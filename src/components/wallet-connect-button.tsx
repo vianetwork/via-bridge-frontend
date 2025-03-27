@@ -1,10 +1,10 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
-import { Loader2, Wallet } from "lucide-react"
-import { useState } from "react"
-import { toast } from "sonner"
-import Image from "next/image"
+import { Button } from "@/components/ui/button";
+import { Loader2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
+import Image from "next/image";
 
 interface WalletConnectButtonProps {
   walletType: "xverse" | "metamask"
@@ -19,33 +19,33 @@ export default function WalletConnectButton({
   onConnect,
   onDisconnect,
 }: WalletConnectButtonProps) {
-  const [isConnecting, setIsConnecting] = useState(false)
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const handleConnect = async () => {
     try {
-      setIsConnecting(true)
-      await onConnect()
+      setIsConnecting(true);
+      await onConnect();
       toast.success("Wallet connected", {
         description: `Successfully connected to ${walletType === "xverse" ? "Xverse" : "MetaMask"}.`,
-      })
+      });
     } catch (error) {
-      console.error(`${walletType} connection error:`, error)
+      console.error(`${walletType} connection error:`, error);
       toast.error("Connection failed", {
         description: `Failed to connect to ${walletType === "xverse" ? "Xverse" : "MetaMask"}. Please try again.`,
-      })
+      });
     } finally {
-      setIsConnecting(false)
+      setIsConnecting(false);
     }
-  }
+  };
 
   const handleDisconnect = () => {
-    onDisconnect()
+    onDisconnect();
     toast.success("Wallet disconnected", {
       description: `Successfully disconnected from ${walletType === "xverse" ? "Xverse" : "MetaMask"}.`,
-    })
-  }
+    });
+  };
 
-  const walletName = walletType === "xverse" ? "Xverse" : "MetaMask"
+  const walletName = walletType === "xverse" ? "Xverse" : "MetaMask";
 
   return (
     <div className="flex flex-col items-center justify-center p-8 space-y-6 bg-slate-50/50 dark:bg-slate-900/50 rounded-xl border border-border/50 backdrop-blur-sm">
@@ -99,5 +99,5 @@ export default function WalletConnectButton({
         )}
       </Button>
     </div>
-  )
+  );
 }

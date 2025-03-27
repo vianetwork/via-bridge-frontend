@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { ArrowRight, Bitcoin, Loader2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { toast } from "sonner"
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { ArrowRight, Bitcoin, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -27,11 +27,11 @@ const withdrawFormSchema = z.object({
   recipientBitcoinAddress: z.string().min(1, {
     message: "Bitcoin address is required",
   }),
-})
+});
 
 export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [txHash, setTxHash] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -39,29 +39,29 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
       amount: "",
       recipientBitcoinAddress: "",
     },
-  })
+  });
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     try {
-      setIsSubmitting(true)
+      setIsSubmitting(true);
 
       // Simulate API call for withdrawal
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Mock transaction hash
-      const mockTxHash = "0x" + Math.random().toString(16).substring(2, 42)
-      setTxHash(mockTxHash)
+      const mockTxHash = "0x" + Math.random().toString(16).substring(2, 42);
+      setTxHash(mockTxHash);
 
       toast.success("Withdrawal initiated", {
         description: "Your withdrawal has been initiated successfully.",
-      })
+      });
     } catch (error) {
-      console.error("Withdrawal error:", error)
+      console.error("Withdrawal error:", error);
       toast.error("Withdrawal failed", {
         description: "There was an error processing your withdrawal. Please try again.",
-      })
+      });
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
@@ -137,5 +137,5 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
         </form>
       </Form>
     </div>
-  )
+  );
 }

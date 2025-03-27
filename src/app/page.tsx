@@ -1,4 +1,4 @@
-import BridgeInterface from "@/components/bridge-interface"
+import BridgeInterface from "@/components/bridge-interface";
 
 export default function Home() {
   return (
@@ -11,5 +11,5 @@ export default function Home() {
         <BridgeInterface />
       </div>
     </main>
-  )
+  );
 }

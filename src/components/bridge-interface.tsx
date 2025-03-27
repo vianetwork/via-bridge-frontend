@@ -1,17 +1,15 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import DepositForm from "@/components/deposit-form"
-import WithdrawForm from "@/components/withdraw-form"
-import WalletConnectButton from "@/components/wallet-connect-button"
-import { useWalletState } from "@/hooks/use-wallet-state"
-import { useMobile } from "@/hooks/use-mobile"
+import { useState, useEffect } from "react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import DepositForm from "@/components/deposit-form";
+import WithdrawForm from "@/components/withdraw-form";
+import WalletConnectButton from "@/components/wallet-connect-button";
+import { useWalletState } from "@/hooks/use-wallet-state";
 
 export default function BridgeInterface() {
-  const { isMobile } = useMobile()
-  const [activeTab, setActiveTab] = useState<string>("deposit")
+  const [activeTab, setActiveTab] = useState<string>("deposit");
   const {
     bitcoinAddress,
     viaAddress,
@@ -21,7 +19,7 @@ export default function BridgeInterface() {
     connectMetamask,
     disconnectXverse,
     disconnectMetamask,
-  } = useWalletState()
+  } = useWalletState();
 
   // Connect to appropriate wallet based on active tab
   useEffect(() => {
@@ -30,7 +28,7 @@ export default function BridgeInterface() {
     } else if (activeTab === "withdraw" && !isMetamaskConnected) {
       // Optional auto-connect logic
     }
-  }, [activeTab, isXverseConnected, isMetamaskConnected])
+  }, [activeTab, isXverseConnected, isMetamaskConnected]);
 
   return (
     <div className="flex flex-col items-center">
@@ -89,5 +87,5 @@ export default function BridgeInterface() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

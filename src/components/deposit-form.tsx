@@ -1,15 +1,15 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Input } from "@/components/ui/input"
-import { ArrowRight, Bitcoin, Loader2 } from "lucide-react"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { toast } from "sonner"
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
+import { Button } from "@/components/ui/button";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { ArrowRight, Bitcoin, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -27,11 +27,11 @@ const depositFormSchema = z.object({
   recipientViaAddress: z.string().min(1, {
     message: "VIA address is required",
   }),
-})
+});
 
 export default function DepositForm({ bitcoinAddress }: DepositFormProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [txHash, setTxHash] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const form = useForm<z.infer<typeof depositFormSchema>>({
     resolver: zodResolver(depositFormSchema),
@@ -39,29 +39,29 @@ export default function DepositForm({ bitcoinAddress }: DepositFormProps) {
       amount: "",
       recipientViaAddress: "",
     },
-  })
+  });
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
-      setIsSubmitting(true)
+      setIsSubmitting(true);
 
       // Simulate API call for deposit
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Mock transaction hash
-      const mockTxHash = "0x" + Math.random().toString(16).substring(2, 42)
-      setTxHash(mockTxHash)
+      const mockTxHash = "0x" + Math.random().toString(16).substring(2, 42);
+      setTxHash(mockTxHash);
 
       toast.success("Deposit initiated", {
         description: "Your deposit has been initiated successfully.",
-      })
+      });
     } catch (error) {
-      console.error("Deposit error:", error)
+      console.error("Deposit error:", error);
       toast.error("Deposit failed", {
         description: "There was an error processing your deposit. Please try again.",
-      })
+      });
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
   }
 
@@ -137,5 +137,5 @@ export default function DepositForm({ bitcoinAddress }: DepositFormProps) {
         </form>
       </Form>
     </div>
-  )
+  );
 }
