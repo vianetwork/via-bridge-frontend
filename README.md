@@ -1,4 +1,19 @@
+# VIA Bridge Frontend
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+
+## Overview
+
+This application allows users to:
+- Perform deposits from Bitcoin to VIA network:
+  - Connect with Xverse wallet,
+  - Initiate, sign and broadcast a deposit transaction on Bitcoin network, that will include 3 outputs:
+    - Output 1: Required amount of BTC is sent from the user's account to the VIA bridge address,
+    - Output 2: OP_RETURN output that contains l2 (EVM) address for receiving funds on VIA L2,
+    - Output 3: Change amount sent back to the user's wallet.
+- Perform withdrawals from VIA to Bitcoin network:
+  - Connect with MetaMask
+  - Initiate withdrawal transaction on VIA network
 
 ## Getting Started
 
