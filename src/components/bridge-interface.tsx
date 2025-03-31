@@ -39,7 +39,7 @@ export default function BridgeInterface() {
             Bridge BTC
           </CardTitle>
           <CardDescription className="text-sm text-slate-600">
-            Transfer BTC between Bitcoin and VIA networks
+            Transfer BTC between Bitcoin and VIA network
           </CardDescription>
         </CardHeader>
         <CardContent>

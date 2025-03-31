@@ -56,7 +56,7 @@ export default function WalletConnectButton({
   const walletName = walletType === "xverse" ? "Xverse" : "MetaMask";
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 space-y-6 bg-slate-50/50 dark:bg-slate-900/50 rounded-xl border border-border/50 backdrop-blur-sm">
+    <div className="flex flex-col items-center justify-center p-8 space-y-6 bg-slate-50/50 rounded-xl border border-border/50 backdrop-blur-sm">
       <div className="relative">
         <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
         <div className="relative rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 ring-1 ring-primary/20">

@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "VIA Bridge",
-  description: "Transfer BTC between Bitcoin and VIA networks",
+  description: "Transfer BTC between Bitcoin and VIA network",
 };
 
 export default function RootLayout({

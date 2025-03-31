@@ -8,8 +8,8 @@ export default function Home() {
           <h1 className="text-4xl font-bold mb-4">
             VIA Bridge
           </h1>
-          <p className="text-lg text-slate-600 dark:text-slate-300 max-w-2xl mx-auto font-medium">
-            Transfer assets between Bitcoin and VIA networks
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto font-medium">
+            Transfer assets between Bitcoin and VIA network
           </p>
         </div>
         <BridgeInterface />
