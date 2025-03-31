@@ -23,6 +23,9 @@ const withdrawFormSchema = z.object({
     })
     .refine((val) => Number.parseFloat(val) > 0, {
       message: "Amount must be greater than 0",
+    })
+    .refine((val) => Number.parseFloat(val) >= 0.00001, {
+      message: "Minimum amount is 0.00001 BTC (1000 satoshis)",
     }),
   recipientBitcoinAddress: z.string().min(1, {
     message: "Bitcoin address is required",
@@ -67,15 +70,18 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between bg-muted p-3 rounded-lg mb-4">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded-full bg-primary" />
-          <span className="font-medium">VIA</span>
+      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-2.5 mb-4">
+        <div className="flex items-center gap-1.5">
+          <div className="h-4 w-4 rounded-full bg-primary" />
+          <span className="text-sm">VIA</span>
         </div>
-        <ArrowRight className="h-5 w-5 text-muted-foreground" />
-        <div className="flex items-center gap-2">
-          <Bitcoin className="h-5 w-5 text-amber-500" />
-          <span className="font-medium">Bitcoin</span>
+        <div className="flex flex-col items-center text-xs text-muted-foreground">
+          <span>BTC</span>
+          <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm">Bitcoin</span>
+          <Bitcoin className="h-4 w-4 text-amber-500" />
         </div>
       </div>
 
@@ -86,11 +92,11 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Amount (VIA)</FormLabel>
+                <FormLabel>Amount (BTC)</FormLabel>
                 <FormControl>
-                  <Input placeholder="0.001" {...field} />
+                  <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
-                <FormDescription>Enter the amount of VIA to withdraw</FormDescription>
+                <FormDescription>Enter the amount of BTC to withdraw (minimum 0.00001 BTC)</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -103,7 +109,7 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
               <FormItem>
                 <FormLabel>Recipient Bitcoin Address</FormLabel>
                 <FormControl>
-                  <Input placeholder="bc1..." {...field} />
+                  <Input placeholder="bc1..." className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
                 <FormDescription>Enter the Bitcoin address to receive funds</FormDescription>
                 <FormMessage />
@@ -112,9 +118,18 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
           />
 
           {viaAddress && (
-            <div className="text-sm text-muted-foreground mb-4">
-              <p>From VIA address:</p>
-              <p className="font-mono text-xs break-all">{viaAddress}</p>
+            <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-4 w-4 rounded-full bg-primary" />
+                  <p className="font-medium">From VIA Address</p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-xs text-green-500 font-medium">Connected</span>
+                </div>
+              </div>
+              <p className="font-mono text-xs text-muted-foreground break-all pl-6">{viaAddress}</p>
             </div>
           )}
 

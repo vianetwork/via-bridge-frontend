@@ -1,57 +1,55 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { getAddress } from "sats-connect";
 
 interface WalletState {
   bitcoinAddress: string | null
+  bitcoinPublicKey: string | null
   viaAddress: string | null
   isXverseConnected: boolean
   isMetamaskConnected: boolean
-  connectXverse: () => Promise<void>
-  connectMetamask: () => Promise<void>
+  connectXverse: () => Promise<boolean>
+  connectMetamask: () => Promise<boolean>
   disconnectXverse: () => void
   disconnectMetamask: () => void
 }
 
 export function useWalletState(): WalletState {
   const [bitcoinAddress, setBitcoinAddress] = useState<string | null>(null);
+  const [bitcoinPublicKey, setBitcoinPublicKey] = useState<string | null>(null);
   const [viaAddress, setViaAddress] = useState<string | null>(null);
   const [isXverseConnected, setIsXverseConnected] = useState(false);
   const [isMetamaskConnected, setIsMetamaskConnected] = useState(false);
 
   const connectXverse = useCallback(async () => {
     try {
-      // Check if window.bitcoin exists (Xverse wallet)
-      if (typeof window !== "undefined" && "bitcoin" in window) {
-        const getAddressOptions = {
-          payload: {
-            purposes: ["payment"],
-            message: "Connect to VIA Bridge",
-            network: {
-              type: "Mainnet",
-            },
-          },
-          onFinish: (response: any) => {
-            const address = response.addresses[0].address;
-            setBitcoinAddress(address);
-            setIsXverseConnected(true);
-            console.log("Xverse connected:", address);
-          },
-          onCancel: () => {
-            throw new Error("User canceled Xverse connection");
-          },
-        };
+      console.log("🔹 Connecting to Xverse wallet...");
 
-        // @ts-expect-error - sats-connect types
-        await getAddress(getAddressOptions);
-      } else {
-        // For development/testing, use a mock address
-        const mockAddress = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh";
-        setBitcoinAddress(mockAddress);
-        setIsXverseConnected(true);
-        console.log("Mock Xverse connected:", mockAddress);
+      const { request, RpcErrorCode, AddressPurpose } = await import("sats-connect");
+
+      const response = await request("wallet_connect", {
+        addresses: [AddressPurpose.Payment, AddressPurpose.Ordinals],
+        message: "Connect to VIA Bridge app",
+      });
+
+      if (response.status !== "success") {
+        if (response.error.code === RpcErrorCode.USER_REJECTION) {
+          console.log("Connection rejected by user");
+          return false;
+        }
+        throw new Error(`Connection failed: ${response.error.message || "Unknown error"}`);
       }
+
+      const addresses = response.result.addresses;
+      if (addresses.length === 0) {
+        throw new Error("No addresses returned from wallet");
+      }
+
+      setBitcoinAddress(addresses[0].address);
+      setBitcoinPublicKey(addresses[0].publicKey);
+      setIsXverseConnected(true);
+      console.log("✅ Xverse wallet connected, addresses:", addresses);
+      return true;
     } catch (error) {
       console.error("Xverse connection error:", error);
       throw error;
@@ -60,23 +58,25 @@ export function useWalletState(): WalletState {
 
   const connectMetamask = useCallback(async () => {
     try {
-      // Check if window.ethereum exists (MetaMask)
-      if (typeof window !== "undefined" && window.ethereum) {
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-        const address = accounts[0];
-        setViaAddress(address);
-        setIsMetamaskConnected(true);
-        console.log("MetaMask connected:", address);
-      } else {
-        // For development/testing, use a mock address
-        const mockAddress = "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-        setViaAddress(mockAddress);
-        setIsMetamaskConnected(true);
-        console.log("Mock MetaMask connected:", mockAddress);
+      if (typeof window === "undefined" || !window.ethereum) {
+        throw new Error("MetaMask not found. Please install MetaMask extension.");
       }
-    } catch (error) {
+
+      const accounts = await window.ethereum.request({
+        method: "eth_requestAccounts",
+      });
+
+      const address = accounts[0];
+      setViaAddress(address);
+      setIsMetamaskConnected(true);
+      console.log("✅ MetaMask wallet connected, address:", address);
+      return true;
+    } catch (error: any) {
+      const METAMASK_USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === METAMASK_USER_REJECTION_ERROR_CODE) {
+        console.log("Connection rejected by user");
+        return false;
+      }
       console.error("MetaMask connection error:", error);
       throw error;
     }
@@ -84,6 +84,7 @@ export function useWalletState(): WalletState {
 
   const disconnectXverse = useCallback(() => {
     setBitcoinAddress(null);
+    setBitcoinPublicKey(null);
     setIsXverseConnected(false);
   }, []);
 
@@ -94,6 +95,7 @@ export function useWalletState(): WalletState {
 
   return {
     bitcoinAddress,
+    bitcoinPublicKey,
     viaAddress,
     isXverseConnected,
     isMetamaskConnected,

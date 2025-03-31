@@ -12,6 +12,7 @@ export default function BridgeInterface() {
   const [activeTab, setActiveTab] = useState<string>("deposit");
   const {
     bitcoinAddress,
+    bitcoinPublicKey,
     viaAddress,
     isXverseConnected,
     isMetamaskConnected,
@@ -32,27 +33,27 @@ export default function BridgeInterface() {
 
   return (
     <div className="flex flex-col items-center">
-      <Card className="w-full max-w-md shadow-2xl hover:shadow-3xl transition-all duration-300 hover:-translate-y-1 bg-white dark:bg-slate-900 border-border/50">
+      <Card className="w-full max-w-md shadow-2xl bg-white border-border/50">
         <CardHeader className="space-y-2 pb-6">
-          <CardTitle className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+          <CardTitle className="text-2xl font-bold tracking-tight text-slate-900">
             Bridge BTC
           </CardTitle>
-          <CardDescription className="text-sm text-slate-600 dark:text-slate-300">
-            Transfer BTC between Bitcoin and VIA blockchain
+          <CardDescription className="text-sm text-slate-600">
+            Transfer BTC between Bitcoin and VIA networks
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="deposit" value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-2 mb-6 h-14 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+            <TabsList className="grid w-full grid-cols-2 mb-6 h-10 bg-slate-100 p-1 rounded-xl">
               <TabsTrigger 
                 value="deposit" 
-                className="text-base font-medium rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80 dark:hover:bg-slate-800/80"
+                className="text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80"
               >
                 Deposit
               </TabsTrigger>
               <TabsTrigger 
                 value="withdraw" 
-                className="text-base font-medium rounded-lg data-[state=active]:bg-white dark:data-[state=active]:bg-slate-900 data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80 dark:hover:bg-slate-800/80"
+                className="text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80"
               >
                 Withdraw
               </TabsTrigger>
@@ -60,7 +61,7 @@ export default function BridgeInterface() {
 
             <TabsContent value="deposit">
               {isXverseConnected ? (
-                <DepositForm bitcoinAddress={bitcoinAddress} />
+                <DepositForm bitcoinAddress={bitcoinAddress} bitcoinPublicKey={bitcoinPublicKey} />
               ) : (
                 <WalletConnectButton
                   walletType="xverse"

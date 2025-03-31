@@ -9,7 +9,7 @@ import Image from "next/image";
 interface WalletConnectButtonProps {
   walletType: "xverse" | "metamask"
   isConnected: boolean
-  onConnect: () => Promise<void>
+  onConnect: () => Promise<boolean>
   onDisconnect: () => void
 }
 
@@ -24,14 +24,20 @@ export default function WalletConnectButton({
   const handleConnect = async () => {
     try {
       setIsConnecting(true);
-      await onConnect();
-      toast.success("Wallet connected", {
-        description: `Successfully connected to ${walletType === "xverse" ? "Xverse" : "MetaMask"}.`,
-      });
+      const connected = await onConnect();
+      if (connected) {
+        toast.success(`${walletName} Connected`, {
+          description: `Successfully connected to your ${walletName} wallet.`,
+          duration: 4000,
+          className: "text-base font-medium",
+        });
+      }
     } catch (error) {
       console.error(`${walletType} connection error:`, error);
-      toast.error("Connection failed", {
-        description: `Failed to connect to ${walletType === "xverse" ? "Xverse" : "MetaMask"}. Please try again.`,
+      toast.error("Connection Failed", {
+        description: `Unable to connect to ${walletName}. Please try again.`,
+        duration: 4000,
+        className: "text-base font-medium"
       });
     } finally {
       setIsConnecting(false);
@@ -40,8 +46,10 @@ export default function WalletConnectButton({
 
   const handleDisconnect = () => {
     onDisconnect();
-    toast.success("Wallet disconnected", {
-      description: `Successfully disconnected from ${walletType === "xverse" ? "Xverse" : "MetaMask"}.`,
+    toast.success(`${walletName} Disconnected`, {
+      description: `Successfully disconnected from your ${walletName} wallet.`,
+      duration: 4000,
+      className: "text-base font-medium"
     });
   };
 
@@ -76,8 +84,8 @@ export default function WalletConnectButton({
         <h3 className="text-xl font-semibold">Connect {walletName}</h3>
         <p className="text-sm text-muted-foreground max-w-[280px]">
           {walletType === "xverse"
-            ? "Connect your Xverse wallet to deposit BTC to VIA"
-            : "Connect MetaMask to withdraw from VIA to BTC"}
+            ? "Xverse wallet connection is required to deposit BTC to VIA network"
+            : "MetaMask wallet connection is required to withdraw BTC from VIA to Bitcoin network"}
         </p>
       </div>
 
