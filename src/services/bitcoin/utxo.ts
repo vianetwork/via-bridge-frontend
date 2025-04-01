@@ -83,14 +83,3 @@ function filterConfirmedUTXOs(
 
   return confirmedUtxos;
 }
-
-/**
- * Selects an appropriate UTXO for the transaction
- */
-export function selectUTXO(utxos: UTXO[], requiredAmount: number): UTXO | null {
-  // Sort by value (ascending) to minimize the amount of locked funds
-  const sortedUtxos = [...utxos].sort((a, b) => a.value - b.value);
-  
-  // Find the smallest UTXO that covers the required amount
-  return sortedUtxos.find(utxo => utxo.value >= requiredAmount) || null;
-}

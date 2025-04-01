@@ -21,10 +21,9 @@ export enum BitcoinNetwork {
   TESTNET = "testnet",
 }
 
-export interface TransactionConfig {
+export interface DepositDetails {
   bridgeAddress: string
   l2ReceiverAddress: string
   satsAmount: number
-  satsFee: number
   network: BitcoinNetwork
 }

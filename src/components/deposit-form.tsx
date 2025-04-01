@@ -122,7 +122,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
                 <div className="space-y-2">
                   <h3 className="text-2xl font-semibold tracking-tight">Deposit Transaction Submitted</h3>
                   <p className="text-muted-foreground text-sm">
-                    Your deposit has been submitted to the Bitcoin network and is being processed
+                    Your deposit transaction has been submitted to the Bitcoin network and it is being processed
                   </p>
                 </div>
               </div>

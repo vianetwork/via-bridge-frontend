@@ -1,7 +1,7 @@
 "use client";
 
-import { getUTXOs, selectUTXO } from "../bitcoin/utxo";
-import { buildTransactionPSBT, broadcastTransaction, finalizeTransaction } from "../bitcoin/transaction";
+import { getUTXOs } from "../bitcoin/utxo";
+import { buildTransaction, broadcastTransaction, finalizeTransaction } from "../bitcoin/transaction";
 import { type UserAddress, BitcoinNetwork } from "../bitcoin/types";
 import { BRIDGE_CONFIG } from "@/services/config";
 import { getTransactionExplorerUrl } from "../bitcoin/transaction";
@@ -26,17 +26,12 @@ export interface DepositResult {
  * Executes a deposit from Bitcoin to VIA
  */
 export async function executeDeposit(params: DepositParams): Promise<DepositResult> {
-  // Dynamically import sats-connect
   const { signTransaction, BitcoinNetworkType } = await import("sats-connect");
 
   const network = params.network || BRIDGE_CONFIG.defaultNetwork;
   const bridgeAddress = BRIDGE_CONFIG.addresses[network];
-  const satsFee = BRIDGE_CONFIG.defaultFee;
+  const satsAmount = Math.floor(params.amountInBtc * SATS_PER_BTC);
 
-  // Convert BTC to satoshis
-  const satsAmount = params.amountInBtc * SATS_PER_BTC;
-
-  // Step 1: Get UTXOs from the user's address
   const utxos = await getUTXOs(params.bitcoinAddress, network);
   console.log("UTXOs", utxos);
 
@@ -44,42 +39,35 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
     throw new Error("No UTXOs found. Please fund your wallet with Bitcoin");
   }
 
-  // Step 2: Select an appropriate UTXO
-  const selectedUtxo = selectUTXO(utxos, satsAmount + satsFee);
-  console.log("Selected UTXO", selectedUtxo);
-  if (!selectedUtxo) {
-    throw new Error(
-      `No UTXO with sufficient funds found. Need at least ${(satsAmount + satsFee) / SATS_PER_BTC} BTC`,
-    );
-  }
-
-  // Step 3: Build the transaction PSBT
+  // Build transaction with automatic UTXO selection
   const userAddress: UserAddress = {
     address: params.bitcoinAddress,
     publicKey: params.bitcoinPublicKey,
     purpose: "payment",
   };
 
-  const base64Psbt = await buildTransactionPSBT(selectedUtxo, userAddress, {
+  const { psbtBase64, fee, inputCount } = await buildTransaction(utxos, userAddress, {
     bridgeAddress,
     l2ReceiverAddress: params.recipientViaAddress,
     satsAmount,
-    satsFee,
     network,
   });
-  console.log("Base64 PSBT", base64Psbt);
+  console.log("Estimated fee", fee.toString(), ", Number of inputs:", inputCount);
 
-  // Step 4: Request signature from wallet
   const bitcoinNetworkType =
     network === BitcoinNetwork.TESTNET ? BitcoinNetworkType.Testnet : BitcoinNetworkType.Mainnet;
 
+  // Request signature from Xverse wallet
   const signedTxResponse = await new Promise<any>((resolve, reject) => {
     signTransaction({
       payload: {
         network: { type: bitcoinNetworkType },
         message: "Sign VIA deposit transaction",
-        psbtBase64: base64Psbt,
-        inputsToSign: [{ address: params.bitcoinAddress, signingIndexes: [0] }],
+        psbtBase64,
+        inputsToSign: [{ 
+          address: params.bitcoinAddress, 
+          signingIndexes: Array.from({ length: inputCount }, (_, i) => i), // Sign all inputs
+        }],
         broadcast: false,
       },
       onFinish: resolve,
@@ -87,12 +75,10 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
     });
   });
 
-  // Step 5: Finalize the transaction
-  const finalTxHex = await finalizeTransaction(signedTxResponse.psbtBase64);
-  console.log("Final TX Hex", finalTxHex);
-
-  // Step 6: Broadcast the transaction
-  const txId = await broadcastTransaction(finalTxHex, network);
+  // Finalize and broadcast
+  const rawTx = await finalizeTransaction(signedTxResponse.psbtBase64);
+  console.log("Final raw transaction: ", rawTx);
+  const txId = await broadcastTransaction(rawTx, network);
 
   return {
     txId,
