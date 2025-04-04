@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 interface WalletState {
   bitcoinAddress: string | null
@@ -20,6 +20,37 @@ export function useWalletState(): WalletState {
   const [viaAddress, setViaAddress] = useState<string | null>(null);
   const [isXverseConnected, setIsXverseConnected] = useState(false);
   const [isMetamaskConnected, setIsMetamaskConnected] = useState(false);
+
+  // Check Xverse connection status on mount
+  useEffect(() => {
+    async function checkXverseConnection() {
+      try {
+        const { request, AddressPurpose } = await import("sats-connect");
+        
+        const response = await request("getAddresses", {
+          purposes: [AddressPurpose.Payment],
+        });
+
+        if (response.status === "success") {
+          const connectedPaymentAddress = response.result.addresses.find(
+            (address) => address.purpose === AddressPurpose.Payment
+          );
+          
+          if (connectedPaymentAddress) {
+            setBitcoinAddress(connectedPaymentAddress.address);
+            setBitcoinPublicKey(connectedPaymentAddress.publicKey);
+            setIsXverseConnected(true);
+            console.log("✅ Xverse wallet already connected");
+          }
+        }
+      } catch (error) {
+        // Silently handle error - wallet is not connected
+        setIsXverseConnected(false);
+      }
+    }
+
+    checkXverseConnection();
+  }, []);
 
   const connectXverse = useCallback(async () => {
     try {
@@ -82,10 +113,17 @@ export function useWalletState(): WalletState {
     }
   }, []);
 
-  const disconnectXverse = useCallback(() => {
-    setBitcoinAddress(null);
-    setBitcoinPublicKey(null);
-    setIsXverseConnected(false);
+  const disconnectXverse = useCallback(async () => {
+    try {
+      const { request } = await import("sats-connect");
+      await request("wallet_disconnect", null);
+    } catch (error) {
+      console.error("Xverse disconnect error:", error);
+    } finally {
+      setBitcoinAddress(null);
+      setBitcoinPublicKey(null);
+      setIsXverseConnected(false);
+    }
   }, []);
 
   const disconnectMetamask = useCallback(() => {

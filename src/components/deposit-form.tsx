@@ -14,6 +14,7 @@ import { executeDeposit } from "@/services/bridge/deposit";
 interface DepositFormProps {
   bitcoinAddress: string | null
   bitcoinPublicKey: string | null
+  onDisconnect: () => void
 }
 
 const depositFormSchema = z.object({
@@ -41,7 +42,7 @@ const depositFormSchema = z.object({
     }),
 });
 
-export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
+export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDisconnect }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -179,7 +180,10 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Deposit BTC</h3>
+      </div>
       <div className="flex items-center justify-between bg-muted/50 rounded-lg p-2.5 mb-4">
         <div className="flex items-center gap-1.5">
           <Bitcoin className="h-4 w-4 text-amber-500" />
@@ -243,16 +247,25 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
-              </>
-            ) : (
-              "Deposit"
-            )}
-          </Button>
+          <div className="space-y-2">
+            <Button type="submit" className="w-full" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                "Deposit"
+              )}
+            </Button>
+            <Button 
+              variant="outline" 
+              className="w-full text-foreground/80 hover:text-foreground" 
+              onClick={onDisconnect}
+            >
+              Disconnect Xverse
+            </Button>
+          </div>
         </form>
       </Form>
     </div>

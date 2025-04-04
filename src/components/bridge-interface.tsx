@@ -61,7 +61,11 @@ export default function BridgeInterface() {
 
             <TabsContent value="deposit">
               {isXverseConnected ? (
-                <DepositForm bitcoinAddress={bitcoinAddress} bitcoinPublicKey={bitcoinPublicKey} />
+                <DepositForm 
+                  bitcoinAddress={bitcoinAddress} 
+                  bitcoinPublicKey={bitcoinPublicKey} 
+                  onDisconnect={disconnectXverse}
+                />
               ) : (
                 <WalletConnectButton
                   walletType="xverse"
