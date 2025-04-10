@@ -230,7 +230,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                   <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
                 {!form.formState.errors.amount && (
-                  <FormDescription>Enter the amount of BTC to deposit (minimum 0.00001 BTC)</FormDescription>
+                  <FormDescription>Amount of BTC to deposit (minimum 0.00001 BTC)</FormDescription>
                 )}
                 <FormMessage />
               </FormItem>
@@ -247,7 +247,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                   <Input placeholder="0x..." className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
                 {!form.formState.errors.recipientViaAddress && (
-                  <FormDescription>Enter the VIA address to receive funds</FormDescription>
+                  <FormDescription>VIA address to receive funds</FormDescription>
                 )}
                 <FormMessage />
               </FormItem>

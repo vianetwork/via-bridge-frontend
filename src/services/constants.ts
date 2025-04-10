@@ -1,1 +1,2 @@
-export const SATS_PER_BTC = 100_000_000;
+export const L1_BTC_DECIMALS = 8;
+export const L2_BTC_DECIMALS = 18;
