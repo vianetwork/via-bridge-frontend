@@ -1,4 +1,37 @@
 import { BitcoinNetwork } from "@/services/bitcoin/types";
+import { env } from "@/lib/env";
+
+export enum Layer {
+  L1,
+  L2,
+};
+
+// Todo: updaye RPC and the chainId
+export const VIA_NETWORK_CONFIG = {
+  [BitcoinNetwork.TESTNET]: {
+    chainId: "0x10e",
+    chainName: 'VIA Network',
+    nativeCurrency: {
+      name: 'BTC',
+      symbol: 'BTC',
+      decimals: 18
+    },
+    rpcUrls: ['http://localhost:3050'],
+    blockExplorerUrls: ['']
+
+  },
+  [BitcoinNetwork.MAINNET]: {
+    chainId: "",
+    chainName: 'VIA Network',
+    nativeCurrency: {
+      name: 'BTC',
+      symbol: 'BTC',
+      decimals: 18
+    },
+    rpcUrls: ['http://localhost:3050'],
+    blockExplorerUrls: ['http://localhost:3050']
+  }
+}
 
 export const API_CONFIG = {
   timeout: 5000, // 5 seconds timeout
@@ -28,6 +61,7 @@ export const BRIDGE_CONFIG = {
   },
   maxPriorityFeeRate: 10, // Maximum acceptable fee rate in sats/vB
   defaultFee: 400, // Default fee in satoshis
-  defaultNetwork: BitcoinNetwork.TESTNET,
   minBlockConfirmations: 3, // Minimum number of block confirmations required
+  defaultNetwork: env().NEXT_PUBLIC_NETWORK,
+  viaChainId: VIA_NETWORK_CONFIG[env().NEXT_PUBLIC_NETWORK].chainId,
 } as const; 

@@ -7,6 +7,10 @@ import DepositForm from "@/components/deposit-form";
 import WithdrawForm from "@/components/withdraw-form";
 import WalletConnectButton from "@/components/wallet-connect-button";
 import { useWalletState } from "@/hooks/use-wallet-state";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { AlertCircle } from "lucide-react";
+import { Layer } from "@/services/config";
 
 export default function BridgeInterface() {
   const [activeTab, setActiveTab] = useState<string>("deposit");
@@ -16,20 +20,66 @@ export default function BridgeInterface() {
     viaAddress,
     isXverseConnected,
     isMetamaskConnected,
+    isCorrectBitcoinNetwork,
+    isCorrectViaNetwork,
     connectXverse,
     connectMetamask,
     disconnectXverse,
     disconnectMetamask,
+    switchNetwork,
   } = useWalletState();
+
+  // Check network when wallet connection changes
+  useEffect(() => {
+    if (isXverseConnected && !isCorrectBitcoinNetwork) {
+      toast.error("Wrong Network", {
+        description: "Please switch to the correct network to continue.",
+        duration: 5000,
+        action: {
+          label: "Switch Network",
+          onClick: () => switchNetwork(Layer.L1),
+        },
+      });
+
+    } else if (isMetamaskConnected && !isCorrectViaNetwork) {
+      toast.error("Wrong Network", {
+        description: "Please switch to the correct network to continue.",
+        duration: 5000,
+        action: {
+          label: "Switch Network",
+          onClick: () => switchNetwork(Layer.L2),
+        },
+      });
+    }
+  }, [isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, switchNetwork]);
 
   // Connect to appropriate wallet based on active tab
   useEffect(() => {
     if (activeTab === "deposit" && !isXverseConnected) {
       // Optional auto-connect logic
     } else if (activeTab === "withdraw" && !isMetamaskConnected) {
-      // Optional auto-connect logic
+      // Option al auto-connect logic
     }
   }, [activeTab, isXverseConnected, isMetamaskConnected]);
+
+  // Network warning banner
+  const NetworkWarning = ({ layer }: { layer: Layer }) => (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-center gap-3">
+      <AlertCircle className="h-5 w-5 text-amber-500" />
+      <div className="flex-1">
+        <p className="text-sm font-medium text-amber-800">Wrong Network Detected</p>
+        <p className="text-xs text-amber-700">Please switch to the correct network to continue.</p>
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="bg-white border-amber-200 text-amber-700 hover:bg-amber-100"
+        onClick={() => switchNetwork(layer)}
+      >
+        Switch Network
+      </Button>
+    </div>
+  );
 
   return (
     <div className="flex flex-col items-center">
@@ -43,16 +93,19 @@ export default function BridgeInterface() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {(isXverseConnected) && (!isCorrectBitcoinNetwork) && <NetworkWarning layer={Layer.L1} />}
+          {(isMetamaskConnected) && (!isCorrectViaNetwork) && <NetworkWarning layer={Layer.L2} />}
+
           <Tabs defaultValue="deposit" value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 h-10 bg-slate-100 p-1 rounded-xl">
-              <TabsTrigger 
-                value="deposit" 
+              <TabsTrigger
+                value="deposit"
                 className="text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80"
               >
                 Deposit
               </TabsTrigger>
-              <TabsTrigger 
-                value="withdraw" 
+              <TabsTrigger
+                value="withdraw"
                 className="text-sm font-medium rounded-lg data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-primary transition-all duration-200 hover:bg-white/80"
               >
                 Withdraw
@@ -61,11 +114,22 @@ export default function BridgeInterface() {
 
             <TabsContent value="deposit">
               {isXverseConnected ? (
-                <DepositForm 
-                  bitcoinAddress={bitcoinAddress} 
-                  bitcoinPublicKey={bitcoinPublicKey} 
-                  onDisconnect={disconnectXverse}
-                />
+                isCorrectBitcoinNetwork ? (
+                  <DepositForm
+                    bitcoinAddress={bitcoinAddress}
+                    bitcoinPublicKey={bitcoinPublicKey}
+                    onDisconnect={disconnectXverse}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center space-y-4 py-6">
+                    <AlertCircle className="h-12 w-12 text-amber-500" />
+                    <h3 className="text-lg font-semibold">Wrong Network</h3>
+                    <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                      Please switch to the correct Bitcoin network to continue.
+                    </p>
+                    <Button onClick={() => switchNetwork(Layer.L2)}>Switch Network</Button>
+                  </div>
+                )
               ) : (
                 <WalletConnectButton
                   walletType="xverse"
@@ -78,7 +142,18 @@ export default function BridgeInterface() {
 
             <TabsContent value="withdraw">
               {isMetamaskConnected ? (
-                <WithdrawForm viaAddress={viaAddress} />
+                isCorrectViaNetwork ? (
+                  <WithdrawForm viaAddress={viaAddress} />
+                ) : (
+                  <div className="flex flex-col items-center space-y-4 py-6">
+                    <AlertCircle className="h-12 w-12 text-amber-500" />
+                    <h3 className="text-lg font-semibold">Wrong Network</h3>
+                    <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                      Please switch to the VIA network to continue.
+                    </p>
+                    <Button onClick={() => switchNetwork(Layer.L2)}>Switch Network</Button>
+                  </div>
+                )
               ) : (
                 <WalletConnectButton
                   walletType="metamask"
