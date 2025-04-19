@@ -35,3 +35,11 @@
     @apply bg-[hsl(var(--background))] text-[hsl(var(--foreground))];
   }
 }
+
+/* Add this to your globals.css file */
+@layer base {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
+}
