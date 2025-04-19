@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { executeDeposit } from "@/services/bridge/deposit";
 import Image from "next/image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useWalletStore } from "@/store/wallet-store";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -41,11 +42,14 @@ const depositFormSchema = z.object({
     }),
 });
 
-export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDisconnect }: DepositFormProps) {
+export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Import the wallet store to get the VIA address
+  const { viaAddress } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema>>({
     resolver: zodResolver(depositFormSchema),
@@ -54,6 +58,13 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
       recipientViaAddress: "",
     },
   });
+
+  // Auto-fill the recipient VIA address when available
+  useEffect(() => {
+    if (viaAddress) {
+      form.setValue("recipientViaAddress", viaAddress);
+    }
+  }, [viaAddress, form]);
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
@@ -293,13 +304,13 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                 "Deposit"
               )}
             </Button>
-            <Button 
+            {/* <Button 
               variant="outline" 
               className="w-full text-foreground/80 hover:text-foreground" 
               onClick={onDisconnect}
             >
               Disconnect Xverse
-            </Button>
+            </Button> */}
           </div>
         </form>
       </Form>

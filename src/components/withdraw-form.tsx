@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -12,6 +12,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import Image from "next/image";
 import { executeWithdraw } from "@/services/bridge/withdraw";
+import { useWalletStore } from "@/store/wallet-store";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -46,6 +47,9 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  // Import the wallet store to get the Bitcoin address
+  const { bitcoinAddress } = useWalletStore();
+
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
     defaultValues: {
@@ -53,6 +57,13 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
       recipientBitcoinAddress: "",
     },
   });
+
+  // Auto-fill the recipient Bitcoin address when available
+  useEffect(() => {
+    if (bitcoinAddress) {
+      form.setValue("recipientBitcoinAddress", bitcoinAddress);
+    }
+  }, [bitcoinAddress, form]);
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
