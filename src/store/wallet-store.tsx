@@ -35,7 +35,7 @@ interface WalletState {
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
   switchNetwork: (layer: Layer) => void;
-  
+
   // Helper methods
   checkXverseConnection: () => Promise<void>;
   checkMetamaskNetwork: () => Promise<boolean | void>;

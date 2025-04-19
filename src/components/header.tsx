@@ -10,10 +10,10 @@ import { useEffect, useState } from "react";
 import { Layer } from "@/services/config";
 
 export default function Header() {
-  const { 
-    isXverseConnected, 
-    isMetamaskConnected, 
-    bitcoinAddress, 
+  const {
+    isXverseConnected,
+    isMetamaskConnected,
+    bitcoinAddress,
     viaAddress,
     disconnectXverse,
     disconnectMetamask,
@@ -23,31 +23,8 @@ export default function Header() {
     isCorrectViaNetwork,
     switchNetwork
   } = useWalletState();
-  
-  const [isConnecting, setIsConnecting] = useState(false);
 
-  // Check network when wallet connection changes
-  useEffect(() => {
-    if (isXverseConnected && !isCorrectBitcoinNetwork) {
-      toast.error("Wrong Network", {
-        description: "Please switch to the correct Bitcoin network to continue.",
-        duration: 5000,
-        action: {
-          label: "Switch Network",
-          onClick: () => switchNetwork(Layer.L1),
-        },
-      });
-    } else if (isMetamaskConnected && !isCorrectViaNetwork) {
-      toast.error("Wrong Network", {
-        description: "Please switch to the VIA network to continue.",
-        duration: 5000,
-        action: {
-          label: "Switch Network",
-          onClick: () => switchNetwork(Layer.L2),
-        },
-      });
-    }
-  }, [isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, switchNetwork]);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   // Listen for account changes
   useEffect(() => {
@@ -60,7 +37,7 @@ export default function Header() {
       };
 
       window.ethereum.on('accountsChanged', handleAccountsChanged);
-      
+
       return () => {
         window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
       };
@@ -134,29 +111,29 @@ export default function Header() {
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
-            <Image 
-              src="/icon.png" 
-              alt="VIA Bridge" 
-              width={32} 
+            <Image
+              src="/icon.png"
+              alt="VIA Bridge"
+              width={32}
               height={32}
               priority
             />
             <span className="text-xl font-bold">VIA Bridge</span>
           </Link>
         </div>
-        
+
         <div className="flex items-center gap-4">
           {isXverseConnected ? (
             <div className="flex items-center gap-2 text-sm bg-slate-100 px-3 py-1.5 rounded-full">
-              <div 
-                className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`} 
+              <div
+                className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}
                 title={isCorrectBitcoinNetwork ? "Connected to correct network" : "Wrong network"}
               ></div>
               <span className="font-medium">BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
               {!isCorrectBitcoinNetwork && (
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-6 w-6 text-amber-500 hover:text-amber-700"
                   onClick={() => handleSwitchNetwork(Layer.L1)}
                   title="Switch to correct network"
@@ -164,9 +141,9 @@ export default function Header() {
                   <AlertCircle className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-6 w-6 ml-1 text-slate-500 hover:text-slate-700"
                 onClick={handleDisconnectXverse}
                 title="Disconnect Xverse"
@@ -175,9 +152,9 @@ export default function Header() {
               </Button>
             </div>
           ) : (
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="text-xs"
               onClick={handleConnectXverse}
               disabled={isConnecting}
@@ -185,18 +162,18 @@ export default function Header() {
               Connect Xverse
             </Button>
           )}
-          
+
           {isMetamaskConnected ? (
             <div className="flex items-center gap-2 text-sm bg-slate-100 px-3 py-1.5 rounded-full">
-              <div 
+              <div
                 className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}
                 title={isCorrectViaNetwork ? "Connected to correct network" : "Wrong network"}
               ></div>
               <span className="font-medium">VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
               {!isCorrectViaNetwork && (
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
+                <Button
+                  variant="ghost"
+                  size="icon"
                   className="h-6 w-6 text-amber-500 hover:text-amber-700"
                   onClick={() => handleSwitchNetwork(Layer.L2)}
                   title="Switch to correct network"
@@ -204,9 +181,9 @@ export default function Header() {
                   <AlertCircle className="h-3.5 w-3.5" />
                 </Button>
               )}
-              <Button 
-                variant="ghost" 
-                size="icon" 
+              <Button
+                variant="ghost"
+                size="icon"
                 className="h-6 w-6 ml-1 text-slate-500 hover:text-slate-700"
                 onClick={handleDisconnectMetamask}
                 title="Disconnect MetaMask"
@@ -215,9 +192,9 @@ export default function Header() {
               </Button>
             </div>
           ) : (
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               className="text-xs"
               onClick={handleConnectMetamask}
               disabled={isConnecting}

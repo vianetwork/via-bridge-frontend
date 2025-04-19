@@ -40,35 +40,11 @@ export default function BridgeInterface() {
       walletEvents.xverseDisconnected.on(() => setRefreshKey(prev => prev + 1)),
       walletEvents.networkChanged.on(() => setRefreshKey(prev => prev + 1)),
     ];
-    
+
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
     };
   }, []);
-
-  // Check network when wallet connection changes
-  useEffect(() => {
-    if (isXverseConnected && !isCorrectBitcoinNetwork) {
-      toast.error("Wrong Network", {
-        description: "Please switch to the correct network to continue.",
-        duration: 5000,
-        action: {
-          label: "Switch Network",
-          onClick: () => switchNetwork(Layer.L1),
-        },
-      });
-
-    } else if (isMetamaskConnected && !isCorrectViaNetwork) {
-      toast.error("Wrong Network", {
-        description: "Please switch to the correct network to continue.",
-        duration: 5000,
-        action: {
-          label: "Switch Network",
-          onClick: () => switchNetwork(Layer.L2),
-        },
-      });
-    }
-  }, [isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, switchNetwork]);
 
   // Connect to appropriate wallet based on active tab
   useEffect(() => {
@@ -110,8 +86,8 @@ export default function BridgeInterface() {
           </CardDescription>
         </CardHeader> */}
         <CardContent>
-          {(isXverseConnected) && (!isCorrectBitcoinNetwork) && <NetworkWarning layer={Layer.L1} />}
-          {(isMetamaskConnected) && (!isCorrectViaNetwork) && <NetworkWarning layer={Layer.L2} />}
+          {/* {(isXverseConnected) && (!isCorrectBitcoinNetwork) && <NetworkWarning layer={Layer.L1} />} */}
+          {/* {(isMetamaskConnected) && (!isCorrectViaNetwork) && <NetworkWarning layer={Layer.L2} />} */}
           <Tabs defaultValue="deposit" value={activeTab} onValueChange={setActiveTab} className="w-full">
             <TabsList className="grid w-full grid-cols-2 mb-6 h-10 bg-slate-100 p-1 rounded-xl">
               <TabsTrigger
