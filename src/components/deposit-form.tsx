@@ -13,6 +13,8 @@ import { executeDeposit } from "@/services/bridge/deposit";
 import Image from "next/image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
+import { isAddress } from "ethers";
+import { SYSTEM_CONTRACTS_ADDRESSES_RANGE } from "@/services/constants";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -33,14 +35,21 @@ const depositFormSchema = z.object({
     .string()
     .min(1, { message: "VIA address is required" })
     .refine((val) => {
-      if (val.startsWith("0x")) {
-        return val.length === 42;
-      }
-      return val.length === 40;
+      return verifyRecipientAddress(val);
     }, {
-      message: "VIA address must be 20 bytes (40 characters) long",
+      message: "Invalid recipient address.",
     }),
 });
+
+const verifyRecipientAddress = (address: string): boolean => {
+  if (!isAddress(address)) {
+    return false;
+  }
+  // Check if the recipientAddress is not a system contract address
+  const invalidReceiverBn = BigInt(SYSTEM_CONTRACTS_ADDRESSES_RANGE);
+  const recipientAddressBn = BigInt(address);
+  return recipientAddressBn > invalidReceiverBn;
+};
 
 export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -75,8 +84,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
       }
 
       // Remove '0x' prefix if present
-      const recipientAddress = values.recipientViaAddress.startsWith('0x') 
-        ? values.recipientViaAddress.slice(2) 
+      const recipientAddress = values.recipientViaAddress.startsWith('0x')
+        ? values.recipientViaAddress.slice(2)
         : values.recipientViaAddress;
 
       // Execute the deposit
@@ -193,11 +202,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
     <div className="space-y-6">
       <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
         <div className="flex items-center gap-2">
-          <Image 
-            src="/bitcoin-logo.svg" 
-            alt="Bitcoin" 
-            width={20} 
-            height={20} 
+          <Image
+            src="/bitcoin-logo.svg"
+            alt="Bitcoin"
+            width={20}
+            height={20}
             className="text-amber-500"
           />
           <div className="flex flex-col">
@@ -207,11 +216,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
         </div>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
-            <Image 
-              src="/bitcoin-logo.svg" 
-              alt="BTC" 
-              width={14} 
-              height={14} 
+            <Image
+              src="/bitcoin-logo.svg"
+              alt="BTC"
+              width={14}
+              height={14}
               className="text-amber-500"
             />
             <span className="text-xs font-medium">BTC</span>
@@ -269,11 +278,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
             <div className="bg-muted/50 rounded-lg p-4 space-y-2 border border-border/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Image 
-                    src="/bitcoin-logo.svg" 
-                    alt="Bitcoin" 
-                    width={16} 
-                    height={16} 
+                  <Image
+                    src="/bitcoin-logo.svg"
+                    alt="Bitcoin"
+                    width={16}
+                    height={16}
                     className="text-amber-500"
                   />
                   <p className="text-sm font-medium">Connected Bitcoin Address</p>
