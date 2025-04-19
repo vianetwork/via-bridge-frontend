@@ -4,12 +4,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
-import { LogOut, AlertCircle } from "lucide-react";
+import { LogOut, AlertCircle, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { useEffect, useState } from "react";
 import { Layer } from "@/services/config";
+import { useMobile } from "@/hooks/use-mobile";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 export default function Header() {
+  const { isMobile } = useMobile();
   const {
     isXverseConnected,
     isMetamaskConnected,
@@ -106,6 +116,91 @@ export default function Header() {
     switchNetwork(layer);
   };
 
+  // Wallet connection buttons for dropdown menu
+  const renderWalletOptions = () => (
+    <>
+      <DropdownMenuLabel>Bitcoin Wallet</DropdownMenuLabel>
+      {isXverseConnected ? (
+        <>
+          <DropdownMenuItem className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+              <span>BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-2 text-slate-500 hover:text-slate-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDisconnectXverse();
+              }}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuItem>
+          {!isCorrectBitcoinNetwork && (
+            <DropdownMenuItem 
+              onClick={() => handleSwitchNetwork(Layer.L1)}
+              className="text-amber-600"
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Switch to correct Bitcoin network
+            </DropdownMenuItem>
+          )}
+        </>
+      ) : (
+        <DropdownMenuItem 
+          onClick={handleConnectXverse}
+          disabled={isConnecting}
+        >
+          {isConnecting ? "Connecting..." : "Connect Xverse"}
+        </DropdownMenuItem>
+      )}
+
+      <DropdownMenuSeparator />
+      
+      <DropdownMenuLabel>VIA Wallet</DropdownMenuLabel>
+      {isMetamaskConnected ? (
+        <>
+          <DropdownMenuItem className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+              <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 ml-2 text-slate-500 hover:text-slate-700"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDisconnectMetamask();
+              }}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </Button>
+          </DropdownMenuItem>
+          {!isCorrectViaNetwork && (
+            <DropdownMenuItem 
+              onClick={() => handleSwitchNetwork(Layer.L2)}
+              className="text-amber-600"
+            >
+              <AlertCircle className="h-4 w-4 mr-2" />
+              Switch to VIA network
+            </DropdownMenuItem>
+          )}
+        </>
+      ) : (
+        <DropdownMenuItem 
+          onClick={handleConnectMetamask}
+          disabled={isConnecting}
+        >
+          {isConnecting ? "Connecting..." : "Connect MetaMask"}
+        </DropdownMenuItem>
+      )}
+    </>
+  );
+
   return (
     <header className="w-full py-4 px-6 bg-white border-b border-slate-200">
       <div className="container mx-auto flex justify-between items-center">
@@ -122,85 +217,63 @@ export default function Header() {
           </Link>
         </div>
 
-        <div className="flex items-center gap-4">
-          {isXverseConnected ? (
-            <div className="flex items-center gap-2 text-sm bg-slate-100 px-3 py-1.5 rounded-full">
-              <div
-                className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}
-                title={isCorrectBitcoinNetwork ? "Connected to correct network" : "Wrong network"}
-              ></div>
-              <span className="font-medium">BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
-              {!isCorrectBitcoinNetwork && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-amber-500 hover:text-amber-700"
-                  onClick={() => handleSwitchNetwork(Layer.L1)}
-                  title="Switch to correct network"
+        <div className="flex items-center gap-2">
+          {isMobile ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="flex items-center gap-2">
+                  <Menu className="h-4 w-4" />
+                  <span className="sm:inline">Wallets</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64">
+                {renderWalletOptions()}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="flex items-center gap-2">
+              {isXverseConnected ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-2"
+                  onClick={handleDisconnectXverse}
                 >
-                  <AlertCircle className="h-3.5 w-3.5" />
+                  <div className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                  <span>BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleConnectXverse}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? "Connecting..." : "Connect Xverse"}
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 ml-1 text-slate-500 hover:text-slate-700"
-                onClick={handleDisconnectXverse}
-                title="Disconnect Xverse"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
-              onClick={handleConnectXverse}
-              disabled={isConnecting}
-            >
-              Connect Xverse
-            </Button>
-          )}
-
-          {isMetamaskConnected ? (
-            <div className="flex items-center gap-2 text-sm bg-slate-100 px-3 py-1.5 rounded-full">
-              <div
-                className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}
-                title={isCorrectViaNetwork ? "Connected to correct network" : "Wrong network"}
-              ></div>
-              <span className="font-medium">VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
-              {!isCorrectViaNetwork && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 text-amber-500 hover:text-amber-700"
-                  onClick={() => handleSwitchNetwork(Layer.L2)}
-                  title="Switch to correct network"
+              
+              {isMetamaskConnected ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-2"
+                  onClick={handleDisconnectMetamask}
                 >
-                  <AlertCircle className="h-3.5 w-3.5" />
+                  <div className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                  <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleConnectMetamask}
+                  disabled={isConnecting}
+                >
+                  {isConnecting ? "Connecting..." : "Connect MetaMask"}
                 </Button>
               )}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-6 w-6 ml-1 text-slate-500 hover:text-slate-700"
-                onClick={handleDisconnectMetamask}
-                title="Disconnect MetaMask"
-              >
-                <LogOut className="h-3.5 w-3.5" />
-              </Button>
             </div>
-          ) : (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-xs"
-              onClick={handleConnectMetamask}
-              disabled={isConnecting}
-            >
-              Connect MetaMask
-            </Button>
           )}
         </div>
       </div>
