@@ -31,7 +31,7 @@ export const VIA_NETWORK_CONFIG = {
     rpcUrls: ['http://localhost:3050'],
     blockExplorerUrls: ['http://localhost:3050']
   }
-}
+};
 
 export const API_CONFIG = {
   timeout: 5000, // 5 seconds timeout
