@@ -7,7 +7,6 @@ import DepositForm from "@/components/deposit-form";
 import WithdrawForm from "@/components/withdraw-form";
 import WalletConnectButton from "@/components/wallet-connect-button";
 import { useWalletState } from "@/hooks/use-wallet-state";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { AlertCircle } from "lucide-react";
 import { Layer } from "@/services/config";
@@ -54,25 +53,6 @@ export default function BridgeInterface() {
       // Option al auto-connect logic
     }
   }, [activeTab, isXverseConnected, isMetamaskConnected]);
-
-  // Network warning banner
-  const NetworkWarning = ({ layer }: { layer: Layer }) => (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-center gap-3">
-      <AlertCircle className="h-5 w-5 text-amber-500" />
-      <div className="flex-1">
-        <p className="text-sm font-medium text-amber-800">Wrong Network Detected</p>
-        <p className="text-xs text-amber-700">Please switch to the correct network to continue.</p>
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="bg-white border-amber-200 text-amber-700 hover:bg-amber-100"
-        onClick={() => switchNetwork(layer)}
-      >
-        Switch Network
-      </Button>
-    </div>
-  );
 
   return (
     <div className="flex flex-col items-center" key={refreshKey}>
