@@ -28,8 +28,8 @@ const depositFormSchema = z.object({
     .refine((val) => !isNaN(Number.parseFloat(val)), {
       message: "Amount must be a valid number",
     })
-    .refine((val) => Number.parseFloat(val) >= 0.00001, {
-      message: "Minimum amount is 0.00001 BTC (1000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= 0.0002, {
+      message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
     }),
   recipientViaAddress: z
     .string()
@@ -250,7 +250,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
                   <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
                 {!form.formState.errors.amount && (
-                  <FormDescription>Amount of BTC to deposit (minimum 0.00001 BTC)</FormDescription>
+                  <FormDescription>Amount of BTC to deposit (minimum 0.0002 BTC)</FormDescription>
                 )}
                 <FormMessage />
               </FormItem>
