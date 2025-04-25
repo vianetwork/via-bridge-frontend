@@ -9,19 +9,19 @@ export enum Layer {
 // Todo: updaye RPC and the chainId
 export const VIA_NETWORK_CONFIG = {
   [BitcoinNetwork.TESTNET]: {
-    chainId: "0x10e",
+    chainId: "0x6287",
     chainName: 'VIA Network',
     nativeCurrency: {
       name: 'BTC',
       symbol: 'BTC',
       decimals: 18
     },
-    rpcUrls: ['http://localhost:3050'],
+    rpcUrls: ['http://via.testnet.viablockchain.dev'],
     blockExplorerUrls: ['']
 
   },
   [BitcoinNetwork.MAINNET]: {
-    chainId: "",
+    chainId: "0x1467",
     chainName: 'VIA Network',
     nativeCurrency: {
       name: 'BTC',
@@ -56,8 +56,8 @@ export const API_CONFIG = {
 export const BRIDGE_CONFIG = {
   // TODO: Add real bridge addresses
   addresses: {
-    [BitcoinNetwork.TESTNET]: "tb1pgvfdm6mfam4kqtnsjudjfa9c4q83mc0a6w5qyz07ajqvyt4f25vsaywx9w",
-    [BitcoinNetwork.MAINNET]: "bc1pgvfdm6mfam4kqtnsjudjfa9c4q83mc0a6w5qyz07ajqvyt4f25vsaywx9w",
+    [BitcoinNetwork.TESTNET]: "tb1p5883ewsczarkj0zpeuucgqxsc63sschq4mdkg2swwd3a9mc67dfqwc4pg9",
+    [BitcoinNetwork.MAINNET]: "",
   },
   maxPriorityFeeRate: 10, // Maximum acceptable fee rate in sats/vB
   defaultFee: 400, // Default fee in satoshis
