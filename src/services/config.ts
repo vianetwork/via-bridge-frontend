@@ -16,7 +16,7 @@ export const VIA_NETWORK_CONFIG = {
       symbol: 'BTC',
       decimals: 18
     },
-    rpcUrls: ['http://via.testnet.viablockchain.dev'],
+    rpcUrls: ['https://via.testnet.viablockchain.dev'],
     blockExplorerUrls: ['']
 
   },
