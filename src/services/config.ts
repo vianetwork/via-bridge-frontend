@@ -9,7 +9,7 @@ export enum Layer {
 // Todo: updaye RPC and the chainId
 export const VIA_NETWORK_CONFIG = {
   [BitcoinNetwork.TESTNET]: {
-    chainId: "0x6287",
+    chainId: "0x10e",
     chainName: 'VIA Network',
     nativeCurrency: {
       name: 'BTC',
@@ -31,6 +31,10 @@ export const VIA_NETWORK_CONFIG = {
     rpcUrls: ['http://localhost:3050'],
     blockExplorerUrls: ['http://localhost:3050']
   }
+};
+
+export const getNetworkConfig = () => {
+  return VIA_NETWORK_CONFIG[env().NEXT_PUBLIC_NETWORK];
 };
 
 export const API_CONFIG = {

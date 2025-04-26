@@ -1,7 +1,8 @@
 import { toast } from "sonner";
-import { BrowserProvider, Provider, types, Signer } from "via-ethers";
+import { BrowserProvider, Provider, Signer } from "via-ethers";
 import { ethers } from "ethers";
 import { L2_BTC_DECIMALS } from "../constants";
+import { getNetworkConfig } from "../config";
 
 export interface WithdrawParams {
   amount: string;
@@ -15,12 +16,13 @@ export interface WithdrawResult {
 
 export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawResult> {
   try {
-    // Connect to the browser wallet
+    // Connect to the browser wallet    
     const browserProvider = new BrowserProvider((window as any).ethereum);
+    const provider = new Provider(getNetworkConfig().rpcUrls[0]);
     const signer = Signer.from(
       await browserProvider.getSigner(),
       Number((await browserProvider.getNetwork()).chainId),
-      Provider.getDefaultProvider(types.Network.Localhost)
+      provider
     );
 
     // Convert amount to L2 token decimals (18 decimals)
@@ -29,7 +31,7 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     // Execute withdrawal
     const tx = await signer.withdraw({
       to: params.recipientBitcoinAddress,
-      amount: l2SatsAmount
+      amount: l2SatsAmount,
     });
 
     // Wait for transaction receipt
