@@ -9,7 +9,7 @@ export enum Layer {
 // Todo: updaye RPC and the chainId
 export const VIA_NETWORK_CONFIG = {
   [BitcoinNetwork.TESTNET]: {
-    chainId: "0x10e",
+    chainId: "0x6287",
     chainName: 'VIA Network',
     nativeCurrency: {
       name: 'BTC',
