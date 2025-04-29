@@ -60,7 +60,7 @@ export const API_CONFIG = {
 export const BRIDGE_CONFIG = {
   // TODO: Add real bridge addresses
   addresses: {
-    [BitcoinNetwork.TESTNET]: "tb1p5883ewsczarkj0zpeuucgqxsc63sschq4mdkg2swwd3a9mc67dfqwc4pg9",
+    [BitcoinNetwork.TESTNET]: "tb1ppsy8j80jtns42rkpdsfcv25qfschqejxmk6datkvu236eekr4fms06wnz0",
     [BitcoinNetwork.MAINNET]: "",
   },
   maxPriorityFeeRate: 10, // Maximum acceptable fee rate in sats/vB
