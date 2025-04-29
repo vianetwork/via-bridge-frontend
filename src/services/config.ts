@@ -38,7 +38,7 @@ export const getNetworkConfig = () => {
 };
 
 export const API_CONFIG = {
-  timeout: 5000, // 5 seconds timeout
+  timeout: 30000, // 5 seconds timeout
   endpoints: {
     bitcoin: {
       primary: {
