@@ -114,7 +114,7 @@ export async function buildTransaction(
   ];
 
   // Get current fee rate
-  const feeRate = await getFeeRate(details.network);
+  const feeRate = Math.round(await getFeeRate(details.network));
   console.log(`Fee rate used: ${feeRate} (sats/vB)`);
 
   // Select UTXOs and create transaction

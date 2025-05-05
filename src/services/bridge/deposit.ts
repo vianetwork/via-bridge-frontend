@@ -33,7 +33,6 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
   const satsAmount = Math.floor(params.amountInBtc * 10 ** L1_BTC_DECIMALS);
 
   const utxos = await getUTXOs(params.bitcoinAddress, network);
-  console.log("UTXOs", utxos);
 
   if (utxos.length === 0) {
     throw new Error("No UTXOs found. Please fund your wallet with Bitcoin");
