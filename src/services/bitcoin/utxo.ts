@@ -11,57 +11,51 @@ async function getCurrentBlockHeight(
   network: BitcoinNetwork,
   axiosInstance: AxiosInstance
 ): Promise<number> {
-  try {
-    const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.primary[network]}/blocks/tip/height`);
-    return response.data;
-  } catch (error) {
-    console.warn("Failed to get block height from primary endpoint, trying fallback...", error);
-    const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.fallback[network]}/blocks/tip/height`);
-    return response.data;
+  for (const endpoint of [API_CONFIG.endpoints.bitcoin.primary, API_CONFIG.endpoints.bitcoin.fallback]) {
+    const url = endpoint[network];
+    try {
+      const response = await axiosInstance.get(`${url}/blocks/tip/height`);
+      return response.data;
+    } catch (error) {
+      console.warn(`Failed to get block height from ${url},`, error);
+      continue;
+    }
   }
+  throw new Error("Failed to get block height from both endpoints");
 }
 
 /**
  * Fetches UTXOs for a given Bitcoin address and filters by minimum confirmations
  */
 export async function getUTXOs(
-  address: string, 
+  address: string,
   network: BitcoinNetwork = BRIDGE_CONFIG.defaultNetwork,
   minConfirmations: number = BRIDGE_CONFIG.minBlockConfirmations
 ): Promise<UTXO[]> {
   const axiosInstance = axios.create({
     timeout: API_CONFIG.timeout,
   });
+  const currentBlockHeight = await getCurrentBlockHeight(network, axiosInstance);
 
-  try {
-    // Get current block height first
-    const currentBlockHeight = await getCurrentBlockHeight(network, axiosInstance);
-    console.log("Current block height:", currentBlockHeight);
-
-    // Then fetch UTXOs
-    console.log("Fetching UTXOs from primary endpoint...");
-    const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.primary[network]}/address/${address}/utxo`);
-    return filterConfirmedUTXOs(response.data, currentBlockHeight, minConfirmations);
-  } catch (error) {
-    console.warn("Primary API endpoint failed, trying fallback API endpoint...", error);
-    
+  for (const endpoint of [API_CONFIG.endpoints.bitcoin.primary, API_CONFIG.endpoints.bitcoin.fallback]) {
+    const url = endpoint[network];
     try {
-      // Try fallback endpoint
-      const currentBlockHeight = await getCurrentBlockHeight(network, axiosInstance);
-      const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.fallback[network]}/address/${address}/utxo`);
-      return filterConfirmedUTXOs(response.data, currentBlockHeight, minConfirmations);
-    } catch (backupError) {
-      console.error("Both endpoints failed", backupError);
-      throw new Error("Failed to fetch UTXOs. Please try again later.");
+      const response = await axiosInstance.get(`${url}/address/${address}/utxo`);
+      return filterConfirmedUTXOs(response.data, currentBlockHeight, minConfirmations);;
+    } catch (error) {
+      console.warn(`Failed to get UTXOs from ${url},`, error);
+      continue;
     }
   }
+
+  throw new Error("Failed to get wallet UTXOs");
 }
 
 /**
  * Filters UTXOs based on minimum confirmation count
  */
 function filterConfirmedUTXOs(
-  utxos: UTXO[], 
+  utxos: UTXO[],
   currentBlockHeight: number,
   minConfirmations: number
 ): UTXO[] {
@@ -69,11 +63,11 @@ function filterConfirmedUTXOs(
     if (!utxo.status?.confirmed || !utxo.status?.block_height) {
       return false;
     }
-    
+
     const confirmations = currentBlockHeight - utxo.status.block_height + 1;
     return confirmations >= minConfirmations;
   });
-  
+
   if (confirmedUtxos.length === 0) {
     throw new Error(
       `No UTXOs found with at least ${minConfirmations} confirmations. ` +

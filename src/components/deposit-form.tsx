@@ -1,15 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Bitcoin, Loader2, ExternalLink } from "lucide-react";
+import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { executeDeposit } from "@/services/bridge/deposit";
+import Image from "next/image";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useWalletStore } from "@/store/wallet-store";
+import { isAddress } from "ethers";
+import { SYSTEM_CONTRACTS_ADDRESSES_RANGE } from "@/services/constants";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -23,30 +28,37 @@ const depositFormSchema = z.object({
     .refine((val) => !isNaN(Number.parseFloat(val)), {
       message: "Amount must be a valid number",
     })
-    .refine((val) => Number.parseFloat(val) > 0, {
-      message: "Amount must be greater than 0",
-    })
-    .refine((val) => Number.parseFloat(val) >= 0.00001, {
-      message: "Minimum amount is 0.00001 BTC (1000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= 0.0002, {
+      message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
     }),
   recipientViaAddress: z
     .string()
     .min(1, { message: "VIA address is required" })
     .refine((val) => {
-      if (val.startsWith("0x")) {
-        return val.length === 42;
-      }
-      return val.length === 40;
+      return verifyRecipientAddress(val);
     }, {
-      message: "VIA address must be 20 bytes (40 characters) long",
+      message: "Invalid recipient address.",
     }),
 });
 
-export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDisconnect }: DepositFormProps) {
+const verifyRecipientAddress = (address: string): boolean => {
+  if (!isAddress(address)) {
+    return false;
+  }
+  // Check if the recipientAddress is not a system contract address
+  const invalidReceiverBn = BigInt(SYSTEM_CONTRACTS_ADDRESSES_RANGE);
+  const recipientAddressBn = BigInt(address);
+  return recipientAddressBn > invalidReceiverBn;
+};
+
+export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Import the wallet store to get the VIA address
+  const { viaAddress } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema>>({
     resolver: zodResolver(depositFormSchema),
@@ -55,6 +67,13 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
       recipientViaAddress: "",
     },
   });
+
+  // Auto-fill the recipient VIA address when available
+  useEffect(() => {
+    if (viaAddress) {
+      form.setValue("recipientViaAddress", viaAddress);
+    }
+  }, [viaAddress, form]);
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
@@ -65,8 +84,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
       }
 
       // Remove '0x' prefix if present
-      const recipientAddress = values.recipientViaAddress.startsWith('0x') 
-        ? values.recipientViaAddress.slice(2) 
+      const recipientAddress = values.recipientViaAddress.startsWith('0x')
+        ? values.recipientViaAddress.slice(2)
         : values.recipientViaAddress;
 
       // Execute the deposit
@@ -181,21 +200,41 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Deposit BTC</h3>
-      </div>
-      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-2.5 mb-4">
-        <div className="flex items-center gap-1.5">
-          <Bitcoin className="h-4 w-4 text-amber-500" />
-          <span className="text-sm">Bitcoin</span>
+      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
+        <div className="flex items-center gap-2">
+          <Image
+            src="/bitcoin-logo.svg"
+            alt="Bitcoin"
+            width={20}
+            height={20}
+            className="text-amber-500"
+          />
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">Bitcoin</span>
+            <span className="text-xs text-muted-foreground">Network</span>
+          </div>
         </div>
-        <div className="flex flex-col items-center text-xs text-muted-foreground">
-          <span>BTC</span>
-          <ArrowRight className="h-5 w-10 text-primary" strokeWidth={3} />
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
+            <Image
+              src="/bitcoin-logo.svg"
+              alt="BTC"
+              width={14}
+              height={14}
+              className="text-amber-500"
+            />
+            <span className="text-xs font-medium">BTC</span>
+          </div>
+          <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
         </div>
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm">VIA</span>
-          <div className="h-4 w-4 rounded-full bg-primary" />
+        <div className="flex items-center gap-2">
+          <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+            <div className="h-3 w-3 rounded-full bg-primary" />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-medium">VIA</span>
+            <span className="text-xs text-muted-foreground">Network</span>
+          </div>
         </div>
       </div>
 
@@ -210,7 +249,9 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                 <FormControl>
                   <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
-                <FormDescription>Enter the amount of BTC to deposit (minimum 0.00001 BTC)</FormDescription>
+                {!form.formState.errors.amount && (
+                  <FormDescription>Amount of BTC to deposit (minimum 0.0002 BTC)</FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
@@ -225,18 +266,26 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                 <FormControl>
                   <Input placeholder="0x..." className="placeholder:text-muted-foreground/60" {...field} />
                 </FormControl>
-                <FormDescription>Enter the VIA address to receive funds</FormDescription>
+                {!form.formState.errors.recipientViaAddress && (
+                  <FormDescription>VIA address to receive funds</FormDescription>
+                )}
                 <FormMessage />
               </FormItem>
             )}
           />
 
           {bitcoinAddress && (
-            <div className="bg-muted/50 rounded-lg p-3 text-sm space-y-1.5">
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2 border border-border/50">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Bitcoin className="h-4 w-4 text-amber-500" />
-                  <p className="font-medium">From Bitcoin Address</p>
+                  <Image
+                    src="/bitcoin-logo.svg"
+                    alt="Bitcoin"
+                    width={16}
+                    height={16}
+                    className="text-amber-500"
+                  />
+                  <p className="text-sm font-medium">Connected Bitcoin Address</p>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
@@ -245,6 +294,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
               </div>
               <p className="font-mono text-xs text-muted-foreground break-all pl-6">{bitcoinAddress}</p>
             </div>
+          )}
+
+          {txHash && (
+            <Alert>
+              <AlertDescription className="text-sm break-all">Transaction submitted: {txHash}</AlertDescription>
+            </Alert>
           )}
 
           <div className="space-y-2">
@@ -258,16 +313,17 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onDiscon
                 "Deposit"
               )}
             </Button>
-            <Button 
+            {/* <Button 
               variant="outline" 
               className="w-full text-foreground/80 hover:text-foreground" 
               onClick={onDisconnect}
             >
               Disconnect Xverse
-            </Button>
+            </Button> */}
           </div>
         </form>
       </Form>
     </div>
   );
 }
+

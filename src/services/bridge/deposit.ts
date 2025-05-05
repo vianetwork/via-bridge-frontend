@@ -5,7 +5,7 @@ import { buildTransaction, broadcastTransaction, finalizeTransaction } from "../
 import { type UserAddress, BitcoinNetwork } from "../bitcoin/types";
 import { BRIDGE_CONFIG } from "@/services/config";
 import { getTransactionExplorerUrl } from "../bitcoin/transaction";
-import { SATS_PER_BTC } from "../constants";
+import { L1_BTC_DECIMALS } from "../constants";
 
 // Interface for deposit parameters
 export interface DepositParams {
@@ -30,10 +30,9 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
 
   const network = params.network || BRIDGE_CONFIG.defaultNetwork;
   const bridgeAddress = BRIDGE_CONFIG.addresses[network];
-  const satsAmount = Math.floor(params.amountInBtc * SATS_PER_BTC);
+  const satsAmount = Math.floor(params.amountInBtc * 10 ** L1_BTC_DECIMALS);
 
   const utxos = await getUTXOs(params.bitcoinAddress, network);
-  console.log("UTXOs", utxos);
 
   if (utxos.length === 0) {
     throw new Error("No UTXOs found. Please fund your wallet with Bitcoin");

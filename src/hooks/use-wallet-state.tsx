@@ -1,145 +1,94 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useEffect } from "react";
+import { useWalletStore } from "@/store/wallet-store";
 
-interface WalletState {
-  bitcoinAddress: string | null
-  bitcoinPublicKey: string | null
-  viaAddress: string | null
-  isXverseConnected: boolean
-  isMetamaskConnected: boolean
-  connectXverse: () => Promise<boolean>
-  connectMetamask: () => Promise<boolean>
-  disconnectXverse: () => void
-  disconnectMetamask: () => void
-}
-
-export function useWalletState(): WalletState {
-  const [bitcoinAddress, setBitcoinAddress] = useState<string | null>(null);
-  const [bitcoinPublicKey, setBitcoinPublicKey] = useState<string | null>(null);
-  const [viaAddress, setViaAddress] = useState<string | null>(null);
-  const [isXverseConnected, setIsXverseConnected] = useState(false);
-  const [isMetamaskConnected, setIsMetamaskConnected] = useState(false);
-
-  // Check Xverse connection status on mount
+export function useWalletState() {
+  const walletStore = useWalletStore();
+  
+  // Check network and connection status on mount
   useEffect(() => {
-    async function checkXverseConnection() {
+    async function checkConnections() {
+      await walletStore.checkXverseConnection();
+      await walletStore.checkMetamaskNetwork();
+    }
+
+    checkConnections();
+
+    // Set up MetaMask network change listener
+    if (typeof window !== "undefined" && window.ethereum) {
+      const handleChainChanged = (chainId: string) => {
+        console.log("MetaMask network changed:", chainId);
+        walletStore.checkMetamaskNetwork();
+      };
+
+      window.ethereum.on('chainChanged', handleChainChanged);
+
+      // Clean up listener on unmount
+      return () => {
+        window.ethereum?.removeListener('chainChanged', handleChainChanged);
+      };
+    }
+  }, []);
+
+  // Set up Xverse wallet event listeners
+  useEffect(() => {
+    const setupXverseListeners = async () => {
       try {
-        const { request, AddressPurpose } = await import("sats-connect");
-        
-        const response = await request("getAddresses", {
-          purposes: [AddressPurpose.Payment],
+        const { addListener } = await import("sats-connect");
+
+        // Listen for network changes
+        const handleNetworkChange = () => {
+          console.log("Xverse network changed");
+          walletStore.checkXverseConnection();
+        };
+
+        // Listen for connection status changes
+        const handleConnectionChange = (connected: boolean) => {
+          console.log("Xverse connection changed:", connected);
+          if (connected) {
+            walletStore.checkXverseConnection();
+          } else {
+            walletStore.setIsXverseConnected(false);
+            walletStore.setBitcoinAddress(null);
+            walletStore.setBitcoinPublicKey(null);
+            walletStore.setIsCorrectBitcoinNetwork(false);
+          }
+        };
+
+        const networkChangeListener = addListener('networkChange', () => {
+          handleNetworkChange();
         });
 
-        if (response.status === "success") {
-          const connectedPaymentAddress = response.result.addresses.find(
-            (address) => address.purpose === AddressPurpose.Payment
-          );
-          
-          if (connectedPaymentAddress) {
-            setBitcoinAddress(connectedPaymentAddress.address);
-            setBitcoinPublicKey(connectedPaymentAddress.publicKey);
-            setIsXverseConnected(true);
-            console.log("✅ Xverse wallet already connected");
-          }
-        }
+        const disconnectListener = addListener('disconnect', () => {
+          handleConnectionChange(false);
+        });
+
+        // Clean up listeners on unmount
+        return () => {
+          networkChangeListener();
+          disconnectListener();
+        };
       } catch (error) {
-        // Silently handle error - wallet is not connected
-        setIsXverseConnected(false);
+        console.error("Failed to set up Xverse event listeners:", error);
       }
-    }
+    };
 
-    checkXverseConnection();
-  }, []);
-
-  const connectXverse = useCallback(async () => {
-    try {
-      console.log("🔹 Connecting to Xverse wallet...");
-
-      const { request, RpcErrorCode, AddressPurpose } = await import("sats-connect");
-
-      const response = await request("wallet_connect", {
-        addresses: [AddressPurpose.Payment, AddressPurpose.Ordinals],
-        message: "Connect to VIA Bridge app",
-      });
-
-      if (response.status !== "success") {
-        if (response.error.code === RpcErrorCode.USER_REJECTION) {
-          console.log("Connection rejected by user");
-          return false;
-        }
-        throw new Error(`Connection failed: ${response.error.message || "Unknown error"}`);
-      }
-
-      const addresses = response.result.addresses;
-      if (addresses.length === 0) {
-        throw new Error("No addresses returned from wallet");
-      }
-
-      setBitcoinAddress(addresses[0].address);
-      setBitcoinPublicKey(addresses[0].publicKey);
-      setIsXverseConnected(true);
-      console.log("✅ Xverse wallet connected, addresses:", addresses);
-      return true;
-    } catch (error) {
-      console.error("Xverse connection error:", error);
-      throw error;
-    }
-  }, []);
-
-  const connectMetamask = useCallback(async () => {
-    try {
-      if (typeof window === "undefined" || !window.ethereum) {
-        throw new Error("MetaMask not found. Please install MetaMask extension.");
-      }
-
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-
-      const address = accounts[0];
-      setViaAddress(address);
-      setIsMetamaskConnected(true);
-      console.log("✅ MetaMask wallet connected, address:", address);
-      return true;
-    } catch (error: any) {
-      const METAMASK_USER_REJECTION_ERROR_CODE = 4001;
-      if (error.code === METAMASK_USER_REJECTION_ERROR_CODE) {
-        console.log("Connection rejected by user");
-        return false;
-      }
-      console.error("MetaMask connection error:", error);
-      throw error;
-    }
-  }, []);
-
-  const disconnectXverse = useCallback(async () => {
-    try {
-      const { request } = await import("sats-connect");
-      await request("wallet_disconnect", null);
-    } catch (error) {
-      console.error("Xverse disconnect error:", error);
-    } finally {
-      setBitcoinAddress(null);
-      setBitcoinPublicKey(null);
-      setIsXverseConnected(false);
-    }
-  }, []);
-
-  const disconnectMetamask = useCallback(() => {
-    setViaAddress(null);
-    setIsMetamaskConnected(false);
+    setupXverseListeners();
   }, []);
 
   return {
-    bitcoinAddress,
-    bitcoinPublicKey,
-    viaAddress,
-    isXverseConnected,
-    isMetamaskConnected,
-    connectXverse,
-    connectMetamask,
-    disconnectXverse,
-    disconnectMetamask,
+    bitcoinAddress: walletStore.bitcoinAddress,
+    bitcoinPublicKey: walletStore.bitcoinPublicKey,
+    viaAddress: walletStore.viaAddress,
+    isXverseConnected: walletStore.isXverseConnected,
+    isMetamaskConnected: walletStore.isMetamaskConnected,
+    isCorrectBitcoinNetwork: walletStore.isCorrectBitcoinNetwork,
+    isCorrectViaNetwork: walletStore.isCorrectViaNetwork,
+    connectXverse: walletStore.connectXverse,
+    connectMetamask: walletStore.connectMetamask,
+    disconnectXverse: walletStore.disconnectXverse,
+    disconnectMetamask: walletStore.disconnectMetamask,
+    switchNetwork: walletStore.switchNetwork,
   };
 }
