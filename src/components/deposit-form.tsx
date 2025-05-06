@@ -10,16 +10,21 @@ import { Input } from "@/components/ui/input";
 import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { executeDeposit } from "@/services/bridge/deposit";
+import { getBitcoinBalance } from "@/services/bitcoin/balance";
 import Image from "next/image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
 import { isAddress } from "ethers";
-import { SYSTEM_CONTRACTS_ADDRESSES_RANGE } from "@/services/constants";
+import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS } from "@/services/constants";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
   bitcoinPublicKey: string | null
   onDisconnect: () => void
+}
+
+interface FormContext {
+  _balance?: string;
 }
 
 const depositFormSchema = z.object({
@@ -30,6 +35,22 @@ const depositFormSchema = z.object({
     })
     .refine((val) => Number.parseFloat(val) >= 0.0002, {
       message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
+    })
+    .superRefine((val, ctx) => {
+      // Get balance from context
+      const formValues = ctx.path[0] as FormContext;
+      const balance = formValues?._balance ? parseFloat(formValues._balance) : 0;
+
+      // Skip validation if no balance available
+      if (balance <= 0) return;
+
+      // Check if amount exceeds balance
+      if (Number.parseFloat(val) > balance) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Amount exceeds available balance",
+        });
+      }
     }),
   recipientViaAddress: z
     .string()
@@ -56,17 +77,27 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [balance, setBalance] = useState<string | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
   const { viaAddress } = useWalletStore();
 
-  const form = useForm<z.infer<typeof depositFormSchema>>({
+  const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
     defaultValues: {
       amount: "",
       recipientViaAddress: "",
+      _balance: "0",
     },
   });
+
+  // Update balance in form values when it changes
+  useEffect(() => {
+    if (balance) {
+      form.setValue("_balance" as any, balance);
+    }
+  }, [balance, form]);
 
   // Auto-fill the recipient VIA address when available
   useEffect(() => {
@@ -74,6 +105,39 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
       form.setValue("recipientViaAddress", viaAddress);
     }
   }, [viaAddress, form]);
+
+  // Fetch Bitcoin balance when address is available
+  useEffect(() => {
+    async function fetchBalance() {
+      if (!bitcoinAddress) return;
+
+      try {
+        setIsLoadingBalance(true);
+        const balanceInSats = await getBitcoinBalance(bitcoinAddress);
+        // Convert from satoshis to BTC
+        const balanceInBtc = (balanceInSats / Math.pow(10, L1_BTC_DECIMALS)).toFixed(8);
+        setBalance(balanceInBtc);
+      } catch (error) {
+        console.error("Error fetching balance:", error);
+        toast.error("Failed to fetch balance", {
+          description: "Could not retrieve your Bitcoin balance. Please try again later.",
+        });
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    }
+
+    fetchBalance();
+  }, [bitcoinAddress]);
+
+  // Function to handle max amount button click
+  const handleMaxAmount = () => {
+    if (balance) {
+      // Set a slightly lower amount to account for transaction fees
+      const maxAmount = Math.max(0, parseFloat(balance) - 0.0001).toFixed(8);
+      form.setValue("amount", maxAmount);
+    }
+  };
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
@@ -245,12 +309,49 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Amount (BTC)</FormLabel>
+                <div className="flex justify-between items-center">
+                  <FormLabel>Amount (BTC)</FormLabel>
+                  {balance && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      Balance: {isLoadingBalance ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <span className={`font-medium ${field.value && parseFloat(field.value) > parseFloat(balance)
+                          ? "text-red-500"
+                          : field.value && parseFloat(field.value) > parseFloat(balance) * 0.95
+                            ? "text-amber-500"
+                            : ""
+                          }`}>
+                          {balance} BTC
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-xs text-primary"
+                        onClick={handleMaxAmount}
+                        disabled={isLoadingBalance || !balance || parseFloat(balance) <= 0}
+                      >
+                        MAX
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <FormControl>
-                  <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
+                  <Input
+                    placeholder="0.001"
+                    className={`placeholder:text-muted-foreground/60 ${field.value && balance && parseFloat(field.value) > parseFloat(balance)
+                      ? "border-red-500 focus-visible:ring-red-500"
+                      : ""
+                      }`}
+                    {...field}
+                  />
                 </FormControl>
                 {!form.formState.errors.amount && (
-                  <FormDescription>Amount of BTC to deposit (minimum 0.0002 BTC)</FormDescription>
+                  <FormDescription>
+                    Amount of BTC to deposit (minimum 0.0002 BTC)
+                  </FormDescription>
                 )}
                 <FormMessage />
               </FormItem>
