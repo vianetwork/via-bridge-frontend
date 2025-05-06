@@ -9,7 +9,7 @@ export default function Home() {
             VIA Bridge
           </h1>
           <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-            Transfer assets between Bitcoin and VIA network
+            Bridge assets securely between Bitcoin and VIA network
           </p>
         </div>
         <div className="flex items-start justify-center">
