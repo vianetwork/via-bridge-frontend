@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import Image from "next/image";
 import { executeWithdraw } from "@/services/bridge/withdraw";
 import { useWalletStore } from "@/store/wallet-store";
+import { getViaBalance } from "@/services/via/balance";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -46,6 +47,8 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [balance, setBalance] = useState<number | null>(null);
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the Bitcoin address
   const { bitcoinAddress } = useWalletStore();
@@ -64,6 +67,28 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
       form.setValue("recipientBitcoinAddress", bitcoinAddress);
     }
   }, [bitcoinAddress, form]);
+
+  // Fetch VIA balance when address is available
+  useEffect(() => {
+    async function fetchBalance() {
+      if (!viaAddress) return;
+
+      try {
+        setIsLoadingBalance(true);
+        const balanceInBtc = await getViaBalance(viaAddress);
+        setBalance(Number(balanceInBtc));
+      } catch (error) {
+        console.error("Error fetching balance:", error);
+        toast.error("Failed to fetch balance", {
+          description: "Could not retrieve your VIA balance. Please try again later.",
+        });
+      } finally {
+        setIsLoadingBalance(false);
+      }
+    }
+
+    fetchBalance();
+  }, [viaAddress]);
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
@@ -222,12 +247,53 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
             name="amount"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Amount (BTC)</FormLabel>
+                <div className="flex justify-between items-center">
+                  <FormLabel>Amount (BTC)</FormLabel>
+                  {balance && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      Balance: {isLoadingBalance ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <span className={`font-medium ${field.value && Number(field.value) > Number(balance)
+                          ? "text-red-500"
+                          : field.value && Number(field.value) > Number(balance) * 0.95
+                            ? "text-amber-500"
+                            : ""
+                          }`}>
+                          {balance} BTC
+                        </span>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 px-1.5 text-xs text-primary"
+                        onClick={() => {
+                          if (balance) {
+                            form.setValue("amount", String(balance));
+                          }
+                        }}
+                        disabled={isLoadingBalance || !balance || parseFloat(String(balance)) <= 0}
+                      >
+                        MAX
+                      </Button>
+                    </div>
+                  )}
+                </div>
                 <FormControl>
-                  <Input placeholder="0.001" className="placeholder:text-muted-foreground/60" {...field} />
+                  <Input
+                    placeholder="0.001"
+                    className={`placeholder:text-muted-foreground/60 ${field.value && balance && parseFloat(field.value) > parseFloat(String(balance))
+                      ? "border-red-500 focus-visible:ring-red-500"
+                      : ""
+                      }`}
+                    {...field}
+                  />
                 </FormControl>
                 {!form.formState.errors.amount && (
-                  <FormDescription>Amount of BTC to withdraw (minimum 0.00001 BTC)</FormDescription>
+                  <FormDescription>
+                    Amount of BTC to withdraw (minimum 0.00001 BTC)
+                  </FormDescription>
                 )}
                 <FormMessage />
               </FormItem>
@@ -273,7 +339,16 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
             </Alert>
           )}
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={
+              isSubmitting || 
+              !form.watch("amount") || 
+              parseFloat(form.watch("amount") || "0") <= 0 ||
+              (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
+            }
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
