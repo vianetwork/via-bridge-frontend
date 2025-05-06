@@ -404,7 +404,16 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
           )}
 
           <div className="space-y-2">
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={
+                isSubmitting || 
+                !form.watch("amount") || 
+                parseFloat(form.watch("amount") || "0") <= 0 ||
+                (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(balance))
+              }
+            >
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

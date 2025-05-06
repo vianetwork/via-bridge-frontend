@@ -339,7 +339,16 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
             </Alert>
           )}
 
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
+          <Button 
+            type="submit" 
+            className="w-full" 
+            disabled={
+              isSubmitting || 
+              !form.watch("amount") || 
+              parseFloat(form.watch("amount") || "0") <= 0 ||
+              (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
+            }
+          >
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
