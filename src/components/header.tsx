@@ -215,6 +215,9 @@ export default function Header() {
             />
             <span className="text-xl font-bold">VIA Bridge</span>
           </Link>
+          <span className="text-xs font-semibold px-2 py-0.5 bg-orange-100 text-orange-800 rounded-md border border-orange-200">
+            Alpha Testnet
+          </span>
         </div>
 
         <div className="flex items-center gap-2">
