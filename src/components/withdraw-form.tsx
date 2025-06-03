@@ -144,7 +144,8 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-semibold tracking-tight">Withdrawal Transaction Submitted</h3>
                   <p className="text-muted-foreground text-sm">
-                    Your withdrawal transaction has been submitted to the VIA network and it is being processed
+                    Your withdrawal transaction has been submitted to the VIA network and it is being processed.
+                    Receiving BTC on the Bitcoin network can take up to 24 hours, please be patient.
                   </p>
                 </div>
               </div>
