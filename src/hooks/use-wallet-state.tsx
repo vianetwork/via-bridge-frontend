@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
+import { setupEthereumListeners } from "@/utils/ethereum-provider";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
@@ -15,20 +16,20 @@ export function useWalletState() {
 
     checkConnections();
 
-    // Set up MetaMask network change listener
-    if (typeof window !== "undefined" && window.ethereum) {
-      const handleChainChanged = (chainId: string) => {
-        console.log("MetaMask network changed:", chainId);
-        walletStore.checkMetamaskNetwork();
-      };
+    // Set up MetaMask network change listener using safer provider detection
+    const handleChainChanged = () => {
+      walletStore.checkMetamaskNetwork();
+    };
 
-      window.ethereum.on('chainChanged', handleChainChanged);
+    const cleanupEthereumListener = setupEthereumListeners('chainChanged', handleChainChanged);
 
-      // Clean up listener on unmount
-      return () => {
-        window.ethereum?.removeListener('chainChanged', handleChainChanged);
-      };
-    }
+    // Clean up listener on unmount
+    return () => {
+      if (cleanupEthereumListener) {
+        cleanupEthereumListener();
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Set up Xverse wallet event listeners
@@ -75,6 +76,7 @@ export function useWalletState() {
     };
 
     setupXverseListeners();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {

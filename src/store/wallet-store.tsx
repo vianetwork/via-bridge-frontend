@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
+import { getMetaMaskProvider, checkForProviderConflicts } from "@/utils/ethereum-provider";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -105,11 +106,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      if (typeof window === "undefined" || !window.ethereum) {
+      console.log("🔹 Connecting to MetaMask wallet...");
+      
+      // Check for provider conflicts
+      checkForProviderConflicts();
+      
+      const provider = getMetaMaskProvider();
+      if (!provider) {
         throw new Error("MetaMask not found. Please install MetaMask extension.");
       }
 
-      const accounts = await window.ethereum.request({
+      const accounts = await provider.request({
         method: "eth_requestAccounts",
       });
 
