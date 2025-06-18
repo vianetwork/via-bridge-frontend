@@ -51,7 +51,7 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress } = useWalletStore();
+  const { bitcoinAddress, addTransaction } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -106,6 +106,13 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
       });
       setTxHash(result.txHash);
       setExplorerUrl(result.explorerUrl);
+      addTransaction({
+        type: 'withdraw',
+        amount: values.amount,
+        status: 'pending',
+        txHash: result.txHash,
+        explorerUrl: result.explorerUrl
+      });
       setIsSuccess(true);
       toast.success("Withdrawal Transaction Broadcast", {
         description: "Your withdrawal transaction has been submitted to the VIA network.",

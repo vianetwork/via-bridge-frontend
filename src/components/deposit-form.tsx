@@ -81,7 +81,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
-  const { viaAddress } = useWalletStore();
+  const { viaAddress, addTransaction } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
@@ -167,6 +167,15 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
         description: "Your deposit transaction has been submitted to the Bitcoin network.",
         duration: 5000,
         className: "text-base font-medium",
+      });
+
+      // Add to onSubmit function after setting txHash and explorerUrl
+      addTransaction({
+        type: 'deposit',
+        amount: values.amount,
+        status: 'pending',
+        txHash: result.txId,
+        explorerUrl: result.explorerUrl
       });
 
     } catch (error) {

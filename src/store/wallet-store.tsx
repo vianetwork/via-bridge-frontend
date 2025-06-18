@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
+import { fetchUserTransactions, mapApiTransactionsToAppFormat } from "@/services/api/transactions";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -11,6 +12,16 @@ export const walletEvents = {
   networkChanged: createEvent<void>('network-changed'),
 };
 
+interface Transaction {
+  id: string;
+  type: 'deposit' | 'withdraw';
+  amount: string;
+  status: 'pending' | 'completed' | 'failed';
+  timestamp: number;
+  txHash: string;
+  explorerUrl: string;
+}
+
 interface WalletState {
   bitcoinAddress: string | null;
   bitcoinPublicKey: string | null;
@@ -19,6 +30,8 @@ interface WalletState {
   isMetamaskConnected: boolean;
   isCorrectBitcoinNetwork: boolean;
   isCorrectViaNetwork: boolean;
+  transactions: Transaction[];
+  isLoadingTransactions: boolean;
 
   // Actions
   setBitcoinAddress: (address: string | null) => void;
@@ -28,6 +41,10 @@ interface WalletState {
   setIsMetamaskConnected: (connected: boolean) => void;
   setIsCorrectBitcoinNetwork: (correct: boolean) => void;
   setIsCorrectViaNetwork: (correct: boolean) => void;
+  addTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
+  updateTransactionStatus: (txHash: string, status: Transaction['status']) => void;
+  clearTransactions: () => void;
+  fetchTransactions: () => Promise<void>;
 
   // Wallet operations
   connectXverse: () => Promise<boolean>;
@@ -50,6 +67,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   isMetamaskConnected: false,
   isCorrectBitcoinNetwork: false,
   isCorrectViaNetwork: false,
+  transactions: [],
+  isLoadingTransactions: false,
 
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
@@ -59,6 +78,49 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsMetamaskConnected: (connected) => set({ isMetamaskConnected: connected }),
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
+  addTransaction: (tx) => set(state => ({
+    transactions: [
+      {
+        ...tx,
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+      },
+      ...state.transactions
+    ]
+  })),
+  updateTransactionStatus: (txHash, status) => set(state => ({
+    transactions: state.transactions.map(tx => 
+      tx.txHash === txHash ? { ...tx, status } : tx
+    )
+  })),
+  clearTransactions: () => set({ transactions: [] }),
+  fetchTransactions: async () => {
+    const { bitcoinAddress, viaAddress } = get();
+    
+    if (!bitcoinAddress && !viaAddress) {
+      return;
+    }
+    
+    try {
+      set({ isLoadingTransactions: true });
+      const apiTransactions = await fetchUserTransactions(bitcoinAddress, viaAddress);
+      const formattedTransactions = mapApiTransactionsToAppFormat(apiTransactions);
+      
+      // Merge with local transactions
+      // This keeps any pending transactions that might not be in the API yet
+      const localTransactions = get().transactions.filter(tx => 
+        !formattedTransactions.some(apiTx => apiTx.txHash === tx.txHash)
+      );
+      
+      set({ 
+        transactions: [...formattedTransactions, ...localTransactions].sort((a, b) => b.timestamp - a.timestamp)
+      });
+    } catch (error) {
+      console.error("Failed to fetch transactions:", error);
+    } finally {
+      set({ isLoadingTransactions: false });
+    }
+  },
 
   // Wallet operations
   connectXverse: async () => {
