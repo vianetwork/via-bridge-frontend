@@ -32,7 +32,7 @@ const withdrawFormSchema = z.object({
     .string()
     .min(1, { message: "Bitcoin address is required" })
     .refine((val) => {
-      if (val.startsWith("bc1") || val.startsWith("tb1")) {
+      if (val.startsWith("bc1") || val.startsWith("tb1") || val.startsWith("bcr")) {
         return val.length >= 42 && val.length <= 62;
       }
       // TODO: Add support for Bitcoin address formats other than bech32 (SegWit)

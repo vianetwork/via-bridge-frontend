@@ -8,6 +8,17 @@ export enum Layer {
 
 // Todo: updaye RPC and the chainId
 export const VIA_NETWORK_CONFIG = {
+  [BitcoinNetwork.REGTEST]: {
+    chainId: "0x6287",
+    chainName: 'VIA Network',
+    nativeCurrency: {
+      name: 'BTC',
+      symbol: 'BTC',
+      decimals: 18
+    },
+    rpcUrls: ['http://0.0.0.0:3050'],
+    blockExplorerUrls: ['']
+  },
   [BitcoinNetwork.TESTNET]: {
     chainId: "0x6287",
     chainName: 'VIA Network',
@@ -18,7 +29,6 @@ export const VIA_NETWORK_CONFIG = {
     },
     rpcUrls: ['https://via.testnet.viablockchain.dev'],
     blockExplorerUrls: ['']
-
   },
   [BitcoinNetwork.MAINNET]: {
     chainId: "0x1467",
@@ -29,7 +39,7 @@ export const VIA_NETWORK_CONFIG = {
       decimals: 18
     },
     rpcUrls: ['http://localhost:3050'],
-    blockExplorerUrls: ['http://localhost:3050']
+    blockExplorerUrls: ['']
   }
 };
 
@@ -44,14 +54,17 @@ export const API_CONFIG = {
       primary: {
         [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet/api",
         [BitcoinNetwork.MAINNET]: "https://blockstream.info/api",
+        [BitcoinNetwork.REGTEST]: "https://mempool.space/testnet/api",
       },
       fallback: {
         [BitcoinNetwork.TESTNET]: "https://blockstream.info/testnet/api",
         [BitcoinNetwork.MAINNET]: "https://mempool.space/api",
+        [BitcoinNetwork.REGTEST]: "https://blockstream.info/testnet/api",
       },
       explorer: {
         [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet/tx/",
         [BitcoinNetwork.MAINNET]: "https://mempool.space/tx/",
+        [BitcoinNetwork.REGTEST]: "http://localhost:1880/tx/",
       },
     },
   },
@@ -60,6 +73,7 @@ export const API_CONFIG = {
 export const BRIDGE_CONFIG = {
   // TODO: Add real bridge addresses
   addresses: {
+    [BitcoinNetwork.REGTEST]: "bcrt1p3s7m76wp5seprjy4gdxuxrr8pjgd47q5s8lu9vefxmp0my2p4t9qh6s8kq",
     [BitcoinNetwork.TESTNET]: "tb1ppsy8j80jtns42rkpdsfcv25qfschqejxmk6datkvu236eekr4fms06wnz0",
     [BitcoinNetwork.MAINNET]: "",
   },

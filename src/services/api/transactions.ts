@@ -2,9 +2,10 @@ import axios from "axios";
 import { L1_BTC_DECIMALS, L2_BTC_DECIMALS } from "../constants";
 import { ethers } from "ethers";
 import { TransactionStatus } from "@/store/wallet-store";
+import { API_CONFIG, BRIDGE_CONFIG, getNetworkConfig } from "../config";
 
 // Define the API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";
 
 // Define types for the API response
 interface Deposit {
@@ -55,7 +56,6 @@ export async function fetchUserTransactions(
       return { deposits: [], withdrawals: [] };
     }
 
-
     const response = await axios.get<TransactionsResponse>(
       `${API_BASE_URL}/user/deposit_withdrawal`,
       {
@@ -88,9 +88,9 @@ export function mapApiTransactionsToAppFormat(data: TransactionsResponse["data"]
     status: deposit.status as TransactionStatus,
     timestamp: deposit.created_at * 1000,
     txHash: deposit.l1_tx_id,
-    l1ExplorerUrl: getExplorerUrl('bitcoin', deposit.l1_tx_id),
+    l1ExplorerUrl: API_CONFIG.endpoints.bitcoin.explorer[BRIDGE_CONFIG.defaultNetwork] + deposit.l1_tx_id,
     l2TxHash: deposit.l2_tx_hash || undefined,
-    l2ExplorerUrl: deposit.l2_tx_hash ? getExplorerUrl('via', deposit.l2_tx_hash) : undefined,
+    l2ExplorerUrl: deposit.l2_tx_hash ? getNetworkConfig().blockExplorerUrls[0] + deposit.l2_tx_hash : undefined,
   }));
 
   const mappedWithdrawals = withdrawals.map(withdrawal => ({
@@ -100,21 +100,11 @@ export function mapApiTransactionsToAppFormat(data: TransactionsResponse["data"]
     status: withdrawal.status as TransactionStatus,
     timestamp: withdrawal.created_at * 1000,
     txHash: withdrawal.l2_tx_hash,
-    l2ExplorerUrl: getExplorerUrl('via', withdrawal.l2_tx_hash),
+    l2ExplorerUrl: getNetworkConfig().blockExplorerUrls[0] + withdrawal.l2_tx_hash,
     l1TxHash: withdrawal.bridge_withdrawal?.tx_id || undefined,
-    l1ExplorerUrl: withdrawal.bridge_withdrawal?.tx_id ? getExplorerUrl('bitcoin', withdrawal.bridge_withdrawal.tx_id) : undefined,
+    l1ExplorerUrl: withdrawal.bridge_withdrawal?.tx_id ? API_CONFIG.endpoints.bitcoin.explorer[BRIDGE_CONFIG.defaultNetwork] + withdrawal.bridge_withdrawal.tx_id : undefined,
   }));
 
   return [...mappedDeposits, ...mappedWithdrawals];
 }
 
-// Helper function to get explorer URL
-function getExplorerUrl(chain: 'bitcoin' | 'via', txHash: string): string {
-  if (chain === 'bitcoin') {
-    // Use the appropriate Bitcoin explorer based on network
-    return `https://mempool.space/testnet/tx/${txHash}`;
-  } else {
-    // Use the appropriate VIA explorer
-    return `https://explorer.testnet.viablockchain.xyz/tx/${txHash}`;
-  }
-}
