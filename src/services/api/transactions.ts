@@ -56,6 +56,8 @@ export async function fetchUserTransactions(
       return { deposits: [], withdrawals: [] };
     }
 
+    bitcoinAddress = "bcrt1qx2lk0unukm80qmepjp49hwf9z6xnz0s73k9j56";
+
     const response = await axios.get<TransactionsResponse>(
       `${API_BASE_URL}/user/deposit_withdrawal`,
       {
