@@ -1,44 +1,39 @@
 import axios from "axios";
-import { L2_BTC_DECIMALS } from "../constants";
+import { L1_BTC_DECIMALS, L2_BTC_DECIMALS } from "../constants";
 import { ethers } from "ethers";
+import { TransactionStatus } from "@/store/wallet-store";
 
 // Define the API base URL
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5000";
 
 // Define types for the API response
 interface Deposit {
-  priority_id: number;
-  status: string;
-  l1_tx_id: string;
-  block_number: number;
-  l2_receiver: string;
-  value: number | string;
-  calldata: string;
-  l2_tx_hash: string;
-  created_at: number;
+  status: string,
+  block_number: number,
+  l2_receiver: string,
+  value: number,
+  l1_tx_id: string,
+  l2_tx_hash: string,
+  created_at: number
 }
 
 interface BridgeWithdrawal {
-  bridge_withdrawal_id: number;
-  tx_id: string;
-  l1_batch_reveal_tx_id: string;
-  fee: number;
-  vsize: number;
-  total_size: number;
-  withdrawals_count: number;
-  block_number: number;
-  created_at: number;
+  tx_id: string,
+  fee: number,
+  withdrawals_count: number,
+  block_number: number,
+  created_at: number,
 }
 
 interface Withdrawal {
-  id: string;
-  l2_sender: string;
-  l1_receiver: string;
-  amount: string;
-  block_number: number;
-  block_timestamp: number;
-  l2_tx_hash: string;
-  bridge_withdrawal?: BridgeWithdrawal;
+  status: string,
+  l2_sender: string,
+  l1_receiver: string,
+  amount: string,
+  block_number: number,
+  created_at: number,
+  l2_tx_hash: string,
+  bridge_withdrawal: BridgeWithdrawal,
 }
 
 interface TransactionsResponse {
@@ -56,12 +51,10 @@ export async function fetchUserTransactions(
   viaAddress: string | null
 ): Promise<TransactionsResponse["data"]> {
   try {
-    if (!bitcoinAddress && !viaAddress) {
+    if (!bitcoinAddress || !viaAddress) {
       return { deposits: [], withdrawals: [] };
     }
 
-    console.log({bitcoinAddress})
-    console.log({viaAddress})
 
     const response = await axios.get<TransactionsResponse>(
       `${API_BASE_URL}/user/deposit_withdrawal`,
@@ -87,44 +80,32 @@ export async function fetchUserTransactions(
 // Helper function to convert transaction data to our app's format
 export function mapApiTransactionsToAppFormat(data: TransactionsResponse["data"]) {
   const { deposits, withdrawals } = data;
-  
+
   const mappedDeposits = deposits.map(deposit => ({
     id: `deposit-${deposit.l1_tx_id}`,
     type: 'deposit' as const,
-    amount: ethers.formatUnits(deposit.value.toString(), L2_BTC_DECIMALS),
-    status: mapApiStatusToAppStatus(deposit.status),
-    timestamp: deposit.created_at * 1000, // Convert to milliseconds
+    amount: ethers.formatUnits(deposit.value.toString(), L1_BTC_DECIMALS),
+    status: deposit.status as TransactionStatus,
+    timestamp: deposit.created_at * 1000,
     txHash: deposit.l1_tx_id,
-    explorerUrl: getExplorerUrl('bitcoin', deposit.l1_tx_id),
-    l2TxHash: deposit.l2_tx_hash || null,
-    l2ExplorerUrl: deposit.l2_tx_hash ? getExplorerUrl('via', deposit.l2_tx_hash) : null,
+    l1ExplorerUrl: getExplorerUrl('bitcoin', deposit.l1_tx_id),
+    l2TxHash: deposit.l2_tx_hash || undefined,
+    l2ExplorerUrl: deposit.l2_tx_hash ? getExplorerUrl('via', deposit.l2_tx_hash) : undefined,
   }));
-  
+
   const mappedWithdrawals = withdrawals.map(withdrawal => ({
     id: `withdrawal-${withdrawal.l2_tx_hash}`,
     type: 'withdraw' as const,
     amount: ethers.formatUnits(withdrawal.amount, L2_BTC_DECIMALS),
-    status: withdrawal.bridge_withdrawal ? 'completed' : 'pending',
-    timestamp: withdrawal.block_timestamp * 1000, // Convert to milliseconds
+    status: withdrawal.status as TransactionStatus,
+    timestamp: withdrawal.created_at * 1000,
     txHash: withdrawal.l2_tx_hash,
-    explorerUrl: getExplorerUrl('via', withdrawal.l2_tx_hash),
-    l1TxHash: withdrawal.bridge_withdrawal?.tx_id || null,
-    l1ExplorerUrl: withdrawal.bridge_withdrawal?.tx_id ? getExplorerUrl('bitcoin', withdrawal.bridge_withdrawal.tx_id) : null,
+    l2ExplorerUrl: getExplorerUrl('via', withdrawal.l2_tx_hash),
+    l1TxHash: withdrawal.bridge_withdrawal?.tx_id || undefined,
+    l1ExplorerUrl: withdrawal.bridge_withdrawal?.tx_id ? getExplorerUrl('bitcoin', withdrawal.bridge_withdrawal.tx_id) : undefined,
   }));
-  
-  return [...mappedDeposits, ...mappedWithdrawals].sort((a, b) => b.timestamp - a.timestamp);
-}
 
-// Helper function to map API status to app status
-function mapApiStatusToAppStatus(status: string): 'pending' | 'completed' | 'failed' {
-  switch (status.toLowerCase()) {
-    case 'processed':
-      return 'completed';
-    case 'failed':
-      return 'failed';
-    default:
-      return 'pending';
-  }
+  return [...mappedDeposits, ...mappedWithdrawals];
 }
 
 // Helper function to get explorer URL

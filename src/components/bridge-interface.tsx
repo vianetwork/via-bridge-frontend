@@ -16,7 +16,7 @@ import { useWalletStore } from "@/store/wallet-store";
 
 export default function BridgeInterface() {
   const [activeTab, setActiveTab] = useState<string>("deposit");
-  const [refreshKey, setRefreshKey] = useState(0);
+  // const [refreshKey, setRefreshKey] = useState(0);
   const [showTransactions, setShowTransactions] = useState(false);
   
   const { 
@@ -65,17 +65,17 @@ export default function BridgeInterface() {
   useEffect(() => {
     const unsubscribers = [
       walletEvents.metamaskConnected.on(() => {
-        setRefreshKey(prev => prev + 1);
+        // setRefreshKey(prev => prev + 1);
         fetchTransactions();
       }),
       walletEvents.xverseConnected.on(() => {
-        setRefreshKey(prev => prev + 1);
+        // setRefreshKey(prev => prev + 1);
         fetchTransactions();
       }),
-      walletEvents.metamaskDisconnected.on(() => setRefreshKey(prev => prev + 1)),
-      walletEvents.xverseDisconnected.on(() => setRefreshKey(prev => prev + 1)),
+      // walletEvents.metamaskDisconnected.on(() => setRefreshKey(prev => prev + 1)),
+      // walletEvents.xverseDisconnected.on(() => setRefreshKey(prev => prev + 1)),
       walletEvents.networkChanged.on(() => {
-        setRefreshKey(prev => prev + 1);
+        // setRefreshKey(prev => prev + 1);
         fetchTransactions();
       }),
     ];

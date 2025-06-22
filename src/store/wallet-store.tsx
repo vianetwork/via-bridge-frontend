@@ -12,15 +12,65 @@ export const walletEvents = {
   networkChanged: createEvent<void>('network-changed'),
 };
 
+export type TransactionStatus =
+  'Pending' |
+  'InProgress' |
+  'Processed' |
+  'Failed' |
+  'ExecutedOnL2' |
+  'CommittedToL1' |
+  'ProvedOnL1' |
+  'ExecutedOnL1' |
+  'Processed' |
+  'Failed'
+
 interface Transaction {
   id: string;
   type: 'deposit' | 'withdraw';
   amount: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: TransactionStatus;
   timestamp: number;
   txHash: string;
-  explorerUrl: string;
+  l1ExplorerUrl?: string;
+  l2ExplorerUrl?: string;
 }
+
+// LocalStorage utility functions
+const LOCALSTORAGE_KEY = 'wallet_local_transactions';
+
+const loadLocalTransactionsFromStorage = (): Transaction[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const stored = localStorage.getItem(LOCALSTORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch (error) {
+    console.error('Failed to load transactions from localStorage:', error);
+    return [];
+  }
+};
+
+const saveLocalTransactionsToStorage = (transactions: Transaction[]): void => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(LOCALSTORAGE_KEY, JSON.stringify(transactions));
+  } catch (error) {
+    console.error('Failed to save transactions to localStorage:', error);
+  }
+};
+
+const removeTransactionsFromStorage = (txHashes: string[]): void => {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const stored = loadLocalTransactionsFromStorage();
+    const filtered = stored.filter(tx => !txHashes.includes(tx.txHash));
+    saveLocalTransactionsToStorage(filtered);
+  } catch (error) {
+    console.error('Failed to remove transactions from localStorage:', error);
+  }
+};
 
 interface WalletState {
   bitcoinAddress: string | null;
@@ -32,6 +82,7 @@ interface WalletState {
   isCorrectViaNetwork: boolean;
   transactions: Transaction[];
   isLoadingTransactions: boolean;
+  localTransactions: Transaction[];
 
   // Actions
   setBitcoinAddress: (address: string | null) => void;
@@ -45,6 +96,11 @@ interface WalletState {
   updateTransactionStatus: (txHash: string, status: Transaction['status']) => void;
   clearTransactions: () => void;
   fetchTransactions: () => Promise<void>;
+  addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
+  removeLocalTransaction: (txHash: string) => void;
+  mergeTransactions: (apiTransactions: Transaction[]) => Transaction[];
+  loadLocalTransactions: () => void;
+  clearLocalTransactions: () => void;
 
   // Wallet operations
   connectXverse: () => Promise<boolean>;
@@ -69,6 +125,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   isCorrectViaNetwork: false,
   transactions: [],
   isLoadingTransactions: false,
+  localTransactions: [],
 
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
@@ -78,43 +135,111 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsMetamaskConnected: (connected) => set({ isMetamaskConnected: connected }),
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
+
   addTransaction: (tx) => set(state => ({
     transactions: [
       {
         ...tx,
-        id: crypto.randomUUID(),
+        id: tx.txHash,
         timestamp: Date.now(),
       },
       ...state.transactions
     ]
   })),
+
   updateTransactionStatus: (txHash, status) => set(state => ({
-    transactions: state.transactions.map(tx => 
+    transactions: state.transactions.map(tx =>
       tx.txHash === txHash ? { ...tx, status } : tx
     )
   })),
+
   clearTransactions: () => set({ transactions: [] }),
+
+  // Enhanced local transaction methods with localStorage
+  addLocalTransaction: (tx) => {
+    const newTransaction: Transaction = {
+      ...tx,
+      id: tx.txHash,
+      timestamp: Date.now(),
+    };
+
+    set(state => {
+      const updatedLocalTransactions = [newTransaction, ...state.localTransactions];
+
+      // Save to localStorage
+      saveLocalTransactionsToStorage(updatedLocalTransactions);
+
+      return {
+        localTransactions: updatedLocalTransactions
+      };
+    });
+  },
+
+  removeLocalTransaction: (txHash) => {
+    set(state => {
+      const updatedLocalTransactions = state.localTransactions.filter(tx => tx.txHash !== txHash);
+
+      // Update localStorage
+      saveLocalTransactionsToStorage(updatedLocalTransactions);
+
+      return {
+        localTransactions: updatedLocalTransactions
+      };
+    });
+  },
+
+  loadLocalTransactions: () => {
+    const localTransactions = loadLocalTransactionsFromStorage();
+    set({ localTransactions });
+  },
+
+  clearLocalTransactions: () => {
+    set({ localTransactions: [] });
+    saveLocalTransactionsToStorage([]);
+  },
+
+  mergeTransactions: (apiTransactions) => {
+    const { localTransactions } = get();
+
+    // Filter out local transactions that are now in the API response
+    const apiTxHashes = apiTransactions.map(tx => tx.txHash);
+    const remainingLocalTxs = localTransactions.filter(tx => !apiTxHashes.includes(tx.txHash));
+
+    // Merge and sort all transactions
+    return [...apiTransactions, ...remainingLocalTxs].sort((a, b) => b.timestamp - a.timestamp);
+  },
+
   fetchTransactions: async () => {
     const { bitcoinAddress, viaAddress } = get();
-    
+
     if (!bitcoinAddress && !viaAddress) {
       return;
     }
-    
+
     try {
       set({ isLoadingTransactions: true });
       const apiTransactions = await fetchUserTransactions(bitcoinAddress, viaAddress);
       const formattedTransactions = mapApiTransactionsToAppFormat(apiTransactions);
-      
-      // Merge with local transactions
-      // This keeps any pending transactions that might not be in the API yet
-      const localTransactions = get().transactions.filter(tx => 
-        !formattedTransactions.some(apiTx => apiTx.txHash === tx.txHash)
-      );
-      
-      set({ 
-        transactions: [...formattedTransactions, ...localTransactions].sort((a, b) => b.timestamp - a.timestamp)
-      });
+
+      // Use the mergeTransactions method to combine API and local transactions
+      const mergedTransactions = get().mergeTransactions(formattedTransactions);
+
+      set({ transactions: mergedTransactions });
+
+      // Get transaction hashes that are now confirmed by the API
+      const confirmedTxHashes = formattedTransactions.map(tx => tx.txHash);
+
+      // Remove confirmed transactions from local storage and state
+      if (confirmedTxHashes.length > 0) {
+        removeTransactionsFromStorage(confirmedTxHashes);
+
+        // Update local transactions state by removing confirmed ones
+        set(state => ({
+          localTransactions: state.localTransactions.filter(tx =>
+            !confirmedTxHashes.includes(tx.txHash)
+          )
+        }));
+      }
     } catch (error) {
       console.error("Failed to fetch transactions:", error);
     } finally {
@@ -156,6 +281,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Check network after connection
       await get().checkXverseConnection();
 
+      // Load local transactions after connecting
+      get().loadLocalTransactions();
+
       console.log("✅ Xverse wallet connected, addresses:", addresses);
       walletEvents.xverseConnected.emit();
       return true;
@@ -183,6 +311,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // Check network after connection
       await get().checkMetamaskNetwork();
+
+      // Load local transactions after connecting
+      get().loadLocalTransactions();
 
       console.log("✅ MetaMask wallet connected, address:", address);
       walletEvents.metamaskConnected.emit();
@@ -309,6 +440,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             bitcoinPublicKey: connectedPaymentAddress.publicKey,
             isXverseConnected: true
           });
+
+          // Load local transactions when wallet is already connected
+          get().loadLocalTransactions();
+
           console.log("✅ Xverse wallet already connected");
         }
       }
