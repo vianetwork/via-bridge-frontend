@@ -16,32 +16,59 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
     <div className="w-full">
       <div className="flex justify-between items-center mb-2">
         <h3 className="text-sm font-medium">Recent Transactions</h3>
-        {onRefresh && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={onRefresh}
-            disabled={isLoading}
-            className="h-8 w-8 p-0"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="sr-only">Refresh</span>
-            <div className="relative group">
-              <HelpCircle className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
-              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-[9999] max-w-xs shadow-lg border border-gray-700">
-                <div className="text-left space-y-0.5">
-                  <div><span className="text-blue-400">🔵 ExecutedOnL2:</span> Transaction executed on L2</div>
-                  <div><span className="text-yellow-400">🟡 CommittedToL1:</span> Committed to L1 blockchain</div>
-                  <div><span className="text-orange-400">🟠 ProvedOnL1:</span> Proof verified on L1</div>
-                  <div><span className="text-purple-400">🟣 ExecutedOnL1:</span> Executed on L1 blockchain</div>
-                  <div><span className="text-amber-400">🟡 InProgress:</span> Transaction in progress</div>
-                  <div><span className="text-green-400">🟢 Processed:</span> Transaction completed successfully</div>
-                  <div><span className="text-red-400">🔴 Failed:</span> Transaction failed</div>
+        <div className="flex items-center space-x-2">
+          {onRefresh && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="h-8 w-8 p-0"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+          <span className="sr-only">Refresh</span>
+          <div className="relative group">
+            <HelpCircle className="h-5 w-5 text-gray-400 hover:text-gray-600 cursor-help" />
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 mb-2 px-3 py-2 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-[9999] max-w-xs shadow-lg border border-gray-700">
+              <div className="text-left space-y-1">
+                <div><span className="text-gray-300 font-bold">Deposit</span></div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-yellow-500" />
+                  <span className="text-yellow-400">InProgress:</span> Transaction in progress
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span className="text-green-400">Processed:</span> Transaction completed successfully
+                </div>
+
+                <div><span className="text-gray-300 font-bold">Withdraw</span></div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-blue-500" />
+                  <span className="text-blue-400">ExecutedOnL2:</span> Transaction executed on L2
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-yellow-500" />
+                  <span className="text-yellow-400">CommittedToL1:</span> Committed to L1 blockchain
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-orange-500" />
+                  <span className="text-orange-400">ProvedOnL1:</span> Proof verified on L1
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-purple-500" />
+                  <span className="text-purple-400">ExecutedOnL1:</span> Executed on L1 blockchain
+                </div>
+                <div className="flex items-center space-x-2">
+                  <CheckCircle className="h-4 w-4 text-green-500" />
+                  <span className="text-green-400">Processed:</span> Transaction completed successfully
                 </div>
               </div>
             </div>
-          </Button>
-        )}
+          </div>
+
+        </div>
       </div>
 
       {isLoading && transactions.length === 0 ? (
