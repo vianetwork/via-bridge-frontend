@@ -56,7 +56,7 @@ export default function BridgeInterface() {
     
     const interval = setInterval(() => {
       fetchTransactions();
-    }, 30000); // Refresh every 30 seconds
+    }, 300000); // Refresh every 10 minutes
     
     return () => clearInterval(interval);
   }, [isAnyWalletConnected, fetchTransactions]);
