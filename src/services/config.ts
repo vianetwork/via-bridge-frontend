@@ -77,7 +77,7 @@ export const BRIDGE_CONFIG = {
     [BitcoinNetwork.TESTNET]: "tb1ppsy8j80jtns42rkpdsfcv25qfschqejxmk6datkvu236eekr4fms06wnz0",
     [BitcoinNetwork.MAINNET]: "",
   },
-  maxPriorityFeeRate: 10, // Maximum acceptable fee rate in sats/vB
+  maxPriorityFeeRate: 5, // Maximum acceptable fee rate in sats/vB
   defaultFee: 400, // Default fee in satoshis
   minBlockConfirmations: 3, // Minimum number of block confirmations required
   defaultNetwork: env().NEXT_PUBLIC_NETWORK,
