@@ -31,9 +31,13 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
           <span className="sr-only">Refresh</span>
           <div className="relative group">
             <HelpCircle className="h-5 w-5 text-gray-400 hover:text-gray-600 cursor-help" />
-            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 sm:left-auto sm:right-0 sm:translate-x-0 mb-2 px-3 py-2 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-[9999] max-w-xs shadow-lg border border-gray-700">
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 transform sm:left-auto sm:right-0 sm:translate-x-0 mb-2 px-3 py-2 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-50 max-w-xs shadow-lg border border-gray-700 pointer-events-none">
               <div className="text-left space-y-1">
                 <div><span className="text-gray-300 font-bold">Deposit</span></div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  <span className="text-gray-400">Pending:</span> Transaction in mempool
+                </div>
                 <div className="flex items-center space-x-2">
                   <Clock className="h-4 w-4 text-yellow-500" />
                   <span className="text-yellow-400">InProgress:</span> Transaction in progress
@@ -44,6 +48,10 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
                 </div>
 
                 <div><span className="text-gray-300 font-bold">Withdraw</span></div>
+                <div className="flex items-center space-x-2">
+                  <Clock className="h-4 w-4 text-gray-400" />
+                  <span className="text-gray-400">Pending:</span> Transaction in mempool
+                </div>
                 <div className="flex items-center space-x-2">
                   <Clock className="h-4 w-4 text-blue-500" />
                   <span className="text-blue-400">ExecutedOnL2:</span> Transaction executed on L2
@@ -84,7 +92,7 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
           <div className="h-[150px] overflow-y-auto pr-1">
             <div className="space-y-2 p-2">
               {transactions.map((tx) => (
-                <div key={tx.txHash} className="flex items-start justify-between rounded-md border p-3 text-sm">
+                <div key={tx.id} className="flex items-start justify-between rounded-md border p-3 text-sm">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       {tx.status === 'ExecutedOnL2' && <Clock className="h-4 w-4 text-blue-500" />}
@@ -92,6 +100,7 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
                       {tx.status === 'ProvedOnL1' && <Clock className="h-4 w-4 text-orange-500" />}
                       {tx.status === 'ExecutedOnL1' && <Clock className="h-4 w-4 text-purple-500" />}
                       {tx.status === 'InProgress' && <Clock className="h-4 w-4 text-amber-500" />}
+                      {tx.status === 'Pending' && <Clock className="h-4 w-4 text-gray-400" />}
                       {tx.status === 'Processed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {tx.status === 'Failed' && <XCircle className="h-4 w-4 text-red-500" />}
 
