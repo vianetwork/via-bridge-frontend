@@ -1,6 +1,6 @@
 "use client";
 
-import { getUTXOs } from "../bitcoin/utxo";
+import { checkIfEnoughBalance, getUTXOs } from "../bitcoin/utxo";
 import { buildTransaction, broadcastTransaction, finalizeTransaction } from "../bitcoin/transaction";
 import { type UserAddress, BitcoinNetwork } from "../bitcoin/types";
 import { BRIDGE_CONFIG } from "@/services/config";
@@ -33,6 +33,7 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
   const satsAmount = Math.floor(params.amountInBtc * 10 ** L1_BTC_DECIMALS);
 
   const utxos = await getUTXOs(params.bitcoinAddress, network);
+  checkIfEnoughBalance(utxos, satsAmount);
 
   if (utxos.length === 0) {
     throw new Error("No UTXOs found. Please fund your wallet with Bitcoin");
