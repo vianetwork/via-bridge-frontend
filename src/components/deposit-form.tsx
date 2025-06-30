@@ -34,7 +34,7 @@ const depositFormSchema = z.object({
     .refine((val) => !isNaN(Number.parseFloat(val)), {
       message: "Amount must be a valid number",
     })
-    .refine((val) => Number.parseFloat(val) >= 0.00002, {
+    .refine((val) => Number.parseFloat(val) >= 0.0002, {
       message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
     })
     .superRefine((val, ctx) => {
