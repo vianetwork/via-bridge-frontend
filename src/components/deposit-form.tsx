@@ -21,6 +21,7 @@ interface DepositFormProps {
   bitcoinAddress: string | null
   bitcoinPublicKey: string | null
   onDisconnect: () => void
+  onTransactionSubmitted: () => void;
 }
 
 interface FormContext {
@@ -33,7 +34,7 @@ const depositFormSchema = z.object({
     .refine((val) => !isNaN(Number.parseFloat(val)), {
       message: "Amount must be a valid number",
     })
-    .refine((val) => Number.parseFloat(val) >= 0.0002, {
+    .refine((val) => Number.parseFloat(val) >= 0.00002, {
       message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
     })
     .superRefine((val, ctx) => {
@@ -72,7 +73,7 @@ const verifyRecipientAddress = (address: string): boolean => {
   return recipientAddressBn > invalidReceiverBn;
 };
 
-export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
+export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransactionSubmitted }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -177,6 +178,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
         txHash: result.txId,
         l1ExplorerUrl: result.explorerUrl
       });
+
+      onTransactionSubmitted();
 
     } catch (error) {
       console.error("Deposit error:", error);
@@ -413,12 +416,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
           )}
 
           <div className="space-y-2">
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="w-full"
               disabled={
-                isSubmitting || 
-                !form.watch("amount") || 
+                isSubmitting ||
+                !form.watch("amount") ||
                 parseFloat(form.watch("amount") || "0") <= 0 ||
                 (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(balance))
               }

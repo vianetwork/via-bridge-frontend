@@ -18,13 +18,13 @@ export default function BridgeInterface() {
   const [activeTab, setActiveTab] = useState<string>("deposit");
   // const [refreshKey, setRefreshKey] = useState(0);
   const [showTransactions, setShowTransactions] = useState(false);
-  
-  const { 
-    transactions, 
-    isLoadingTransactions, 
-    fetchTransactions 
+
+  const {
+    transactions,
+    isLoadingTransactions,
+    fetchTransactions
   } = useWalletStore();
-  
+
   const {
     bitcoinAddress,
     bitcoinPublicKey,
@@ -41,25 +41,25 @@ export default function BridgeInterface() {
   } = useWalletState();
 
   // Check if any wallet is connected
-  const isAnyWalletConnected = isXverseConnected || isMetamaskConnected;
+  const isBothWalletConnected = isXverseConnected && isMetamaskConnected;
 
   // Fetch transactions when wallets are connected
   useEffect(() => {
-    if (isAnyWalletConnected) {
+    if (isBothWalletConnected) {
       fetchTransactions();
     }
   }, [isXverseConnected, isMetamaskConnected, fetchTransactions]);
 
   // Set up a polling interval to refresh transactions
   useEffect(() => {
-    if (!isAnyWalletConnected) return;
-    
+    if (!isBothWalletConnected) return;
+
     const interval = setInterval(() => {
       fetchTransactions();
     }, 300000); // Refresh every 10 minutes
-    
+
     return () => clearInterval(interval);
-  }, [isAnyWalletConnected, fetchTransactions]);
+  }, [isBothWalletConnected, fetchTransactions]);
 
   // Listen for wallet events to refresh the UI and transactions
   useEffect(() => {
@@ -123,6 +123,7 @@ export default function BridgeInterface() {
                     bitcoinAddress={bitcoinAddress}
                     bitcoinPublicKey={bitcoinPublicKey}
                     onDisconnect={disconnectXverse}
+                    onTransactionSubmitted={fetchTransactions}
                   />
                 ) : (
                   <div className="flex flex-col items-center space-y-4 py-6">
@@ -147,7 +148,7 @@ export default function BridgeInterface() {
             <TabsContent value="withdraw">
               {isMetamaskConnected ? (
                 isCorrectViaNetwork ? (
-                  <WithdrawForm viaAddress={viaAddress} />
+                  <WithdrawForm viaAddress={viaAddress} onTransactionSubmitted={fetchTransactions} />
                 ) : (
                   <div className="flex flex-col items-center space-y-4 py-6">
                     <AlertCircle className="h-12 w-12 text-amber-500" />
@@ -169,12 +170,11 @@ export default function BridgeInterface() {
             </TabsContent>
           </Tabs>
         </CardContent>
-        
-        {/* Only show transaction history section if at least one wallet is connected */}
-        {isAnyWalletConnected && (
+
+        {isBothWalletConnected && (
           <CardFooter className="flex flex-col px-6 pt-0">
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               className="flex items-center justify-between w-full py-2 text-sm font-medium"
               onClick={() => setShowTransactions(!showTransactions)}
             >
@@ -189,7 +189,7 @@ export default function BridgeInterface() {
               </div>
               {showTransactions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
-            
+
             {showTransactions && (
               <div className="w-full mt-2">
                 <TransactionHistory isLoading={isLoadingTransactions} onRefresh={fetchTransactions} />

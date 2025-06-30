@@ -17,6 +17,7 @@ import { getViaBalance } from "@/services/via/balance";
 
 interface WithdrawFormProps {
   viaAddress: string | null
+  onTransactionSubmitted: () => void;
 }
 
 const withdrawFormSchema = z.object({
@@ -42,7 +43,7 @@ const withdrawFormSchema = z.object({
     }),
 });
 
-export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
+export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: WithdrawFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -119,6 +120,8 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
         duration: 5000,
         className: "text-base font-medium",
       });
+
+      onTransactionSubmitted();
     } catch (error) {
       console.error("Withdrawal error:", error);
     } finally {

@@ -64,8 +64,8 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
         network: { type: bitcoinNetworkType },
         message: "Sign VIA deposit transaction",
         psbtBase64,
-        inputsToSign: [{ 
-          address: params.bitcoinAddress, 
+        inputsToSign: [{
+          address: params.bitcoinAddress,
           signingIndexes: Array.from({ length: inputCount }, (_, i) => i), // Sign all inputs
         }],
         broadcast: false,
@@ -77,7 +77,6 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
 
   // Finalize and broadcast
   const rawTx = await finalizeTransaction(signedTxResponse.psbtBase64);
-  console.log("Final raw transaction: ", rawTx);
   const txId = await broadcastTransaction(rawTx, network);
 
   return {
