@@ -5,15 +5,17 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Loader2, ExternalLink } from "lucide-react";
+import { ArrowRight, Loader2, ExternalLink, HelpCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
 import Image from "next/image";
 import { executeWithdraw } from "@/services/bridge/withdraw";
 import { useWalletStore } from "@/store/wallet-store";
 import { getViaBalance } from "@/services/via/balance";
+import { cn } from "@/lib/utils";
+import { toL1Amount } from "@/helpers";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -50,9 +52,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [isSuccess, setIsSuccess] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [amount, setAmount] = useState(0);
+  const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress, addLocalTransaction } = useWalletStore();
+  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -91,6 +95,67 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     fetchBalance();
   }, [viaAddress]);
 
+  // Update amount state when form amount changes
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "amount" && value.amount) {
+        const numericAmount = parseFloat(value.amount);
+        if (!isNaN(numericAmount)) {
+          setAmount(numericAmount);
+        }
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form]);
+
+  // Update the existing useEffect that watches form changes
+  useEffect(() => {
+    const subscription = form.watch((value, { name }) => {
+      if (name === "amount" && value.amount) {
+        const numericAmount = parseFloat(value.amount);
+        if (!isNaN(numericAmount)) {
+          setAmount(numericAmount);
+
+          // Clear existing timeout
+          if (feeEstimationTimeout) {
+            clearTimeout(feeEstimationTimeout);
+          }
+
+          // Set new timeout for fee estimation
+          const newTimeout = setTimeout(async () => {
+            try {
+              let formattedAmount = toL1Amount(numericAmount.toString());
+              if (formattedAmount == 0) {
+                throw "Amount can not be zero"
+              }
+              await fetchFeeEstimation(formattedAmount);
+            } catch (error) {
+              console.error("Error fetching fee estimation:", error);
+            }
+          }, 2000);
+
+          setFeeEstimationTimeout(newTimeout);
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      // Clear timeout on cleanup
+      if (feeEstimationTimeout) {
+        clearTimeout(feeEstimationTimeout);
+      }
+    };
+  }, [form, feeEstimationTimeout]);
+  // Add cleanup effect for component unmount
+  useEffect(() => {
+    return () => {
+      if (feeEstimationTimeout) {
+        clearTimeout(feeEstimationTimeout);
+      }
+    };
+  }, [feeEstimationTimeout]);
+
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
       toast.error("VIA address is required", {
@@ -128,6 +193,13 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       setIsSubmitting(false);
     }
   }
+
+  // Determine color class based on amount
+  const getColorClass = (amount: number) => {
+    if (amount < 250) return "text-red-500";
+    if (amount < 1000) return "text-orange-500";
+    return "text-green-500";
+  };
 
   if (isSuccess && txHash && explorerUrl) {
     return (
@@ -187,6 +259,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     setIsSuccess(false);
                     setTxHash(null);
                     setExplorerUrl(null);
+                    // setAmount(0);
                     form.reset();
                   }}
                 >
@@ -212,7 +285,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-md min-w-[300px] sm:min-w-[360px] mx-auto">
       <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
         <div className="flex items-center gap-2">
           <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
@@ -225,11 +298,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
         </div>
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
-            <Image 
-              src="/bitcoin-logo.svg" 
-              alt="BTC" 
-              width={14} 
-              height={14} 
+            <Image
+              src="/bitcoin-logo.svg"
+              alt="BTC"
+              width={14}
+              height={14}
               className="text-amber-500"
             />
             <span className="text-xs font-medium">BTC</span>
@@ -237,11 +310,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
         </div>
         <div className="flex items-center gap-2">
-          <Image 
-            src="/bitcoin-logo.svg" 
-            alt="Bitcoin" 
-            width={20} 
-            height={20} 
+          <Image
+            src="/bitcoin-logo.svg"
+            alt="Bitcoin"
+            width={20}
+            height={20}
             className="text-amber-500"
           />
           <div className="flex flex-col">
@@ -259,105 +332,154 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
             render={({ field }) => (
               <FormItem>
                 <div className="flex justify-between items-center">
-                  <FormLabel>Amount (BTC)</FormLabel>
-                  {balance && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      Balance: {isLoadingBalance ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <span className={`font-medium ${field.value && Number(field.value) > Number(balance)
-                          ? "text-red-500"
-                          : field.value && Number(field.value) > Number(balance) * 0.95
-                            ? "text-amber-500"
-                            : ""
-                          }`}>
-                          {balance} BTC
-                        </span>
+                  <FormLabel className="text-sm">BTC Amount</FormLabel>
+                </div>
+
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      placeholder="0.001"
+                      className={cn(
+                        "placeholder:text-muted-foreground/60 pr-16", // space inside input for the button
+                        field.value &&
+                        balance &&
+                        parseFloat(field.value) > parseFloat(String(balance)) &&
+                        "border-red-500 focus-visible:ring-red-500"
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 px-1.5 text-xs text-primary"
-                        onClick={() => {
-                          if (balance) {
-                            form.setValue("amount", String(balance));
-                          }
-                        }}
-                        disabled={isLoadingBalance || !balance || parseFloat(String(balance)) <= 0}
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (balance) {
+                          form.setValue("amount", String(balance));
+                          setAmount(balance);
+                        }
+                      }}
+                      disabled={
+                        isLoadingBalance || !balance || parseFloat(String(balance)) <= 0
+                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-600 hover:bg-blue-200 disabled:opacity-50 mr-2"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </FormControl>
+
+                {balance && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                    Balance:{" "}
+                    {isLoadingBalance ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <span
+                        className={cn(
+                          "font-medium",
+                          field.value &&
+                          Number(field.value) > Number(balance) &&
+                          "text-red-500",
+                          field.value &&
+                          Number(field.value) > Number(balance) * 0.95 &&
+                          "text-amber-500"
+                        )}
                       >
-                        MAX
-                      </Button>
-                    </div>
+                        {(balance).toFixed(4)} BTC
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <FormMessage />
+
+                <FormField
+                  control={form.control}
+                  name="recipientBitcoinAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">Recipient Bitcoin Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="bc1..."
+                          className="placeholder:text-muted-foreground/60"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </div>
-                <FormControl>
-                  <Input
-                    placeholder="0.001"
-                    className={`placeholder:text-muted-foreground/60 ${field.value && balance && parseFloat(field.value) > parseFloat(String(balance))
-                      ? "border-red-500 focus-visible:ring-red-500"
-                      : ""
-                      }`}
-                    {...field}
-                  />
-                </FormControl>
-                {!form.formState.errors.amount && (
-                  <FormDescription>
-                    Amount of BTC to withdraw (minimum 0.00001 BTC)
-                  </FormDescription>
+                />
+
+                {field.value && (
+                  <div className="text-xs text-muted-foreground mt-4 min-h-[1rem]">
+                    {isLoadingFeeEstimation ? (
+                      <div className="w-48 h-4 rounded bg-muted animate-pulse" />
+                    ) : feeEstimation !== null && (
+                      <div className="border border-muted rounded-md bg-muted/40 px-4 py-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            Estimated network fee:{" "}
+                            <span className="font-medium text-foreground">
+                              {feeEstimation.fee.toLocaleString()} sats
+                            </span>
+                          </div>
+                          {/* Custom Tooltip */}
+                          <div className="relative group">
+                            <HelpCircle className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 transform sm:left-auto sm:right-0 sm:translate-x-0 mb-2 px-2 py-1.5 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 shadow-lg border border-gray-700 pointer-events-none">
+                              <div className="text-left leading-snug">
+                                This is the estimated fee required to process your withdrawal through the verifier network. Any unused amount will be refunded to your wallet.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {(() => {
+                          const btcAmount = Math.max(0, toL1Amount(amount.toString()) - feeEstimation.fee);
+
+                          const getColorClass = (amount: number) => {
+                            if (amount < 250) return "text-red-500";
+                            if (amount < 1000) return "text-orange-500";
+                            return "text-green-500";
+                          };
+
+                          const colorClass = getColorClass(btcAmount);
+
+                          return (
+                            <div className={`text-xs ${colorClass}`}>
+                              Minimum BTC you will receive:{" "}
+                              <span className={`font-medium ${colorClass}`}>
+                                {btcAmount.toLocaleString()} sats
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
                 )}
-                <FormMessage />
               </FormItem>
             )}
           />
-
-          <FormField
-            control={form.control}
-            name="recipientBitcoinAddress"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Recipient Bitcoin Address</FormLabel>
-                <FormControl>
-                  <Input placeholder="bc1..." className="placeholder:text-muted-foreground/60" {...field} />
-                </FormControl>
-                {!form.formState.errors.recipientBitcoinAddress && (
-                  <FormDescription>Bitcoin address to receive funds</FormDescription>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {viaAddress && (
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2 border border-border/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="h-4 w-4 rounded-full bg-primary" />
-                  <p className="text-sm font-medium">Connected VIA Address</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-xs text-green-500 font-medium">Connected</span>
-                </div>
-              </div>
-              <p className="font-mono text-xs text-muted-foreground break-all pl-6">{viaAddress}</p>
-            </div>
-          )}
-
           {txHash && (
             <Alert className="bg-primary/5 border-primary/10">
-              <AlertDescription className="text-sm break-all text-primary/80">Transaction submitted: {txHash}</AlertDescription>
+              <AlertDescription className="text-sm break-all text-primary/80">
+                Transaction submitted: {txHash}
+              </AlertDescription>
             </Alert>
           )}
 
-          <Button 
-            type="submit" 
-            className="w-full" 
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            className="w-full"
             disabled={
-              isSubmitting || 
-              !form.watch("amount") || 
+              isSubmitting ||
+              !feeEstimation ||
+              isLoadingFeeEstimation ||
+              !form.watch("amount") ||
               parseFloat(form.watch("amount") || "0") <= 0 ||
-              (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
+              (!!balance &&
+                parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
             }
           >
             {isSubmitting ? (

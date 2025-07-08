@@ -1,6 +1,10 @@
 import { BitcoinNetwork } from "@/services/bitcoin/types";
 import { env } from "@/lib/env";
 
+
+// Define the API base URL
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";
+
 export enum Layer {
   L1,
   L2,
