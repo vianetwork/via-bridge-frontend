@@ -2,10 +2,7 @@ import axios from "axios";
 import { L1_BTC_DECIMALS, L2_BTC_DECIMALS } from "../constants";
 import { ethers } from "ethers";
 import { TransactionStatus } from "@/store/wallet-store";
-import { API_CONFIG, BRIDGE_CONFIG, getNetworkConfig } from "../config";
-
-// Define the API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";
+import { API_BASE_URL, API_CONFIG, BRIDGE_CONFIG, getNetworkConfig } from "../config";
 
 // Define types for the API response
 interface Deposit {

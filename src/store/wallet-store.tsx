@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
-import { fetchUserTransactions, mapApiTransactionsToAppFormat } from "@/services/api/transactions";
+import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -33,6 +33,10 @@ interface Transaction {
   txHash: string;
   l1ExplorerUrl?: string;
   l2ExplorerUrl?: string;
+}
+
+interface FeeEstimation {
+  fee: number;
 }
 
 // LocalStorage utility functions
@@ -82,7 +86,9 @@ interface WalletState {
   isCorrectViaNetwork: boolean;
   transactions: Transaction[];
   isLoadingTransactions: boolean;
+  isLoadingFeeEstimation: boolean;
   localTransactions: Transaction[];
+  feeEstimation: FeeEstimation | null;
 
   // Actions
   setBitcoinAddress: (address: string | null) => void;
@@ -96,6 +102,7 @@ interface WalletState {
   updateTransactionStatus: (txHash: string, status: Transaction['status']) => void;
   clearTransactions: () => void;
   fetchTransactions: () => Promise<void>;
+  fetchFeeEstimation: (amount: number) => Promise<void>;
   addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   removeLocalTransaction: (txHash: string) => void;
   mergeTransactions: (apiTransactions: Transaction[]) => Transaction[];
@@ -125,7 +132,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   isCorrectViaNetwork: false,
   transactions: [],
   isLoadingTransactions: false,
+  isLoadingFeeEstimation: false,
   localTransactions: [],
+  feeEstimation: null,
 
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
@@ -207,6 +216,27 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // Merge and sort all transactions
     return [...apiTransactions, ...remainingLocalTxs].sort((a, b) => b.timestamp - a.timestamp);
+  },
+
+  fetchFeeEstimation: async (amount: number) => {
+    if (amount == 0) {
+      return;
+    }
+
+    try {
+      set({ isLoadingFeeEstimation: true });
+      const fee = await fetchFeeEstimation(amount);
+      set(() => ({
+        feeEstimation: {
+          fee
+        }
+      }));
+    } catch (error) {
+      console.error(error);
+    } finally {
+      set({ isLoadingFeeEstimation: false });
+    }
+
   },
 
   fetchTransactions: async () => {
