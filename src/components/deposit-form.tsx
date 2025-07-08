@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { ArrowRight, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -341,11 +341,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     />
                     <button
                       type="button"
-                      onClick={() => {
-                        if (balance) {
-                          form.setValue("amount", String(balance));
-                        }
-                      }}
+                      onClick={handleMaxAmount}
                       disabled={
                         isLoadingBalance || !balance || parseFloat(String(balance)) <= 0
                       }

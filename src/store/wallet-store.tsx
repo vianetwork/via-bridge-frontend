@@ -226,13 +226,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       set({ isLoadingFeeEstimation: true });
       const fee = await fetchFeeEstimation(amount);
-      set(_ => ({
+      set(() => ({
         feeEstimation: {
           fee
         }
       }));
     } catch (error) {
-
+      console.error(error);
     } finally {
       set({ isLoadingFeeEstimation: false });
     }

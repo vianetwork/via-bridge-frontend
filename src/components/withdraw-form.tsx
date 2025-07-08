@@ -124,9 +124,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           // Set new timeout for fee estimation
           const newTimeout = setTimeout(async () => {
             try {
-              let formattedAmount = toL1Amount(numericAmount.toString());
+              const formattedAmount = toL1Amount(numericAmount.toString());
               if (formattedAmount == 0) {
-                throw "Amount can not be zero"
+                throw "Amount can not be zero";
               }
               await fetchFeeEstimation(formattedAmount);
             } catch (error) {
@@ -193,13 +193,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       setIsSubmitting(false);
     }
   }
-
-  // Determine color class based on amount
-  const getColorClass = (amount: number) => {
-    if (amount < 250) return "text-red-500";
-    if (amount < 1000) return "text-orange-500";
-    return "text-green-500";
-  };
 
   if (isSuccess && txHash && explorerUrl) {
     return (
