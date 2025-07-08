@@ -16,6 +16,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
 import { isAddress } from "ethers";
 import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS } from "@/services/constants";
+import { cn } from "@/lib/utils";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -275,7 +276,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full max-w-md min-w-[300px] sm:min-w-[360px] mx-auto">
       <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
         <div className="flex items-center gap-2">
           <Image
@@ -322,92 +323,84 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
             render={({ field }) => (
               <FormItem>
                 <div className="flex justify-between items-center">
-                  <FormLabel>Amount (BTC)</FormLabel>
-                  {balance && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      Balance: {isLoadingBalance ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <span className={`font-medium ${field.value && parseFloat(field.value) > parseFloat(balance)
-                          ? "text-red-500"
-                          : field.value && parseFloat(field.value) > parseFloat(balance) * 0.95
-                            ? "text-amber-500"
-                            : ""
-                          }`}>
-                          {balance} BTC
-                        </span>
+                  <FormLabel className="text-sm">BTC Amount</FormLabel>
+                </div>
+
+                <FormControl>
+                  <div className="relative">
+                    <Input
+                      placeholder="0.001"
+                      className={cn(
+                        "placeholder:text-muted-foreground/60 pr-16",
+                        field.value &&
+                        balance &&
+                        parseFloat(field.value) > parseFloat(String(balance)) &&
+                        "border-red-500 focus-visible:ring-red-500"
                       )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-5 px-1.5 text-xs text-primary"
-                        onClick={handleMaxAmount}
-                        disabled={isLoadingBalance || !balance || parseFloat(balance) <= 0}
+                      {...field}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (balance) {
+                          form.setValue("amount", String(balance));
+                        }
+                      }}
+                      disabled={
+                        isLoadingBalance || !balance || parseFloat(String(balance)) <= 0
+                      }
+                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-600 hover:bg-blue-200 disabled:opacity-50 mr-2"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </FormControl>
+
+                {balance && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                    Balance:{" "}
+                    {isLoadingBalance ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <span
+                        className={cn(
+                          "font-medium",
+                          field.value &&
+                          Number(field.value) > Number(balance) &&
+                          "text-red-500",
+                          field.value &&
+                          Number(field.value) > Number(balance) * 0.95 &&
+                          "text-amber-500"
+                        )}
                       >
-                        MAX
-                      </Button>
-                    </div>
+                        {balance} BTC
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <FormMessage />
+
+                <FormField
+                  control={form.control}
+                  name="recipientViaAddress"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">Recipient VIA Address</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="0x..."
+                          className="placeholder:text-muted-foreground/60"
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
                   )}
-                </div>
-                <FormControl>
-                  <Input
-                    placeholder="0.001"
-                    className={`placeholder:text-muted-foreground/60 ${field.value && balance && parseFloat(field.value) > parseFloat(balance)
-                      ? "border-red-500 focus-visible:ring-red-500"
-                      : ""
-                      }`}
-                    {...field}
-                  />
-                </FormControl>
-                {!form.formState.errors.amount && (
-                  <FormDescription>
-                    Amount of BTC to deposit (minimum 0.0002 BTC)
-                  </FormDescription>
-                )}
-                <FormMessage />
+                />
               </FormItem>
             )}
           />
-
-          <FormField
-            control={form.control}
-            name="recipientViaAddress"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Recipient VIA Address</FormLabel>
-                <FormControl>
-                  <Input placeholder="0x..." className="placeholder:text-muted-foreground/60" {...field} />
-                </FormControl>
-                {!form.formState.errors.recipientViaAddress && (
-                  <FormDescription>VIA address to receive funds</FormDescription>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {bitcoinAddress && (
-            <div className="bg-muted/50 rounded-lg p-4 space-y-2 border border-border/50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Image
-                    src="/bitcoin-logo.svg"
-                    alt="Bitcoin"
-                    width={16}
-                    height={16}
-                    className="text-amber-500"
-                  />
-                  <p className="text-sm font-medium">Connected Bitcoin Address</p>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                  <span className="text-xs text-green-500 font-medium">Connected</span>
-                </div>
-              </div>
-              <p className="font-mono text-xs text-muted-foreground break-all pl-6">{bitcoinAddress}</p>
-            </div>
-          )}
 
           {txHash && (
             <Alert>
@@ -435,13 +428,6 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                 "Deposit"
               )}
             </Button>
-            {/* <Button 
-              variant="outline" 
-              className="w-full text-foreground/80 hover:text-foreground" 
-              onClick={onDisconnect}
-            >
-              Disconnect Xverse
-            </Button> */}
           </div>
         </form>
       </Form>
