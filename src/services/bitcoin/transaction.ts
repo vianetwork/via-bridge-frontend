@@ -18,55 +18,42 @@ async function getFeeRate(
   const axiosInstance = axios.create({
     timeout: API_CONFIG.timeout,
   });
+  const apis = [
+    API_CONFIG.endpoints.bitcoin.primary[network],
+    API_CONFIG.endpoints.bitcoin.fallback[network]
+  ];
+  for (let i = 0; i < apis.length; i++) {
+    try {
+      // Try fallback endpoint (Mempool.space)
+      console.log(`Fetching fee estimates from: ${apis[i]}`);
+      const response = await axiosInstance.get(`${apis[i]}/v1/fees/recommended`);
 
-  try {
-    // Try primary endpoint (Blockstream)
-    console.log("Fetching fee estimates from primary endpoint...");
-    const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.primary[network]}/fee-estimates`);
-    // Blockstream returns estimates for different block targets
-    const feeRate = response.data[targetBlocks.toString()];
+      // Select fee rate based on target blocks:
+      // fastestFee: ~1 block (10 minutes)
+      // halfHourFee: ~3 blocks (30 minutes)
+      // hourFee: ~6 blocks (1 hour)
+      // economyFee: ~144 blocks (1 day)
+      // minimumFee: lowest fee rate
+      let feeRate: number;
+      if (targetBlocks <= 1) {
+        feeRate = response.data.fastestFee;
+      } else if (targetBlocks <= 3) {
+        feeRate = response.data.halfHourFee;
+      } else if (targetBlocks <= 6) {
+        feeRate = response.data.hourFee;
+      } else {
+        feeRate = response.data.economyFee;
+      }
 
-    console.log("Fee rate from primary endpoint:", response.data);
+      console.log("Fee rate:", feeRate);
 
-    // Check if fee rate is valid and under the maximum threshold
-    if (typeof feeRate === 'number' && feeRate <= BRIDGE_CONFIG.maxPriorityFeeRate) {
-      return feeRate;
+      if (typeof feeRate === 'number' && feeRate <= BRIDGE_CONFIG.maxPriorityFeeRate) {
+        return feeRate;
+      }
+      console.warn(`Fallback endpoint fee rate ${feeRate} exceeds maximum ${BRIDGE_CONFIG.maxPriorityFeeRate} sats/vB`);
+    } catch (backupError) {
+      console.error("Both endpoints failed to get fee estimates", backupError);
     }
-    console.warn(`Primary endpoint fee rate ${feeRate} exceeds maximum ${BRIDGE_CONFIG.maxPriorityFeeRate} sats/vB, trying fallback...`);
-  } catch (error) {
-    console.warn("Primary API endpoint failed for fee estimation, trying fallback...", error);
-  }
-
-  try {
-    // Try fallback endpoint (Mempool.space)
-    console.log("Fetching fee estimates from fallback endpoint...");
-    const response = await axiosInstance.get(`${API_CONFIG.endpoints.bitcoin.fallback[network]}/v1/fees/recommended`);
-    
-    // Select fee rate based on target blocks:
-    // fastestFee: ~1 block (10 minutes)
-    // halfHourFee: ~3 blocks (30 minutes)
-    // hourFee: ~6 blocks (1 hour)
-    // economyFee: ~144 blocks (1 day)
-    // minimumFee: lowest fee rate
-    let feeRate: number;
-    if (targetBlocks <= 1) {
-      feeRate = response.data.fastestFee;
-    } else if (targetBlocks <= 3) {
-      feeRate = response.data.halfHourFee;
-    } else if (targetBlocks <= 6) {
-      feeRate = response.data.hourFee;
-    } else {
-      feeRate = response.data.economyFee;
-    }
-    
-    console.log("Fee rate from fallback endpoint:", feeRate);
-
-    if (typeof feeRate === 'number' && feeRate <= BRIDGE_CONFIG.maxPriorityFeeRate) {
-      return feeRate;
-    }
-    console.warn(`Fallback endpoint fee rate ${feeRate} exceeds maximum ${BRIDGE_CONFIG.maxPriorityFeeRate} sats/vB`);
-  } catch (backupError) {
-    console.error("Both endpoints failed to get fee estimates", backupError);
   }
 
   // If both endpoints fail or return excessive fees, use max priority fee rate
@@ -98,8 +85,8 @@ export async function buildTransaction(
   }));
 
   // Remove '0x' prefix if present
-  const l2Address = details.l2ReceiverAddress.startsWith('0x') 
-    ? details.l2ReceiverAddress.slice(2) 
+  const l2Address = details.l2ReceiverAddress.startsWith('0x')
+    ? details.l2ReceiverAddress.slice(2)
     : details.l2ReceiverAddress;
 
   const outputs = [
@@ -173,7 +160,7 @@ export async function broadcastTransaction(
     return response.data;
   } catch (error) {
     console.warn("Primary API endpoint failed for broadcast, trying fallback...", error);
-    
+
     try {
       // Try fallback endpoint
       console.log("Broadcasting transaction via fallback endpoint...");
