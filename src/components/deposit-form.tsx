@@ -32,11 +32,8 @@ interface FormContext {
 const depositFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => !isNaN(Number.parseFloat(val)), {
-      message: "Amount must be a valid number",
-    })
     .refine((val) => Number.parseFloat(val) >= 0.0002, {
-      message: "Minimum amount is 0.0002 BTC (1000 satoshis)",
+      message: "Minimum amount is 0.0002 BTC (20000 satoshis)",
     })
     .superRefine((val, ctx) => {
       // Get balance from context
@@ -87,6 +84,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       amount: "",
       recipientViaAddress: "",
@@ -330,6 +329,9 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   <div className="relative">
                     <Input
                       placeholder="0.001"
+                      step="any"
+                      type="number"
+                      inputMode="decimal"
                       className={cn(
                         "placeholder:text-muted-foreground/60 pr-16",
                         field.value &&
@@ -351,6 +353,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     </button>
                   </div>
                 </FormControl>
+                <FormMessage/>
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -374,8 +377,6 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     )}
                   </div>
                 )}
-
-                <FormMessage />
 
                 <FormField
                   control={form.control}

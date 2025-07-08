@@ -25,11 +25,8 @@ interface WithdrawFormProps {
 const withdrawFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => !isNaN(Number.parseFloat(val)), {
-      message: "Amount must be a valid number",
-    })
-    .refine((val) => Number.parseFloat(val) >= 0.00001, {
-      message: "Minimum amount is 0.00001 BTC (1000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= 0.00002, {
+      message: "Minimum amount is 0.00002 BTC (2000 satoshis)",
     }),
   recipientBitcoinAddress: z
     .string()
@@ -50,9 +47,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
-  const [balance, setBalance] = useState<number | null>(null);
+  const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState("0");
   const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Import the wallet store to get the Bitcoin address
@@ -60,6 +57,8 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
+    mode: "onChange",
+    reValidateMode: "onChange",
     defaultValues: {
       amount: "",
       recipientBitcoinAddress: "",
@@ -81,7 +80,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       try {
         setIsLoadingBalance(true);
         const balanceInBtc = await getViaBalance(viaAddress);
-        setBalance(Number(balanceInBtc));
+        setBalance(balanceInBtc);
       } catch (error) {
         console.error("Error fetching balance:", error);
         toast.error("Failed to fetch balance", {
@@ -99,10 +98,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "amount" && value.amount) {
-        const numericAmount = parseFloat(value.amount);
-        if (!isNaN(numericAmount)) {
-          setAmount(numericAmount);
-        }
+        setAmount(value.amount);
       }
     });
     return () => subscription.unsubscribe();
@@ -112,30 +108,27 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       if (name === "amount" && value.amount) {
-        const numericAmount = parseFloat(value.amount);
-        if (!isNaN(numericAmount)) {
-          setAmount(numericAmount);
+        setAmount(value.amount);
 
-          // Clear existing timeout
-          if (feeEstimationTimeout) {
-            clearTimeout(feeEstimationTimeout);
-          }
-
-          // Set new timeout for fee estimation
-          const newTimeout = setTimeout(async () => {
-            try {
-              const formattedAmount = toL1Amount(numericAmount.toString());
-              if (formattedAmount == 0) {
-                throw "Amount can not be zero";
-              }
-              await fetchFeeEstimation(formattedAmount);
-            } catch (error) {
-              console.error("Error fetching fee estimation:", error);
-            }
-          }, 2000);
-
-          setFeeEstimationTimeout(newTimeout);
+        // Clear existing timeout
+        if (feeEstimationTimeout) {
+          clearTimeout(feeEstimationTimeout);
         }
+
+        // Set new timeout for fee estimation
+        const newTimeout = setTimeout(async () => {
+          try {
+            const formattedAmount = toL1Amount(value.amount!);
+            if (formattedAmount == 0) {
+              return;
+            }
+            await fetchFeeEstimation(formattedAmount);
+          } catch (error) {
+            console.error("Error fetching fee estimation:", error);
+          }
+        }, 2000);
+
+        setFeeEstimationTimeout(newTimeout);
       }
     });
 
@@ -332,6 +325,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                   <div className="relative">
                     <Input
                       placeholder="0.001"
+                      step="any"
+                      type="number"
+                      inputMode="decimal"
                       className={cn(
                         "placeholder:text-muted-foreground/60 pr-16", // space inside input for the button
                         field.value &&
@@ -358,6 +354,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     </button>
                   </div>
                 </FormControl>
+                <FormMessage />
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -376,13 +373,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                           "text-amber-500"
                         )}
                       >
-                        {(balance).toFixed(4)} BTC
+                        {(Number(balance)).toFixed(4)} BTC
                       </span>
                     )}
                   </div>
                 )}
-
-                <FormMessage />
 
                 <FormField
                   control={form.control}
@@ -468,6 +463,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
             disabled={
               isSubmitting ||
               !feeEstimation ||
+              toL1Amount(amount.toString()) - feeEstimation.fee < 0 ||
               isLoadingFeeEstimation ||
               !form.watch("amount") ||
               parseFloat(form.watch("amount") || "0") <= 0 ||
