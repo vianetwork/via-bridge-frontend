@@ -83,10 +83,51 @@ USER nextjs
 
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
 
 CMD ["node", "server.js"]
+```
+
+**Build and run with Docker:**
+```bash
+# Build the image
+docker build -t via-bridge-frontend .
+
+# Run the container
+docker run -p 3000:3000 via-bridge-frontend
+```
+
+#### Docker Compose (Recommended for Development)
+
+For easier development and testing, use the included `docker-compose.yml`:
+
+```bash
+# Start the application (builds automatically)
+docker-compose up --build
+
+# Run in background
+docker-compose up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop the application
+docker-compose down
+```
+
+The docker-compose configuration includes:
+- Development-friendly environment variables (`NODE_ENV=development`, `NEXT_PUBLIC_NETWORK=testnet`)
+- Volume mounts for live code changes during development
+- Health checks to monitor container status
+- Automatic restart policies
+
+**Production Docker Compose:**
+For production, modify the environment variables in `docker-compose.yml`:
+```yaml
+environment:
+  - NODE_ENV=production
+  - NEXT_PUBLIC_NETWORK=mainnet
 ```
 
 #### Other Platforms
