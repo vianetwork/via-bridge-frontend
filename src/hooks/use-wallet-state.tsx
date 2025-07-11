@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
-import { setupEthereumListeners } from "@/utils/ethereum-provider";
+import { getMetaMaskProvider } from "@/utils/ethereum-provider";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
@@ -15,20 +15,6 @@ export function useWalletState() {
     }
 
     checkConnections();
-
-    // Set up MetaMask network change listener using safer provider detection
-    const handleChainChanged = () => {
-      walletStore.checkMetamaskNetwork();
-    };
-
-    const cleanupEthereumListener = setupEthereumListeners('chainChanged', handleChainChanged);
-
-    // Clean up listener on unmount
-    return () => {
-      if (cleanupEthereumListener) {
-        cleanupEthereumListener();
-      }
-    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -77,6 +63,55 @@ export function useWalletState() {
 
     setupXverseListeners();
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Listen for metmask account and network changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const provider = getMetaMaskProvider();
+    if (!provider) {
+      console.log('MetaMask not available for account change monitoring');
+      return;
+    }
+
+    const handleAccountsChanged = (accounts: string[]) => {
+      console.log('MetaMask accounts changed:', accounts);
+      
+      if (accounts.length === 0) {
+        console.log('MetaMask disconnected or locked');
+        walletStore.disconnectMetamask();
+      } else {
+        console.log('Active account:', accounts[0]);
+        
+        walletStore.setViaAddress(accounts[0]);
+        if (!walletStore.isMetamaskConnected) {
+          walletStore.setIsMetamaskConnected(true);
+        }
+        
+        walletStore.checkMetamaskNetwork();
+      }
+    };
+
+    const handleChainChanged = async (chainId: string) => {
+      console.log('MetaMask chain changed to:', chainId);
+      // check if we're on the correct network
+      await walletStore.checkMetamaskNetwork();
+    };
+
+
+    if (provider.on) {
+      provider.on('accountsChanged', handleAccountsChanged);
+      provider.on('chainChanged', handleChainChanged);
+    }
+
+    return () => {
+      if (provider.removeListener) {
+        provider.removeListener('accountsChanged', handleAccountsChanged);
+        provider.removeListener('chainChanged', handleChainChanged);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return {
