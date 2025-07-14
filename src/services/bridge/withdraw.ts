@@ -16,15 +16,21 @@ export interface WithdrawResult {
 
 export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawResult> {
   try {
-    // Connect to the browser wallet    
+    // Connect to the browser wallet
     const browserProvider = new BrowserProvider((window as any).ethereum);
     const provider = new Provider(getNetworkConfig().rpcUrls[0]);
+    
+    // Get the browser signer and ensure it has the required properties
+    const browserSigner = await browserProvider.getSigner();
+    const network = await browserProvider.getNetwork();
+    
+    // Create the VIA signer
     const signer = Signer.from(
-      await browserProvider.getSigner(),
-      Number((await browserProvider.getNetwork()).chainId),
+      browserSigner as unknown as Parameters<typeof Signer.from>[0],
+      Number(network.chainId),
       provider
     );
-
+    
     // Convert amount to L2 token decimals (18 decimals)
     const l2SatsAmount = ethers.parseUnits(params.amount, L2_BTC_DECIMALS);
 
