@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
 import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { getAllWalletProviders, getCoinbaseProvider, getRabbyProvider } from "@/utils/ethereum-provider";
+import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -10,6 +12,8 @@ export const walletEvents = {
   metamaskDisconnected: createEvent<void>('metamask-disconnected'),
   xverseDisconnected: createEvent<void>('xverse-disconnected'),
   networkChanged: createEvent<void>('network-changed'),
+  walletChanged: createEvent<string>('wallet-changed'),
+  walletRefreshed: createEvent<void>('wallet-refreshed'),
 };
 
 interface WalletState {
@@ -21,6 +25,10 @@ interface WalletState {
   isCorrectBitcoinNetwork: boolean;
   isCorrectViaNetwork: boolean;
 
+  // Multi wallet support
+  availableWallets: Array<{name: string, rdns: string, icon?: string}>;
+  selectedWallet: string | null; // rdns of selected wallet
+
   // Actions
   setBitcoinAddress: (address: string | null) => void;
   setBitcoinPublicKey: (publicKey: string | null) => void;
@@ -30,12 +38,18 @@ interface WalletState {
   setIsCorrectBitcoinNetwork: (correct: boolean) => void;
   setIsCorrectViaNetwork: (correct: boolean) => void;
 
+  setAvailableWallets: (wallets: Array<{name: string, rdns: string, icon?: string}>) => void;
+  setSelectedWallet: (rdns: string) => void;
+
   // Wallet operations
   connectXverse: () => Promise<boolean>;
   connectMetamask: () => Promise<boolean>;
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
   switchNetwork: (layer: Layer) => void;
+
+  connectWallet: (rdns: string) => Promise<boolean>;
+  refreshAvailableWallets: () => void;
 
   // Helper methods
   checkXverseConnection: () => Promise<void>;
@@ -52,6 +66,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   isCorrectBitcoinNetwork: false,
   isCorrectViaNetwork: false,
 
+  availableWallets: [],
+  selectedWallet: null,
+
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
   setBitcoinPublicKey: (publicKey) => set({ bitcoinPublicKey: publicKey }),
@@ -60,6 +77,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsMetamaskConnected: (connected) => set({ isMetamaskConnected: connected }),
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
+
+  setAvailableWallets: (wallets) => set({ availableWallets: wallets }),
+  setSelectedWallet: (rdns) => set({ selectedWallet: rdns }),
 
   // Wallet operations
   connectXverse: async () => {
@@ -218,6 +238,76 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     walletEvents.networkChanged.emit();
   },
 
+  connectWallet: async (rdns: string) => {
+    try {
+      console.log(`🔹 Connecting to wallet with rdns: ${rdns}`);
+      
+      const { eip6963Store } = await import("@/utils/eip6963-provider");
+      const providerDetail = eip6963Store.getProviderByRdns(rdns);
+      
+      if (!providerDetail) {
+        throw new WalletNotFoundError(`Wallet with rdns ${rdns} not found`);
+      }
+
+      const provider = providerDetail.provider;
+      
+      // Request account access
+      const accounts = await provider.request({
+        method: "eth_requestAccounts",
+      }) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from wallet");
+      }
+
+      const address = accounts[0];
+      set({
+        viaAddress: address,
+        isMetamaskConnected: true, // For now, treating all EIP-6963 wallets as "metamask-like"
+        selectedWallet: rdns
+      });
+
+      // Check network after connection
+      await get().checkMetamaskNetwork();
+
+      console.log(`✅ Wallet ${providerDetail.info.name} connected, address:`, address);
+      walletEvents.metamaskConnected.emit();
+      return true;
+    } catch (error: any) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
+        console.log("Connection rejected by user");
+        return false;
+      }
+      console.error(`Wallet connection error for ${rdns}:`, error);
+      throw error;
+    }
+  },
+
+  refreshAvailableWallets: () => {
+  try {
+    console.log("🔄 Refreshing available wallets...");
+    
+    const { eip6963Store } = require("@/utils/eip6963-provider");
+    const providers = eip6963Store.getAllWalletProviders();
+    
+    const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
+      name: provider.info.name,
+      rdns: provider.info.rdns,
+      icon: provider.info.icon
+    }));
+
+    set({ availableWallets: wallets });
+    
+    console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
+    walletEvents.walletRefreshed.emit();
+    } catch (error: any) {
+      console.error("Error refreshing available wallets:", error);
+      // Don't throw, just log the error and continue with empty array
+      set({ availableWallets: [] });
+    }
+  },
+
   // Helper methods
   checkXverseConnection: async () => {
     try {
@@ -303,3 +393,4 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   }
 }));
+

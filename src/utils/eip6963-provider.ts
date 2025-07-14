@@ -49,7 +49,87 @@ export class EIP6963ProviderStore {
 
   getMetaMaskProvider(): EIP6963ProviderDetail | undefined {
     this.ensureInitialized();
-    return this.getProviderByName('metamask');
+    return this.providers.find(provider =>
+      provider.info.name.toLowerCase().includes('metamask') ||
+      provider.info.rdns === 'io.metamask'
+    );
+  }
+
+  getRabbyProvider(): EIP6963ProviderDetail | undefined {
+    this.ensureInitialized();
+    return this.providers.find(provider =>
+      provider.info.name.toLocaleLowerCase().includes('rabby') ||
+      provider.info.rdns === 'io.rabby'
+    );
+  }
+
+  getCoinbaseProvider(): EIP6963ProviderDetail | undefined {
+    this.ensureInitialized();
+    return this.providers.find(provider =>
+      provider.info.name.toLocaleLowerCase().includes('coinbase') ||
+      provider.info.rdns === 'io.coinbase'
+    );
+  }
+
+  getAllWalletProviders(): EIP6963ProviderDetail[] {
+    this.ensureInitialized();
+    return [...this.providers];
+  }
+
+  getProviderByRdns(rdns: string): EIP6963ProviderDetail | undefined {
+    this.ensureInitialized();
+    return this.providers.find(provider => provider.info.rdns === rdns);
+  }
+
+  getProviderCount(): number {
+    this.ensureInitialized();
+    return this.providers.length;
+  }
+
+  detectProviderConflicts(): ConflictReport {
+    this.ensureInitialized();
+
+    const conflicts: ConflictReport = {
+      hasConflicts: false,
+      conflictingProviders: [],
+      recommendations: []
+    };
+
+    const walletTypes = new Map<string, EIP6963ProviderDetail[]>();
+
+    this.providers.forEach(provider => {
+      const walletType = this.getWalletType(provider.info.rdns)
+      if (!walletTypes.has(walletType)) {
+        walletTypes.set(walletType, []);
+      }
+      walletTypes.get(walletType)!.push(provider);
+    })
+
+    // Check for conflicts 
+    walletTypes.forEach((providers, walletType) => {
+      if (providers.length > 1) {
+        conflicts.hasConflicts = true;
+        providers.forEach(provider => {
+          conflicts.conflictingProviders.push({
+            rdns: provider.info.rdns,
+            name: provider.info.name,
+            conflictType: 'duplicate'
+          });
+        });
+        conflicts.recommendations.push(
+          `Multiple ${walletType} providers detected. Consider disabling wallet extensions you do not (want to) use.`
+        );
+      }
+    })
+
+    return conflicts;
+  }
+
+  private getWalletType(rdns: string): string {
+    if (rdns.includes('metamask')) return 'MetaMask';
+    if (rdns.includes('coinbase')) return 'Coinbase';
+    if (rdns.includes('rabby')) return 'Rabby';
+    return 'Unknown';
   }
 
   subscribe(listener: () => void): () => void {
