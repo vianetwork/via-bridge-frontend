@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
-import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { getMetaMaskProvider, getPreferredWeb3Provider } from "@/utils/ethereum-provider";
 import { getAllWalletProviders, getCoinbaseProvider, getRabbyProvider } from "@/utils/ethereum-provider";
 import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 
@@ -126,14 +126,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      console.log("🔹 Connecting to MetaMask wallet...");
+      console.log("🔹 Connecting to wallet...");
             
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        throw new Error("MetaMask not found. Please install MetaMask extension.");
+      const bestProvider = getPreferredWeb3Provider();
+      if (!bestProvider) {
+        throw new Error("No wallet found. Please install MetaMask, Rabby, or another compatible wallet extension.");
       }
 
-      const accounts = await provider.request({
+      console.log(`🔗 Using ${bestProvider.name} (${bestProvider.rdns})`);
+
+      const accounts = await bestProvider.provider.request({
         method: "eth_requestAccounts",
       }) as string[];
 
@@ -145,17 +147,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // Check network after connection
       await get().checkMetamaskNetwork();
-
-      console.log("✅ MetaMask wallet connected, address:", address);
       walletEvents.metamaskConnected.emit();
       return true;
     } catch (error: any) {
-      const METAMASK_USER_REJECTION_ERROR_CODE = 4001;
-      if (error.code === METAMASK_USER_REJECTION_ERROR_CODE) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
         console.log("Connection rejected by user");
         return false;
       }
-      console.error("MetaMask connection error:", error);
+      console.error("Wallet connection error:", error);
       throw error;
     }
   },
@@ -201,10 +201,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         case Layer.L2:
           if (isMetamaskConnected) {
             // For MetaMask, we can request network switch
-            const provider = getMetaMaskProvider();
-            if (!provider) {
-              throw new Error("MetaMask not found or not accessible");
+            const bestProvider = getPreferredWeb3Provider();
+            if (!bestProvider) {
+              throw new Error("Wallet not found or not accessible");
             }
+            const provider = bestProvider.provider;
 
             const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
             const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
@@ -354,31 +355,31 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   checkMetamaskNetwork: async () => {
     try {
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        console.warn("MetaMask provider not found");
+      const bestProvider = getPreferredWeb3Provider();
+      if (!bestProvider) {
+        console.warn("Wallet provider not found");
         return;
       }
 
       const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
       const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-      const chainId = await provider.request({ method: 'eth_chainId' });
+      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' });
       const isCorrect = chainId === expectedChainId;
 
       set({ isCorrectViaNetwork: isCorrect });
 
       if (!isCorrect) {
         try {
-          await provider.request({
+          await bestProvider.provider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: expectedChainId }],
           });
           set({ isCorrectViaNetwork: true });
           return true;
         } catch (switchError: any) {
-          // This error code indicates that the chain has not been added to MetaMask
+          // This error code indicates that the chain has not been added to the wallet
           if (switchError.code === 4902) {
-            await provider.request({
+            await bestProvider.provider.request({
               method: 'wallet_addEthereumChain',
               params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
             });
@@ -389,7 +390,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error("Error checking MetaMask network:", error);
+      console.error("Error checking wallet network:", error);
     }
   }
 }));

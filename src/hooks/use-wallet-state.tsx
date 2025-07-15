@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
-import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { getPreferredWeb3Provider } from "@/utils/ethereum-provider";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
@@ -69,11 +69,12 @@ export function useWalletState() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const provider = getMetaMaskProvider();
-    if (!provider) {
-      console.log('MetaMask not available for account change monitoring');
+    const bestProvider = getPreferredWeb3Provider();
+    if (!bestProvider) {
+      console.log('Wallet not available for account change monitoring');
       return;
     }
+    const provider = bestProvider.provider;
 
     const handleAccountsChanged = (accounts: string[]) => {
       console.log('MetaMask accounts changed:', accounts);

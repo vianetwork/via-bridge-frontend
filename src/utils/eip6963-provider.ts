@@ -6,8 +6,11 @@ export class EIP6963ProviderStore {
   private ensureInitialized() {
     // Only initialize when we're in the browser and haven't initialized yet
     if (!this.initialized && typeof window !== 'undefined') {
+      console.log('EIP6963ProviderStore: Initializing...');
       this.setupEventListeners();
       this.initialized = true;
+    } else {
+      console.log('EIP6963ProviderStore: Cannot initialize - not in browser environment');
     }
   }
 
@@ -42,25 +45,28 @@ export class EIP6963ProviderStore {
 
   getProviderByName(name: string): EIP6963ProviderDetail | undefined {
     this.ensureInitialized();
-    return this.providers.find(provider => 
+    const result = this.providers.find(provider =>
       provider.info.name.toLowerCase().includes(name.toLowerCase())
     );
+    return result;
   }
 
   getMetaMaskProvider(): EIP6963ProviderDetail | undefined {
     this.ensureInitialized();
-    return this.providers.find(provider =>
+    const result = this.providers.find(provider =>
       provider.info.name.toLowerCase().includes('metamask') ||
       provider.info.rdns === 'io.metamask'
     );
+    return result;
   }
 
   getRabbyProvider(): EIP6963ProviderDetail | undefined {
     this.ensureInitialized();
-    return this.providers.find(provider =>
-      provider.info.name.toLocaleLowerCase().includes('rabby') ||
+    const result = this.providers.find(provider =>
+      provider.info.name.toLowerCase().includes('rabby') ||
       provider.info.rdns === 'io.rabby'
     );
+    return result;
   }
 
   getCoinbaseProvider(): EIP6963ProviderDetail | undefined {
@@ -73,6 +79,8 @@ export class EIP6963ProviderStore {
 
   getAllWalletProviders(): EIP6963ProviderDetail[] {
     this.ensureInitialized();
+    console.log(`getAllWalletProviders() called, returning ${this.providers.length} providers`);
+    console.log('Provider details:', this.providers.map(p => ({ name: p.info.name, rdns: p.info.rdns })));
     return [...this.providers];
   }
 
