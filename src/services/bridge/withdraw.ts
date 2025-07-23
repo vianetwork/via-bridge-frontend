@@ -38,8 +38,7 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     const receipt = await tx.wait();
     const txHash = receipt.hash;
 
-    // TODO: Update explorer URL
-    const explorerUrl = `https://explorer.testnet.viablockchain.xyz/tx/${txHash}`;
+    const explorerUrl = `https://testnet.blockscout.onvia.org/tx/${txHash}`;
 
     return {
       txHash,
