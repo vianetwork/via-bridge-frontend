@@ -17,6 +17,7 @@ import { getViaBalance } from "@/services/via/balance";
 
 interface WithdrawFormProps {
   viaAddress: string | null
+  onTransactionSubmitted: () => void;
 }
 
 const withdrawFormSchema = z.object({
@@ -32,7 +33,7 @@ const withdrawFormSchema = z.object({
     .string()
     .min(1, { message: "Bitcoin address is required" })
     .refine((val) => {
-      if (val.startsWith("bc1") || val.startsWith("tb1")) {
+      if (val.startsWith("bc1") || val.startsWith("tb1") || val.startsWith("bcr")) {
         return val.length >= 42 && val.length <= 62;
       }
       // TODO: Add support for Bitcoin address formats other than bech32 (SegWit)
@@ -42,7 +43,7 @@ const withdrawFormSchema = z.object({
     }),
 });
 
-export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
+export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: WithdrawFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -51,7 +52,7 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress } = useWalletStore();
+  const { bitcoinAddress, addLocalTransaction } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -106,12 +107,21 @@ export default function WithdrawForm({ viaAddress }: WithdrawFormProps) {
       });
       setTxHash(result.txHash);
       setExplorerUrl(result.explorerUrl);
+      addLocalTransaction({
+        type: 'withdraw',
+        amount: values.amount,
+        status: 'Pending',
+        txHash: result.txHash,
+        l2ExplorerUrl: result.explorerUrl
+      });
       setIsSuccess(true);
       toast.success("Withdrawal Transaction Broadcast", {
         description: "Your withdrawal transaction has been submitted to the VIA network.",
         duration: 5000,
         className: "text-base font-medium",
       });
+
+      onTransactionSubmitted();
     } catch (error) {
       console.error("Withdrawal error:", error);
     } finally {

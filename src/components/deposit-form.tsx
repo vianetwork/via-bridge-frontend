@@ -21,6 +21,7 @@ interface DepositFormProps {
   bitcoinAddress: string | null
   bitcoinPublicKey: string | null
   onDisconnect: () => void
+  onTransactionSubmitted: () => void;
 }
 
 interface FormContext {
@@ -72,7 +73,7 @@ const verifyRecipientAddress = (address: string): boolean => {
   return recipientAddressBn > invalidReceiverBn;
 };
 
-export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: DepositFormProps) {
+export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransactionSubmitted }: DepositFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
-  const { viaAddress } = useWalletStore();
+  const { viaAddress, addLocalTransaction } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
@@ -168,6 +169,17 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
         duration: 5000,
         className: "text-base font-medium",
       });
+
+      // Add to onSubmit function after setting txHash and explorerUrl
+      addLocalTransaction({
+        type: 'deposit',
+        amount: values.amount,
+        status: 'Pending',
+        txHash: result.txId,
+        l1ExplorerUrl: result.explorerUrl
+      });
+
+      onTransactionSubmitted();
 
     } catch (error) {
       console.error("Deposit error:", error);
@@ -404,12 +416,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey }: Deposi
           )}
 
           <div className="space-y-2">
-            <Button 
-              type="submit" 
-              className="w-full" 
+            <Button
+              type="submit"
+              className="w-full"
               disabled={
-                isSubmitting || 
-                !form.watch("amount") || 
+                isSubmitting ||
+                !form.watch("amount") ||
                 parseFloat(form.watch("amount") || "0") <= 0 ||
                 (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(balance))
               }
