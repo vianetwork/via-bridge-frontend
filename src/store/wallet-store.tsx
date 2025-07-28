@@ -1,8 +1,8 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
-import { getMetaMaskProvider, getPreferredWeb3Provider } from "@/utils/ethereum-provider";
-import { getAllWalletProviders, getCoinbaseProvider, getRabbyProvider } from "@/utils/ethereum-provider";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
+import { getAllWalletProviders } from "@/utils/ethereum-provider";
 import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 
 // Create events for wallet state changes
@@ -128,7 +128,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       console.log("🔹 Connecting to wallet...");
             
-      const bestProvider = getPreferredWeb3Provider();
+      const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) {
         throw new Error("No wallet found. Please install MetaMask, Rabby, or another compatible wallet extension.");
       }
@@ -201,7 +201,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         case Layer.L2:
           if (isMetamaskConnected) {
             // For MetaMask, we can request network switch
-            const bestProvider = getPreferredWeb3Provider();
+            const bestProvider = await getPreferredWeb3ProviderAsync();
             if (!bestProvider) {
               throw new Error("Wallet not found or not accessible");
             }
@@ -355,7 +355,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   checkMetamaskNetwork: async () => {
     try {
-      const bestProvider = getPreferredWeb3Provider();
+      const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) {
         console.warn("Wallet provider not found");
         return;

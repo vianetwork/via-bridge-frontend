@@ -1,5 +1,6 @@
 import { Eip6963ProviderInfo } from 'ethers';
 import { eip6963Store } from './eip6963-provider';
+import { string } from 'zod';
 
 /**
  * Safely get the MetaMask provider, avoiding conflicts with other wallet extensions
@@ -101,3 +102,14 @@ export const getPreferredWeb3Provider = (): { provider: EIP1193Provider; name: s
   return null;
 };
 
+/**
+ * Async version of getPreferredWeb3Provider that waits for providers to be ready
+ * @param timeout - Maximum time to wait for providers (default: 5000ms)
+ * @returns The preferred provider or null if none found
+ */
+export const getPreferredWeb3ProviderAsync = async (
+  timeout: number = 5000
+): Promise<{ provider: EIP1193Provider; name: string; rdns: string } | null> => {
+  await eip6963Store.waitForProviders(timeout);
+  return getPreferredWeb3Provider();
+};

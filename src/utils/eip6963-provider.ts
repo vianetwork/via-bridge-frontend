@@ -2,16 +2,31 @@ export class EIP6963ProviderStore {
   private providers: EIP6963ProviderDetail[] = [];
   private listeners: Array<() => void> = [];
   private initialized = false;
+  private providerReadyPromise: Promise<void> | null = null;
+  private providerReadyResolve: (() => void) | null = null;
 
   private ensureInitialized() {
     // Only initialize when we're in the browser and haven't initialized yet
     if (!this.initialized && typeof window !== 'undefined') {
       console.log('EIP6963ProviderStore: Initializing...');
       this.setupEventListeners();
+      this.setupProviderReadyPromise();
       this.initialized = true;
-    } else {
+    } else if (!this.initialized && typeof window === 'undefined') {
+      // Only log this if we're actually not in a browser environment
       console.log('EIP6963ProviderStore: Cannot initialize - not in browser environment');
     }
+    // If already initialized, do nothing silently
+  }
+
+  private setupProviderReadyPromise() {
+    this.providerReadyPromise = new Promise((resolve) => {
+      this.providerReadyResolve = resolve; 
+      // if providers are already available, resolve the promise
+      if (this.providers.length > 0) {
+        resolve();
+      }
+    });
   }
 
   private setupEventListeners() {
@@ -32,6 +47,11 @@ export class EIP6963ProviderStore {
 
     this.providers.push(providerDetail);
     this.notifyListeners();
+
+    // resolve the provider ready promise if it was not resolved yet
+    if (this.providers.length == 1 && this.providerReadyResolve) {
+      this.providerReadyResolve();
+    }
   }
 
   private notifyListeners() {
@@ -150,6 +170,30 @@ export class EIP6963ProviderStore {
         this.listeners.splice(index, 1);
       }
     };
+  }
+
+  /**
+   * Wait for at least one provider to be available
+   */
+  async waitForProviders(timeout: number = 5000): Promise<void> {
+    this.ensureInitialized();
+
+    if (this.providers.length > 0) {
+      console.log(`EIP6963ProviderStore: waitForProviders - Already have ${this.providers.length} provider(s)`);
+      return;
+    }
+
+    console.log(`EIP6963ProviderStore: waitForProviders - Waiting up to ${timeout}ms for providers...`);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Timeout waiting for providers')), timeout);
+    });
+
+    try {
+      await Promise.race([this.providerReadyPromise, timeoutPromise]);
+      console.log(`EIP6963ProviderStore: waitForProviders - Provider detected!`);
+    } catch (error) {
+      console.warn(`EIP6963ProviderStore: waitForProviders - No wallet provider detected within ${timeout}ms timeout period`);
+    }
   }
 }
 

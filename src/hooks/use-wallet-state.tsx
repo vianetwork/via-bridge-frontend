@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
-import { getPreferredWeb3Provider } from "@/utils/ethereum-provider";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
@@ -67,50 +67,63 @@ export function useWalletState() {
 
   // Listen for metmask account and network changes
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    let mounted = true; 
 
-    const bestProvider = getPreferredWeb3Provider();
-    if (!bestProvider) {
-      console.log('Wallet not available for account change monitoring');
-      return;
-    }
-    const provider = bestProvider.provider;
+    const setupProviderListener = async () => {
+      if (typeof window == "undefined") return;
 
-    const handleAccountsChanged = (accounts: string[]) => {
-      console.log('MetaMask accounts changed:', accounts);
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+
+      if (!mounted) return;
       
-      if (accounts.length === 0) {
-        console.log('MetaMask disconnected or locked');
-        walletStore.disconnectMetamask();
-      } else {
-        console.log('Active account:', accounts[0]);
-        
-        walletStore.setViaAddress(accounts[0]);
-        if (!walletStore.isMetamaskConnected) {
-          walletStore.setIsMetamaskConnected(true);
-        }
-        
-        walletStore.checkMetamaskNetwork();
+      if (!bestProvider) {
+        console.log('Wallet not available for account change monitoring');
+        return;
       }
+
+      const provider = bestProvider.provider;
+
+      const handleAccountsChanged = (accounts: string[]) => {
+        console.log('MetaMask accounts changed:', accounts);
+      
+        if (accounts.length === 0) {
+          console.log('MetaMask disconnected or locked');
+          walletStore.disconnectMetamask();
+        } else {
+          console.log('Active account:', accounts[0]);
+        
+          walletStore.setViaAddress(accounts[0]);
+          if (!walletStore.isMetamaskConnected) {
+            walletStore.setIsMetamaskConnected(true);
+          }
+          
+          walletStore.checkMetamaskNetwork();
+        }
+      };
+
+      const handleChainChanged = async (chainId: string) => {
+        console.log('MetaMask chain changed to:', chainId);
+        // check if we're on the correct network
+        await walletStore.checkMetamaskNetwork();
+      };
+
+      if (provider.on) {
+        provider.on('accountsChanged', handleAccountsChanged);
+        provider.on('chainChanged', handleChainChanged);
+      }
+
+      return () => {
+        if (provider?.removeListener) {
+          provider.removeListener('accountsChanged', handleAccountsChanged);
+          provider.removeListener('chainChanged', handleChainChanged);
+        }
+      };
     };
 
-    const handleChainChanged = async (chainId: string) => {
-      console.log('MetaMask chain changed to:', chainId);
-      // check if we're on the correct network
-      await walletStore.checkMetamaskNetwork();
-    };
-
-
-    if (provider.on) {
-      provider.on('accountsChanged', handleAccountsChanged);
-      provider.on('chainChanged', handleChainChanged);
-    }
+    setupProviderListener().catch(console.error);
 
     return () => {
-      if (provider.removeListener) {
-        provider.removeListener('accountsChanged', handleAccountsChanged);
-        provider.removeListener('chainChanged', handleChainChanged);
-      }
+      mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
