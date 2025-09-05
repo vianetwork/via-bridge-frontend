@@ -77,3 +77,16 @@ function filterConfirmedUTXOs(
 
   return confirmedUtxos;
 }
+
+export function checkIfEnoughBalance(
+  availableUtxos: UTXO[],
+  requiredAmount: number,
+  minConfirmations: number = BRIDGE_CONFIG.minBlockConfirmations
+) {
+  const totalAvailableBalance = availableUtxos.reduce((sum, { value }) => sum + value, 0);
+  if (totalAvailableBalance < requiredAmount) {
+    throw new Error(
+      `Insufficient balance to deposit. UTXOs must have at least ${minConfirmations} confirmations to be eligible for deposit into the VIA network.`
+    );
+  }
+}
