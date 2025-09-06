@@ -18,7 +18,7 @@ export interface UserAddress {
 
 export enum BitcoinNetwork {
   MAINNET = "mainnet",
-  TESTNET = "testnet",
+  TESTNET = "testnet4",
   REGTEST = "regtest",
 }
 
