@@ -56,17 +56,17 @@ export const API_CONFIG = {
   endpoints: {
     bitcoin: {
       primary: {
-        [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet/api",
-        [BitcoinNetwork.MAINNET]: "https://blockstream.info/api",
-        [BitcoinNetwork.REGTEST]: "https://mempool.space/testnet/api",
+        [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet4/api",
+        [BitcoinNetwork.MAINNET]: "https://mempool.space/api",
+        [BitcoinNetwork.REGTEST]: "https://mempool.space/testnet4/api",
       },
       fallback: {
-        [BitcoinNetwork.TESTNET]: "https://blockstream.info/testnet/api",
+        [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet4/api",
         [BitcoinNetwork.MAINNET]: "https://mempool.space/api",
         [BitcoinNetwork.REGTEST]: "https://blockstream.info/testnet/api",
       },
       explorer: {
-        [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet/tx/",
+        [BitcoinNetwork.TESTNET]: "https://mempool.space/testnet4/tx/",
         [BitcoinNetwork.MAINNET]: "https://mempool.space/tx/",
         [BitcoinNetwork.REGTEST]: "http://localhost:1880/tx/",
       },

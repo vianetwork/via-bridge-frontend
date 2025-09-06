@@ -55,7 +55,7 @@ export async function executeDeposit(params: DepositParams): Promise<DepositResu
   console.log("Estimated fee", fee.toString(), ", Number of inputs:", inputCount);
 
   const bitcoinNetworkType =
-    network === BitcoinNetwork.TESTNET ? BitcoinNetworkType.Testnet : BitcoinNetworkType.Mainnet;
+    network === BitcoinNetwork.TESTNET ? BitcoinNetworkType.Testnet4 : BitcoinNetworkType.Mainnet;
 
   // Request signature from Xverse wallet
   const signedTxResponse = await new Promise<any>((resolve, reject) => {
