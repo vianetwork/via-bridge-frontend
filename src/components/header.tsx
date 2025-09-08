@@ -6,7 +6,7 @@ import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
 import { LogOut, AlertCircle, Menu } from "lucide-react";
 import { toast } from "sonner";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Layer } from "@/services/config";
 import { useMobile } from "@/hooks/use-mobile";
 import {
@@ -17,6 +17,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
+
 
 export default function Header() {
   const { isMobile } = useMobile();
@@ -34,29 +35,12 @@ export default function Header() {
     switchNetwork
   } = useWalletState();
 
-  const [isConnecting, setIsConnecting] = useState(false);
-
-  // Listen for account changes
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.ethereum) {
-      const handleAccountsChanged = (accounts: string[]) => {
-        if (accounts.length === 0) {
-          // MetaMask is locked or the user has not connected any accounts
-          console.log('Please connect to MetaMask.');
-        }
-      };
-
-      window.ethereum.on('accountsChanged', handleAccountsChanged);
-
-      return () => {
-        window.ethereum?.removeListener('accountsChanged', handleAccountsChanged);
-      };
-    }
-  }, []);
+  const [isConnectingXverse, setIsConnectingXverse] = useState(false);
+  const [isConnectingMetaMask, setIsConnectingMetaMask] = useState(false);
 
   const handleConnectXverse = async () => {
     try {
-      setIsConnecting(true);
+      setIsConnectingXverse(true);
       const connected = await connectXverse();
       if (connected) {
         toast.success("Xverse Connected", {
@@ -71,13 +55,13 @@ export default function Header() {
         duration: 4000
       });
     } finally {
-      setIsConnecting(false);
+      setIsConnectingXverse(false);
     }
   };
 
   const handleConnectMetamask = async () => {
     try {
-      setIsConnecting(true);
+      setIsConnectingMetaMask(true);
       const connected = await connectMetamask();
       if (connected) {
         toast.success("MetaMask Connected", {
@@ -92,7 +76,7 @@ export default function Header() {
         duration: 4000
       });
     } finally {
-      setIsConnecting(false);
+      setIsConnectingMetaMask(false);
     }
   };
 
@@ -152,9 +136,9 @@ export default function Header() {
       ) : (
         <DropdownMenuItem 
           onClick={handleConnectXverse}
-          disabled={isConnecting}
+          disabled={isConnectingXverse}
         >
-          {isConnecting ? "Connecting..." : "Connect Xverse"}
+          {isConnectingXverse ? "Connecting..." : "Connect Xverse"}
         </DropdownMenuItem>
       )}
 
@@ -193,9 +177,9 @@ export default function Header() {
       ) : (
         <DropdownMenuItem 
           onClick={handleConnectMetamask}
-          disabled={isConnecting}
+          disabled={isConnectingMetaMask}
         >
-          {isConnecting ? "Connecting..." : "Connect MetaMask"}
+          {isConnectingMetaMask ? "Connecting..." : "Connect MetaMask"}
         </DropdownMenuItem>
       )}
     </>
@@ -251,9 +235,9 @@ export default function Header() {
                   variant="outline" 
                   size="sm"
                   onClick={handleConnectXverse}
-                  disabled={isConnecting}
+                  disabled={isConnectingXverse}
                 >
-                  {isConnecting ? "Connecting..." : "Connect Xverse"}
+                  {isConnectingXverse ? "Connecting..." : "Connect Xverse"}
                 </Button>
               )}
               
@@ -272,9 +256,9 @@ export default function Header() {
                   variant="outline" 
                   size="sm"
                   onClick={handleConnectMetamask}
-                  disabled={isConnecting}
+                  disabled={isConnectingMetaMask}
                 >
-                  {isConnecting ? "Connecting..." : "Connect MetaMask"}
+                  {isConnectingMetaMask ? "Connecting..." : "Connect MetaMask"}
                 </Button>
               )}
             </div>

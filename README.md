@@ -11,14 +11,58 @@ This application allows users to:
     - Output 1: Required amount of BTC is sent from the user's account to the VIA bridge address,
     - Output 2: OP_RETURN output that contains l2 (EVM) address for receiving funds on VIA L2,
     - Output 3: Change amount sent back to the user's wallet.
-- Perform withdrawals from VIA to Bitcoin network:
+- Perform withdrawals from VIA network to Bitcoin network:
   - Connect with MetaMask
   - Initiate withdrawal transaction on VIA network
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+
+- npm, yarn, pnpm, or bun
+- MetaMask browser extension (for VIA network interactions)
+- Xverse wallet (for Bitcoin interactions)
+
+### Environment Setup
+
+1. Copy the environment template:
+```bash
+cp .env.example .env.local
+```
+
+2. Configure your environment variables:
+```bash
+# Set network (testnet for development, mainnet for production)
+NEXT_PUBLIC_NETWORK=testnet
+```
+
+### MetaMask Network Configuration
+
+To use the VIA Bridge, you need to add the VIA network to your MetaMask wallet:
+
+#### VIA Alpha Testnet (Development)
+
+| Parameter | Value |
+|-----------|-------|
+| **Network Name** | VIA Alpha Testnet |
+| **Chain ID** | 25223 |
+| **RPC URL** | https://via.testnet.viablockchain.dev |
+| **Base Token** | BTC |
+| **Decimals** | 18 |
+| **Block Explorer** | - |
+
+#### How to Add Network to MetaMask
+
+1. Open MetaMask and click on the network dropdown (top center)
+2. Click "Add Network" or "Custom RPC"
+3. Fill in the network details from the table above
+4. Click "Save" to add the network
+5. Switch to VIA network
+
+### Development
+
+Run the development server with Turbopack:
 ```bash
 npm run dev
 # or
@@ -29,23 +73,70 @@ pnpm dev
 bun dev
 ```
 
+Or run without Turbopack if you encounter issues:
+```bash
+npm run dev:no-turbo
+```
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+May use a different port if port 3000 is not available.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+### Production Build
+
+```bash
+npm run build
+npm start
+```
+
+## Architecture
+
+### Key Components
+
+- **Wallet Store** (`src/store/wallet-store.tsx`): Centralized wallet state management
+- **Ethereum Provider Utils** (`src/utils/ethereum-provider.ts`): Safe provider detection and conflict resolution
+- **Wallet State Hook** (`src/hooks/use-wallet-state.tsx`): React hook for wallet interactions
+- **Bridge Interface** (`src/components/bridge-interface.tsx`): Main UI component
+
+### Security Features
+
+- Provider conflict detection and resolution
+- Network validation and automatic switching
+- Production-safe error handling
+- Security headers in production
+
+## Deployment
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed deployment instructions including:
+- Environment configuration
+- Docker setup
+- Platform-specific guides (Vercel, Netlify, etc.)
+- Security considerations
+
+## Troubleshooting
+
+### Common Issues
+
+1. **Multiple Wallet Providers**: The app automatically handles conflicts between MetaMask, Xverse, and other wallet extensions
+2. **Network Mismatch**: Ensure your MetaMask is connected to VIA network. The app will prompt you to switch if needed.
+3. **MetaMask Network Not Found**: If MetaMask can't find the VIA network, manually add it using the configuration table above
+4. **Connection Issues**: Try refreshing the page or reconnecting your wallet
+5. **Deposit/Withdrawal Failures**: Ensure you have sufficient BTC balance and are connected to the correct networks
+
+### Debug Mode
+
+Development builds include detailed logging. For production debugging:
+```bash
+NODE_ENV=development npm start
+```
+
 ## Learn More
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js Documentation](https://nextjs.org/docs)
+- [VIA official website](https://buildonvia.org)
+- [VIA Documentation](https://docs.onvia.org)
+- [MetaMask Documentation](https://docs.metamask.io)
+- [Xverse Documentation](https://docs.xverse.app)

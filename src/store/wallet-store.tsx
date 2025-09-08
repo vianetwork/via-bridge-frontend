@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
+import { getMetaMaskProvider } from "@/utils/ethereum-provider";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 
 // Create events for wallet state changes
@@ -325,13 +326,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      if (typeof window === "undefined" || !window.ethereum) {
+      console.log("🔹 Connecting to MetaMask wallet...");
+            
+      const provider = getMetaMaskProvider();
+      if (!provider) {
         throw new Error("MetaMask not found. Please install MetaMask extension.");
       }
 
-      const accounts = await window.ethereum.request({
+      const accounts = await provider.request({
         method: "eth_requestAccounts",
-      });
+      }) as string[];
 
       const address = accounts[0];
       set({
@@ -400,15 +404,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         case Layer.L2:
           if (isMetamaskConnected) {
             // For MetaMask, we can request network switch
-            if (typeof window === "undefined" || !window.ethereum) {
-              throw new Error("MetaMask not found");
+            const provider = getMetaMaskProvider();
+            if (!provider) {
+              throw new Error("MetaMask not found or not accessible");
             }
 
             const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
             const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
 
             try {
-              await window.ethereum.request({
+              await provider.request({
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: expectedChainId }],
               });
@@ -417,7 +422,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             } catch (switchError: any) {
               // This error code indicates that the chain has not been added to MetaMask
               if (switchError.code === 4902) {
-                await window.ethereum.request({
+                await provider.request({
                   method: 'wallet_addEthereumChain',
                   params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
                 });
@@ -486,18 +491,22 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   checkMetamaskNetwork: async () => {
     try {
-      if (typeof window === "undefined" || !window.ethereum) return;
+      const provider = getMetaMaskProvider();
+      if (!provider) {
+        console.warn("MetaMask provider not found");
+        return;
+      }
 
       const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
       const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-      const chainId = await window.ethereum.request({ method: 'eth_chainId' });
+      const chainId = await provider.request({ method: 'eth_chainId' });
       const isCorrect = chainId === expectedChainId;
 
       set({ isCorrectViaNetwork: isCorrect });
 
       if (!isCorrect) {
         try {
-          await window.ethereum.request({
+          await provider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: expectedChainId }],
           });
@@ -506,7 +515,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         } catch (switchError: any) {
           // This error code indicates that the chain has not been added to MetaMask
           if (switchError.code === 4902) {
-            await window.ethereum.request({
+            await provider.request({
               method: 'wallet_addEthereumChain',
               params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
             });
