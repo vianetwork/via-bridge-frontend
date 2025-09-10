@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
+import { maskAddress, maskAddresses } from "@/lib/utils";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
@@ -84,13 +85,13 @@ export function useWalletState() {
       const provider = bestProvider.provider;
 
       const handleAccountsChanged = (accounts: string[]) => {
-        console.log('MetaMask accounts changed:', accounts);
+        console.log('MetaMask accounts changed:', maskAddresses(accounts));
       
         if (accounts.length === 0) {
           console.log('MetaMask disconnected or locked');
           walletStore.disconnectMetamask();
         } else {
-          console.log('Active account:', accounts[0]);
+          console.log('Active account:', maskAddress(accounts[0]));
         
           walletStore.setViaAddress(accounts[0]);
           if (!walletStore.isMetamaskConnected) {

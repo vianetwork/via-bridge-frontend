@@ -5,6 +5,7 @@ import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { getAllWalletProviders } from "@/utils/ethereum-provider";
 import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
+import { maskAddress } from "@/lib/utils";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -495,7 +496,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Check network after connection
       await get().checkMetamaskNetwork();
 
-      console.log(`✅ Wallet ${providerDetail.info.name} connected, address:`, address);
+      console.log(`✅ Wallet ${providerDetail.info.name} connected, address:`, maskAddress(address));
       walletEvents.metamaskConnected.emit();
       return true;
     } catch (error: any) {
