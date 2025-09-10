@@ -6,6 +6,7 @@ import { getAllWalletProviders } from "@/utils/ethereum-provider";
 import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/lib/utils";
+import { getMetaMaskProvider } from "@/utils/ethereum-provider";
 
 // Create events for wallet state changes
 export const walletEvents = {
