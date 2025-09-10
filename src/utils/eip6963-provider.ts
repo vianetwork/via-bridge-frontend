@@ -92,7 +92,7 @@ export class EIP6963ProviderStore {
   getCoinbaseProvider(): EIP6963ProviderDetail | undefined {
     this.ensureInitialized();
     return this.providers.find(provider =>
-      provider.info.name.toLocaleLowerCase().includes('coinbase') ||
+      provider.info.name.toLowerCase().includes('coinbase') ||
       provider.info.rdns === 'io.coinbase'
     );
   }

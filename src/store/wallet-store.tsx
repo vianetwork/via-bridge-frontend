@@ -471,7 +471,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const providerDetail = eip6963Store.getProviderByRdns(rdns);
       
       if (!providerDetail) {
-        throw new WalletNotFoundError(`Wallet with rdns ${rdns} not found`);
+        throw new WalletNotFoundError(rdns);
       }
 
       const provider = providerDetail.provider;
@@ -512,20 +512,24 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   refreshAvailableWallets: () => {
   try {
     console.log("🔄 Refreshing available wallets...");
-    
-    const { eip6963Store } = require("@/utils/eip6963-provider");
-    const providers = eip6963Store.getAllWalletProviders();
-    
-    const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
-      name: provider.info.name,
-      rdns: provider.info.rdns,
-      icon: provider.info.icon
-    }));
+    import("@/utils/eip6963-provider")
+      .then(({ eip6963Store }) => {
+        const providers = eip6963Store.getAllWalletProviders();
+        const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
+          name: provider.info.name,
+          rdns: provider.info.rdns,
+          icon: provider.info.icon
+        }));
 
-    set({ availableWallets: wallets });
-    
-    console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
-    walletEvents.walletRefreshed.emit();
+        set({ availableWallets: wallets });
+        console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
+        walletEvents.walletRefreshed.emit();
+      })
+      .catch((error: any) => {
+        console.error("Error refreshing available wallets:", error);
+        // Don't throw, just log the error and continue with empty array
+        set({ availableWallets: [] });
+      });
     } catch (error: any) {
       console.error("Error refreshing available wallets:", error);
       // Don't throw, just log the error and continue with empty array

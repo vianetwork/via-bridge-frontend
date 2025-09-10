@@ -2,7 +2,7 @@ import WalletConnectButton from "@/components/wallet-connect-button";
 import { walletTypes } from "sats-connect";
 
 /**
- * Wallet-specfic error types
+ * Wallet-specific error types
  */
 export class WalletError extends Error {
   constructor(
@@ -20,7 +20,7 @@ export class WalletNotFoundError extends WalletError {
   constructor(walletType: string) {
     super(
       `${walletType} wallet not found`,
-      `WALLE_NOT_FOUND`,
+      `WALLET_NOT_FOUND`,
       walletType,
       `${walletType} is not installed. Please install ${walletType} wallet extension`
     );
@@ -45,6 +45,7 @@ export class NetworkError extends WalletError {
     super(
       `Wrong network: expected ${expectedNetwork}, but connected to ${currentNetwork}`,
       'WRONG_NETWORK',
+      walletType,
       `Please switch to ${expectedNetwork} network in ${walletType} wallet`
     );
     this.name = 'NetworkError'

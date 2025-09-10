@@ -50,7 +50,7 @@ interface EIP1193Provider {
 interface WalletProviderState extends EIP1193Provider {
     isConnected?: boolean;
     lastUsed?: Date;
-    userPreffered?: boolean; // Maybe we want this but this could also be annoying for users who like to use different wallets for some preffered reason
+    userPreferred?: boolean; // Maybe we want this but this could also be annoying for users who like to use different wallets for some preferred reason
     conflictsWith?: string[]; // List of other providers that conflict with this one
 }
 
