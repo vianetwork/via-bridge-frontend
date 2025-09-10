@@ -8,7 +8,7 @@ export default function Footer() {
         
         <div className="flex items-center gap-6">
           <a 
-            href="#" 
+            href="https://docs.onvia.org/" 
             target="_blank" 
             rel="noopener noreferrer"
             className="hover:text-primary transition-colors"
@@ -16,7 +16,7 @@ export default function Footer() {
             Documentation
           </a>
           <a 
-            href="#" 
+            href="https://discord.gg/ReS5cz8M6H" 
             target="_blank" 
             rel="noopener noreferrer"
             className="hover:text-primary transition-colors"
@@ -24,7 +24,7 @@ export default function Footer() {
             Discord
           </a>
           <a 
-            href="#" 
+            href="https://x.com/buildonvia" 
             target="_blank" 
             rel="noopener noreferrer"
             className="hover:text-primary transition-colors"
@@ -32,7 +32,7 @@ export default function Footer() {
             X
           </a>
           <a 
-            href="#" 
+            href="https://github.com/vianetwork" 
             target="_blank" 
             rel="noopener noreferrer"
             className="hover:text-primary transition-colors"

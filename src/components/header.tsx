@@ -186,20 +186,21 @@ export default function Header() {
   );
 
   return (
-    <header className="w-full py-4 px-6 bg-white border-b border-slate-200">
+    <header className="w-full py-3 px-1 md:py-4 md:px-6 bg-white border-b border-slate-200">
       <div className="container mx-auto flex justify-between items-center">
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
             <Image
               src="/icon.png"
               alt="VIA Bridge"
-              width={32}
-              height={32}
+              width={28}
+              height={28}
               priority
+              className="md:w-8 md:h-8"
             />
-            <span className="text-xl font-bold">VIA Bridge</span>
+            <span className="text-lg md:text-l font-bold">VIA Bridge</span>
           </Link>
-          <span className="text-xs font-semibold px-2 py-0.5 bg-orange-100 text-orange-800 rounded-md border border-orange-200">
+          <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-0.5 bg-orange-100 text-orange-800 rounded-md border border-orange-200">
             Alpha Testnet
           </span>
         </div>
@@ -208,9 +209,9 @@ export default function Header() {
           {isMobile ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="flex items-center gap-2">
-                  <Menu className="h-4 w-4" />
-                  <span className="sm:inline">Wallets</span>
+                <Button variant="outline" size="sm" className="h-8 flex items-center gap-1.5">
+                  <Menu className="h-3.5 w-3.5" />
+                  <span>Wallets</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
