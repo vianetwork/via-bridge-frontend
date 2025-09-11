@@ -1,9 +1,8 @@
 "use client";
 
-import axios, { type AxiosInstance } from "axios";
+import axios  from "axios";
 import { type UTXO, BitcoinNetwork } from "./types";
 import { API_CONFIG, BRIDGE_CONFIG } from "@/services/config";
-
 
 /**
  * Fetches UTXOs for a given Bitcoin address and filters by minimum confirmations
@@ -29,7 +28,6 @@ export async function getUTXOs(
 
   throw new Error("Failed to get wallet UTXOs");
 }
-
 
 export function checkIfEnoughBalance(
   availableUtxos: UTXO[],
