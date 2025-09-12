@@ -83,7 +83,7 @@ export const BRIDGE_CONFIG = {
   },
   maxPriorityFeeRate: 5, // Maximum acceptable fee rate in sats/vB
   defaultFee: 400, // Default fee in satoshis
-  minBlockConfirmations: 3, // Minimum number of block confirmations required
+  minBlockConfirmations: 0, // No confirmation required for chained deposits
   defaultNetwork: env().NEXT_PUBLIC_NETWORK,
   viaChainId: VIA_NETWORK_CONFIG[env().NEXT_PUBLIC_NETWORK].chainId,
 } as const; 
