@@ -2,11 +2,10 @@ import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
-import { getAllWalletProviders } from "@/utils/ethereum-provider";
 import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/utils";
-import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -518,9 +517,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       .then(({ eip6963Store }) => {
         const providers = eip6963Store.getAllWalletProviders();
         const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
-          name: provider.info.name,
+          name: resolveDisplayName(provider),
           rdns: provider.info.rdns,
-          icon: provider.info.icon
+          icon: resolveIcon(provider)
         }));
 
         set({ availableWallets: wallets });

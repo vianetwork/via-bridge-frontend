@@ -1,6 +1,5 @@
-import { Eip6963ProviderInfo } from 'ethers';
 import { eip6963Store } from './eip6963-provider';
-import { string } from 'zod';
+import { resolveDisplayName } from './wallet-metadata';
 
 /**
  * Safely get the MetaMask provider, avoiding conflicts with other wallet extensions
@@ -61,33 +60,36 @@ export const getPreferredWeb3Provider = (): { provider: EIP1193Provider; name: s
   // Try MetaMask first
   const metamask = eip6963Store.getMetaMaskProvider();
   if (metamask) {
-    console.log('getPreferredWeb3Provider: MetaMask wallet found with provider details:', {
-      name: metamask.info.name,
+    const displayName = resolveDisplayName(metamask);
+    console.log('getPreferredWeb3Provider: Web3 wallet found with provider details:', {
+      name: displayName,
       rdns: metamask.info.rdns,
       hasProvider: !!metamask.provider
     });
-    return { provider: metamask.provider, name: metamask.info.name, rdns: metamask.info.rdns };
+    return { provider: metamask.provider, name: displayName, rdns: metamask.info.rdns };
   }
   
   // Try Rabby second
   const rabby = eip6963Store.getRabbyProvider();
   if (rabby) {
-    console.log('getPreferredWeb3Provider: Rabby wallet found with provider details:', {
-      name: rabby.info.name,
+    const displayName = resolveDisplayName(rabby);
+    console.log('getPreferredWeb3Provider: Web3 wallet found with provider details:', {
+      name: displayName,
       rdns: rabby.info.rdns,
       hasProvider: !!rabby.provider
     });
-    return { provider: rabby.provider, name: rabby.info.name, rdns: rabby.info.rdns };
+    return { provider: rabby.provider, name: displayName, rdns: rabby.info.rdns };
   }
 
   const coinbase = eip6963Store.getCoinbaseProvider();
   if (coinbase) {
-    console.log('getPreferredWeb3Provider: Coinbase wallet found with provider details:', {
-      name: coinbase.info.name,
+    const displayName = resolveDisplayName(coinbase);
+    console.log('getPreferredWeb3Provider: Web3 wallet found with provider details:', {
+      name: displayName,
       rdns: coinbase.info.rdns,
       hasProvider: !!coinbase.provider
     });
-    return { provider: coinbase.provider, name: coinbase.info.name, rdns: coinbase.info.rdns };
+    return { provider: coinbase.provider, name: displayName, rdns: coinbase.info.rdns };
   }
   
   // Try any other EIP-6963 wallet
