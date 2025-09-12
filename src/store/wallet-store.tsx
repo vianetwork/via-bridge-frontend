@@ -165,7 +165,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
 
   setAvailableWallets: (wallets) => set({ availableWallets: wallets }),
-  setSelectedWallet: (rdns) => set({ selectedWallet: rdns }),
+  setSelectedWallet: (rdns) => {
+    const prev = get().selectedWallet;
+    if (prev !== rdns) {
+      set({ selectedWallet: rdns });
+      // Notify services that the active EVM wallet changed
+      walletEvents.walletChanged.emit(rdns);
+    }
+  },
   addTransaction: (tx) => set(state => ({
     transactions: [
       {
@@ -355,6 +362,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       console.log(`🔗 Using ${bestProvider.name} (${bestProvider.rdns})`);
 
+      // Ensure selection reflects chosen provider and emits walletChanged if changed
+      get().setSelectedWallet(bestProvider.rdns);
+
       const accounts = await bestProvider.provider.request({
         method: "eth_requestAccounts",
       }) as string[];
@@ -490,8 +500,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({
         viaAddress: address,
         isMetamaskConnected: true, // For now, treating all EIP-6963 wallets as "metamask-like"
-        selectedWallet: rdns
       });
+      // Route selection through setter to emit WalletChanged
+      get().setSelectedWallet(rdns);
 
       // Check network after connection
       await get().checkMetamaskNetwork();
