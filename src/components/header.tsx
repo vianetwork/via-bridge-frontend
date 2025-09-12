@@ -8,6 +8,7 @@ import { LogOut, AlertCircle, Menu } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Layer } from "@/services/config";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { useMobile } from "@/hooks/use-mobile";
 import {
   DropdownMenu,
@@ -64,15 +65,19 @@ export default function Header() {
       setIsConnectingMetaMask(true);
       const connected = await connectMetamask();
       if (connected) {
-        toast.success("MetaMask Connected", {
-          description: "Successfully connected to your MetaMask wallet.",
+        const best = await getPreferredWeb3ProviderAsync();
+        const displayName = best?.name ?? "Web3 Wallet";
+        toast.success(`${displayName} Connected`, {
+          description: `Successfully connected to your ${displayName} wallet.`,
           duration: 4000
         });
       }
     } catch (error) {
-      console.error("MetaMask connection error:", error);
+      console.error("Web3 wallet connection error:", error);
+      const best = await getPreferredWeb3ProviderAsync();
+      const displayName = best?.name ?? "Web3 Wallet";
       toast.error("Connection Failed", {
-        description: "Unable to connect to MetaMask. Please try again.",
+        description: `Unable to connect to ${displayName}. Please try again.`,
         duration: 4000
       });
     } finally {
@@ -88,10 +93,12 @@ export default function Header() {
     });
   };
 
-  const handleDisconnectMetamask = () => {
+  const handleDisconnectMetamask = async () => {
+    const best = await getPreferredWeb3ProviderAsync();
+    const displayName = best?.name ?? "Web3 Wallet";
     disconnectMetamask();
-    toast.success("MetaMask Disconnected", {
-      description: "Successfully disconnected from your MetaMask wallet.",
+    toast.success(`${displayName} Disconnected`, {
+      description: `Successfully disconnected from your ${displayName} wallet.`,
       duration: 4000
     });
   };
@@ -179,7 +186,7 @@ export default function Header() {
           onClick={handleConnectMetamask}
           disabled={isConnectingMetaMask}
         >
-          {isConnectingMetaMask ? "Connecting..." : "Connect MetaMask"}
+          {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
         </DropdownMenuItem>
       )}
     </>
@@ -258,7 +265,7 @@ export default function Header() {
                   onClick={handleConnectMetamask}
                   disabled={isConnectingMetaMask}
                 >
-                  {isConnectingMetaMask ? "Connecting..." : "Connect MetaMask"}
+                  {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
                 </Button>
               )}
             </div>

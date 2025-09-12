@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
-import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
+import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
+import { maskAddress } from "@/utils";
+import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -11,6 +14,8 @@ export const walletEvents = {
   metamaskDisconnected: createEvent<void>('metamask-disconnected'),
   xverseDisconnected: createEvent<void>('xverse-disconnected'),
   networkChanged: createEvent<void>('network-changed'),
+  walletChanged: createEvent<string>('wallet-changed'),
+  walletRefreshed: createEvent<void>('wallet-refreshed'),
 };
 
 export type TransactionStatus =
@@ -91,6 +96,10 @@ interface WalletState {
   localTransactions: Transaction[];
   feeEstimation: FeeEstimation | null;
 
+  // Multi wallet support
+  availableWallets: Array<{name: string, rdns: string, icon?: string}>;
+  selectedWallet: string | null; // rdns of selected wallet
+
   // Actions
   setBitcoinAddress: (address: string | null) => void;
   setBitcoinPublicKey: (publicKey: string | null) => void;
@@ -110,12 +119,18 @@ interface WalletState {
   loadLocalTransactions: () => void;
   clearLocalTransactions: () => void;
 
+  setAvailableWallets: (wallets: Array<{name: string, rdns: string, icon?: string}>) => void;
+  setSelectedWallet: (rdns: string) => void;
+
   // Wallet operations
   connectXverse: () => Promise<boolean>;
   connectMetamask: () => Promise<boolean>;
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
   switchNetwork: (layer: Layer) => void;
+
+  connectWallet: (rdns: string) => Promise<boolean>;
+  refreshAvailableWallets: () => void;
 
   // Helper methods
   checkXverseConnection: () => Promise<void>;
@@ -137,6 +152,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   localTransactions: [],
   feeEstimation: null,
 
+  availableWallets: [],
+  selectedWallet: null,
+
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
   setBitcoinPublicKey: (publicKey) => set({ bitcoinPublicKey: publicKey }),
@@ -146,6 +164,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
 
+  setAvailableWallets: (wallets) => set({ availableWallets: wallets }),
+  setSelectedWallet: (rdns) => {
+    const prev = get().selectedWallet;
+    if (prev !== rdns) {
+      set({ selectedWallet: rdns });
+      // Notify services that the active EVM wallet changed
+      walletEvents.walletChanged.emit(rdns);
+    }
+  },
   addTransaction: (tx) => set(state => ({
     transactions: [
       {
@@ -326,14 +353,19 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      console.log("🔹 Connecting to MetaMask wallet...");
+      console.log("🔹 Connecting to wallet...");
             
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        throw new Error("MetaMask not found. Please install MetaMask extension.");
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+      if (!bestProvider) {
+        throw new Error("No wallet found. Please install MetaMask, Rabby, or another compatible wallet extension.");
       }
 
-      const accounts = await provider.request({
+      console.log(`🔗 Using ${bestProvider.name} (${bestProvider.rdns})`);
+
+      // Ensure selection reflects chosen provider and emits walletChanged if changed
+      get().setSelectedWallet(bestProvider.rdns);
+
+      const accounts = await bestProvider.provider.request({
         method: "eth_requestAccounts",
       }) as string[];
 
@@ -353,12 +385,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       walletEvents.metamaskConnected.emit();
       return true;
     } catch (error: any) {
-      const METAMASK_USER_REJECTION_ERROR_CODE = 4001;
-      if (error.code === METAMASK_USER_REJECTION_ERROR_CODE) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
         console.log("Connection rejected by user");
         return false;
       }
-      console.error("MetaMask connection error:", error);
+      console.error("Wallet connection error:", error);
       throw error;
     }
   },
@@ -404,10 +436,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         case Layer.L2:
           if (isMetamaskConnected) {
             // For MetaMask, we can request network switch
-            const provider = getMetaMaskProvider();
-            if (!provider) {
-              throw new Error("MetaMask not found or not accessible");
+            const bestProvider = await getPreferredWeb3ProviderAsync();
+            if (!bestProvider) {
+              throw new Error("Wallet not found or not accessible");
             }
+            const provider = bestProvider.provider;
 
             const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
             const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
@@ -439,6 +472,81 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
     walletEvents.networkChanged.emit();
+  },
+
+  connectWallet: async (rdns: string) => {
+    try {
+      console.log(`🔹 Connecting to wallet with rdns: ${rdns}`);
+      
+      const { eip6963Store } = await import("@/utils/eip6963-provider");
+      const providerDetail = eip6963Store.getProviderByRdns(rdns);
+      
+      if (!providerDetail) {
+        throw new WalletNotFoundError(rdns);
+      }
+
+      const provider = providerDetail.provider;
+      
+      // Request account access
+      const accounts = await provider.request({
+        method: "eth_requestAccounts",
+      }) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from wallet");
+      }
+
+      const address = accounts[0];
+      set({
+        viaAddress: address,
+        isMetamaskConnected: true, // For now, treating all EIP-6963 wallets as "metamask-like"
+      });
+      // Route selection through setter to emit WalletChanged
+      get().setSelectedWallet(rdns);
+
+      // Check network after connection
+      await get().checkMetamaskNetwork();
+
+      console.log(`✅ Wallet ${providerDetail.info.name} connected, address:`, maskAddress(address));
+      walletEvents.metamaskConnected.emit();
+      return true;
+    } catch (error: any) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
+        console.log("Connection rejected by user");
+        return false;
+      }
+      console.error(`Wallet connection error for ${rdns}:`, error);
+      throw error;
+    }
+  },
+
+  refreshAvailableWallets: () => {
+  try {
+    console.log("🔄 Refreshing available wallets...");
+    import("@/utils/eip6963-provider")
+      .then(({ eip6963Store }) => {
+        const providers = eip6963Store.getAllWalletProviders();
+        const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
+          name: resolveDisplayName(provider),
+          rdns: provider.info.rdns,
+          icon: resolveIcon(provider)
+        }));
+
+        set({ availableWallets: wallets });
+        console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
+        walletEvents.walletRefreshed.emit();
+      })
+      .catch((error: any) => {
+        console.error("Error refreshing available wallets:", error);
+        // Don't throw, just log the error and continue with empty array
+        set({ availableWallets: [] });
+      });
+    } catch (error: any) {
+      console.error("Error refreshing available wallets:", error);
+      // Don't throw, just log the error and continue with empty array
+      set({ availableWallets: [] });
+    }
   },
 
   // Helper methods
@@ -491,31 +599,31 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   checkMetamaskNetwork: async () => {
     try {
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        console.warn("MetaMask provider not found");
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+      if (!bestProvider) {
+        console.warn("Wallet provider not found");
         return;
       }
 
       const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
       const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-      const chainId = await provider.request({ method: 'eth_chainId' });
+      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' });
       const isCorrect = chainId === expectedChainId;
 
       set({ isCorrectViaNetwork: isCorrect });
 
       if (!isCorrect) {
         try {
-          await provider.request({
+          await bestProvider.provider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: expectedChainId }],
           });
           set({ isCorrectViaNetwork: true });
           return true;
         } catch (switchError: any) {
-          // This error code indicates that the chain has not been added to MetaMask
+          // This error code indicates that the chain has not been added to the wallet
           if (switchError.code === 4902) {
-            await provider.request({
+            await bestProvider.provider.request({
               method: 'wallet_addEthereumChain',
               params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
             });
@@ -526,7 +634,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error("Error checking MetaMask network:", error);
+      console.error("Error checking wallet network:", error);
     }
   }
 }));
