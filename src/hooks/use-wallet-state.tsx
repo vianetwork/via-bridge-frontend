@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import { useWalletStore } from "@/store/wallet-store";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
-import { maskAddress, maskAddresses } from "@/lib/utils";
+import { maskAddress, maskAddresses } from "@/utils";
 
 export function useWalletState() {
   const walletStore = useWalletStore();

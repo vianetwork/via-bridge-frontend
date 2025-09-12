@@ -1,0 +1,1 @@
+export { maskAddress, maskAddresses } from "./address";
