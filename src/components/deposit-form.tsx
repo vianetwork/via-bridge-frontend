@@ -17,6 +17,7 @@ import { useWalletStore } from "@/store/wallet-store";
 import { isAddress } from "ethers";
 import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS } from "@/services/constants";
 import { cn } from "@/lib/utils";
+import { BRIDGE_CONFIG } from "@/services/config";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -183,11 +184,19 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
 
     } catch (error) {
       console.error("Deposit error:", error);
-      toast.error("Deposit Failed", {
-        description: error instanceof Error ? error.message : "There was an error processing your deposit. Please try again.",
-        duration: 5000,
-        className: "text-base font-medium",
-      });
+      if (error instanceof Error && error.message.includes("No UTXOs found with at least")) {
+        toast("Waiting for confirmations", {
+          description: `We couldn't find any UTXOs with at least ${BRIDGE_CONFIG.minBlockConfirmations} confirmations yet. Please wait for your transactions to be confirmed and try again.`,
+          duration: 5000,
+          className: "text-base font-medium",
+        });
+      } else {
+        toast.error("Deposit Failed", {
+          description: error instanceof Error ? error.message : "There was an error processing your deposit. Please try again.",
+          duration: 5000,
+          className: "text-base font-medium",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
