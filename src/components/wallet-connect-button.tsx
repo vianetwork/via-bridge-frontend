@@ -100,6 +100,13 @@ export default function WalletConnectButton({
       <div className="relative">
         <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
         <div className="relative rounded-full bg-gradient-to-br from-primary/10 to-primary/5 p-4 ring-1 ring-primary/20">
+          {!isConnected && (
+            <span
+              className="pointer-events-none absolute inset-0 rounded-full z-0 bg-primary/30 ring-2 ring-primary/50 animate-ping"
+              style={{ animationDuration: '1.8s' }}
+              aria-hidden="true"
+            />
+          )}
           {walletType === "xverse" ? (
             <Image
               src="/xverse-logo.svg"
@@ -107,6 +114,7 @@ export default function WalletConnectButton({
               width={32}
               height={32}
               priority
+              className="relative z-10"
             />
           ) : walletIcon ? (
             <Image
@@ -116,6 +124,7 @@ export default function WalletConnectButton({
               height={32}
               priority
               unoptimized={!walletIcon.startsWith('/')}
+              className="relative z-10"
             />
           ) : (
             <Image
@@ -124,6 +133,7 @@ export default function WalletConnectButton({
               width={32}
               height={32}
               priority
+              className="relative z-10"
             />
           )}
         </div>

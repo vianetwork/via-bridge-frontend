@@ -349,6 +349,32 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                         "border-red-500 focus-visible:ring-red-500"
                       )}
                       {...field}
+                      onChange={(e) => {
+                        // Let users type freely; keep RHF in sync
+                        field.onChange(e.target.value);
+                      }}
+                      onBlur={(e) => {
+                        // Mark as touched first
+                        field.onBlur();
+                        // Clamp to fee-aware MAX if user-entered amount exceeds it (use handleMaxAmount for consistency)
+                        try {
+                          if (!balance) return;
+                          const bal = parseFloat(String(balance));
+                          if (!Number.isFinite(bal) || bal <= 0) return;
+                          const feeReserve = 0.0001; // aligned with MAX button
+                          const max = Math.max(0, bal - feeReserve);
+                          const currentStr = form.getValues("amount") ?? "";
+                          const current = parseFloat(currentStr || "0");
+                          if (Number.isFinite(current) && current > max) {
+                            handleMaxAmount();
+                            // Ensure validation after clamping
+                            // Note: RHF setValue in handleMaxAmount won't validate by default
+                            form.trigger("amount");
+                          }
+                        } catch {
+                          // no-op: keep user's value if parsing fails
+                        }
+                      }}
                     />
                     <button
                       type="button"
@@ -386,6 +412,83 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     )}
                   </div>
                 )}
+
+                {/* balance usage progress + slider */}
+                {balance && Number(balance) > 0 && (
+                  <div className="mt-2">
+                    {(() => {
+                      const bal = parseFloat(balance);
+                      const min = 0.0002; // 20,000 sats minimum
+                      const feeReserve = 0.0001; // aligned with MAX
+                      const max = Math.max(0, bal - feeReserve);
+                      const hasRange = max >= min;
+
+                      const parsed = parseFloat(field.value || "0");
+                      const current = Number.isFinite(parsed) ? parsed : min;
+                      const value = Math.min(Math.max(current, min), hasRange ? max : min);
+
+                      const range = Math.max(max - min, 1e-12);
+                      const pct = Math.min(Math.max(((value - min) / range) * 100, 0), 100);
+
+                      const setAmount = (v: number) =>
+                        form.setValue("amount", v.toFixed(8), {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                          shouldTouch: true,
+                        });
+
+                      const shouldPulse = !(field.value && String(field.value).trim());
+
+
+                      return (
+                        <>
+                          <div className="flex justify-between items-center text-[11px] text-muted-foreground mb-1">
+                            <div className="flex items-center gap-1.5">
+                              <span>Using {pct.toFixed(1)}% of balance</span>
+                            </div>
+                            <span className="font-medium text-foreground/80">
+                              {Number.isFinite(value) ? value.toFixed(8) : "0.00000000"} / {bal.toFixed(8)} BTC
+                            </span>
+                          </div>
+
+                          <div className="relative w-full">
+                            {/* Progress bar */}
+                            <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                              <div
+                                className={cn("h-1.5 rounded-l-full", "bg-green-500")}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+
+
+                            {/* Slider overlay */}
+                            <input
+                              type="range"
+                              min={min}
+                              max={hasRange ? max : min}
+                              step="any"
+                              value={value}
+                              onChange={(e) => setAmount(Number(e.target.value))}
+                              disabled={!hasRange || isLoadingBalance}
+                              className="absolute inset-0 w-full h-1.5 appearance-none bg-transparent cursor-pointer disabled:cursor-not-allowed accent-green-500"
+                              aria-label="Deposit amount"
+                            />
+                            {shouldPulse && (
+                              <span
+                                className="pointer-events-none absolute z-10 top-1/2 -translate-x-1/2 -translate-y-1/2 inline-flex w-4 h-4"
+                                style={{ left: `calc(${pct}% + 9px)` }}
+                                aria-hidden="true"
+                              >
+                                <span className="absolute inset-0 animate-ping rounded-full bg-green-400 opacity-75"></span>
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                )}
+
 
                 <FormField
                   control={form.control}
@@ -440,4 +543,5 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     </div>
   );
 }
+
 
