@@ -39,6 +39,18 @@ export class EIP6963ProviderStore {
     window.dispatchEvent(new Event('eip6963:requestProvider'));
   }
 
+  /**
+   * Request wallets to (re)announce
+   * Useful in case a user enables a wallet extension while the app is open
+   * or when the window regains focus after being in the background
+   */
+  public requestProvider(): void {
+    this.ensureInitialized();
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('eip6963:requestProvider'));
+    }
+  }
+
   private handleProviderAnnouncement(providerDetail: EIP6963ProviderDetail) {
     const existingProvider = this.providers.find(p => p.info.uuid === providerDetail.info.uuid);
     if (existingProvider) {
