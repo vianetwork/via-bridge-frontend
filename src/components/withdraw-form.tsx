@@ -16,6 +16,7 @@ import { useWalletStore } from "@/store/wallet-store";
 import { getViaBalance } from "@/services/via/balance";
 import { cn } from "@/lib/utils";
 import { toL1Amount } from "@/helpers";
+import { FormAmountSlider } from "@/components/form-amount-slider";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -377,6 +378,24 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                       </span>
                     )}
                   </div>
+                )}
+
+                {/* balance usage progress */}
+                {balance && Number(balance) >0 && (
+                  <FormAmountSlider
+                    form={form}
+                    name="amount"
+                    balance={Number.parseFloat(String(balance))}
+                    min={0.0002}
+                    feeReserve={0}
+                    isLoading={isLoadingBalance}
+                    pulseWhenEmpty={!(field.value && String(field.value).trim())}
+                    unit="BTC"
+                    progressClassName="bg-green-500"
+                    sliderAccentClassName="accent-green-500"
+                    ariaLabel="Withdraw amount"
+                    decimals={8}
+                    />
                 )}
 
                 <FormField
