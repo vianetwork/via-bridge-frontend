@@ -1,11 +1,14 @@
 import axios from "axios";
 import { API_BASE_URL } from "../config";
-import { getUserIPAddress } from "../../utils/ip-address";
 
 export interface FaucetResponse {
   success: boolean;
   error?: string;
   message?: string;
+}
+
+export interface FaucetRequestData {
+  altchaToken: string;
 }
 
 /**
@@ -14,23 +17,20 @@ export interface FaucetResponse {
  * @returns Promise<FaucetResponse>
  */
 export async function requestFaucetFunds(
-  address: string
+  address: string,
 ): Promise<FaucetResponse> {
   try {
-    const userIP = await getUserIPAddress();
-    
     const response = await axios.post<FaucetResponse>(
       `${API_BASE_URL}/faucet/request-tokens?address=${address}`,
       {},
       {
-        timeout: 30000,
+        timeout: 10000, // Reduced timeout for faster feedback
         headers: {
           'Content-Type': 'application/json',
-          'X-Forwarded-For': userIP,
+          'X-Forwarded-For': '1.1.1.1',
         },
       }
     );
-    console.log("Response:", response.data);
 
     return response.data;
   } catch (error) {
@@ -38,15 +38,22 @@ export async function requestFaucetFunds(
     
     if (axios.isAxiosError(error)) {
       if (error.response) {
-        const errorMessage = error.response.data?.error || error.response.data?.message || 'Server error';
+        // Server responded with error status
+        const errorMessage = error.response.data?.error || error.response.data?.message || `Server error (${error.response.status})`;
         return {
           success: false,
           error: errorMessage,
         };
       } else if (error.request) {
+        // Network error - server not reachable
         return {
           success: false,
-          error: 'Network error: Unable to reach faucet service',
+          error: `Backend server not available. Please ensure the backend is running on ${API_BASE_URL}`,
+        };
+      } else if (error.code === 'ECONNREFUSED') {
+        return {
+          success: false,
+          error: `Connection refused. Backend server is not running on ${API_BASE_URL}`,
         };
       }
     }

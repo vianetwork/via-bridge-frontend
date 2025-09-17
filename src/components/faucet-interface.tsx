@@ -1,15 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Droplets, CheckCircle, AlertCircle } from "lucide-react";
+import { Droplets, CheckCircle, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { requestFaucetFunds } from "@/services/api/faucet";
 import { useWalletState } from "@/hooks/use-wallet-state";
+import AltchaWidget, { AltchaWidgetRef } from "@/components/altcha-widget";
+import { useAltcha } from "@/hooks/use-altcha";
+import { API_BASE_URL } from "@/services/config";
 
 interface FaucetRequest {
   address: string;
@@ -20,10 +23,17 @@ interface FaucetRequest {
 
 export default function FaucetInterface() {
   const { viaAddress } = useWalletState();
+  const altchaRef = useRef<AltchaWidgetRef>(null);
+  const { altchaState, handleVerify, handleError, resetAltcha } = useAltcha();
+  
   const [faucetRequest, setFaucetRequest] = useState<FaucetRequest>({
     address: viaAddress || "",
     status: 'idle'
   });
+
+  // Get AltCHA URLs from environment
+  const altchaChallengeUrl = `${API_BASE_URL}/faucet/altcha-challenge`;
+  const altchaVerifyUrl = `${API_BASE_URL}/faucet/altcha-verify`;
 
   const handleAddressChange = (value: string) => {
     setFaucetRequest(prev => ({
@@ -33,7 +43,6 @@ export default function FaucetInterface() {
       error: undefined
     }));
   };
-
 
   const handleUseConnectedWallet = () => {
     if (viaAddress) {
@@ -56,6 +65,15 @@ export default function FaucetInterface() {
       return;
     }
 
+    if (altchaChallengeUrl && !altchaState.isVerified) {
+      setFaucetRequest(prev => ({
+        ...prev,
+        status: 'error',
+        error: 'Please complete the security verification'
+      }));
+      return;
+    }
+
     setFaucetRequest(prev => ({ ...prev, status: 'loading' }));
 
     try {
@@ -66,6 +84,8 @@ export default function FaucetInterface() {
           ...prev,
           status: 'success',
         }));
+        resetAltcha();
+        altchaRef.current?.reset();
         toast.success("Faucet Request Successful", {
           description: `Successfully requested test BTC to ${faucetRequest.address.slice(0, 6)}...${faucetRequest.address.slice(-4)}`,
           duration: 5000
@@ -76,6 +96,8 @@ export default function FaucetInterface() {
           status: 'error',
           error: result.error || 'Failed to request funds from faucet'
         }));
+        resetAltcha();
+        altchaRef.current?.reset();
         toast.error("Faucet Request Failed", {
           description: result.error || 'Failed to request funds from faucet',
           duration: 5000
@@ -88,6 +110,8 @@ export default function FaucetInterface() {
         status: 'error',
         error: errorMessage
       }));
+      resetAltcha();
+      altchaRef.current?.reset();
       toast.error("Faucet Request Failed", {
         description: errorMessage,
         duration: 5000
@@ -138,13 +162,6 @@ export default function FaucetInterface() {
             )}
           </div>
 
-          {faucetRequest.status === 'error' && faucetRequest.error && (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4 flex-shrink-0" />
-              <AlertDescription className="flex-1">{faucetRequest.error}</AlertDescription>
-            </Alert>
-          )}
-
           {faucetRequest.status === 'success' && (
             <Alert>
               <CheckCircle className="h-4 w-4 flex-shrink-0" />
@@ -156,9 +173,33 @@ export default function FaucetInterface() {
             </Alert>
           )}
 
+          {altchaChallengeUrl && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                Security Verification
+              </Label>
+              <div className="flex items-center justify-center">
+                <AltchaWidget
+                  ref={altchaRef}
+                  challengeUrl={altchaChallengeUrl}
+                  verifyUrl={altchaVerifyUrl}
+                  onVerify={handleVerify}
+                  onError={handleError}
+                  debug={false}
+                  test={false}
+                />
+              </div>
+            </div>
+          )}
+
           <Button
             onClick={handleRequestFunds}
-            disabled={faucetRequest.status === 'loading' || !isValidAddress(faucetRequest.address)}
+            disabled={
+              faucetRequest.status === 'loading' || 
+              !isValidAddress(faucetRequest.address) ||
+              (!!altchaChallengeUrl && !altchaState.isVerified)
+            }
             className="w-full"
           >
             {faucetRequest.status === 'loading' ? (
