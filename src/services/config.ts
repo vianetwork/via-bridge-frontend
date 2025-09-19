@@ -21,7 +21,7 @@ export const VIA_NETWORK_CONFIG = {
       decimals: 18
     },
     rpcUrls: ['http://0.0.0.0:3050'],
-    blockExplorerUrls: ['https://testnet.blockscout.onvia.org']
+    blockExplorerUrls: ['']
   },
   [BitcoinNetwork.TESTNET]: {
     chainId: "0x6287",
@@ -32,7 +32,7 @@ export const VIA_NETWORK_CONFIG = {
       decimals: 18
     },
     rpcUrls: ['https://via.testnet.viablockchain.dev'],
-    blockExplorerUrls: ['https://testnet.blockscout.onvia.org']
+    blockExplorerUrls: ['']
   },
   [BitcoinNetwork.MAINNET]: {
     chainId: "0x1467",

@@ -24,7 +24,6 @@ export async function requestFaucetFunds(
       `${API_BASE_URL}/faucet/request-tokens?address=${address}`,
       {},
       {
-        timeout: 10000, // Reduced timeout for faster feedback
         headers: {
           'Content-Type': 'application/json',
           'X-Forwarded-For': '1.1.1.1',
