@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -17,6 +17,7 @@ import { getViaBalance } from "@/services/via/balance";
 import { cn } from "@/lib/utils";
 import { toL1Amount } from "@/helpers";
 import { FormAmountSlider } from "@/components/form-amount-slider";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -51,7 +52,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [amount, setAmount] = useState("0");
-  const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
+  // TODO REMOVE const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Import the wallet store to get the Bitcoin address
   const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation } = useWalletStore();
@@ -95,60 +96,26 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     fetchBalance();
   }, [viaAddress]);
 
-  // Update amount state when form amount changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "amount" && value.amount) {
-        setAmount(value.amount);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form]);
-
-  // Update the existing useEffect that watches form changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "amount" && value.amount) {
-        setAmount(value.amount);
-
-        // Clear existing timeout
-        if (feeEstimationTimeout) {
-          clearTimeout(feeEstimationTimeout);
+    const liveAmount = form.watch("amount");
+    const debouncedAmount = useDebounce(liveAmount, 600); // 600ms debounce delay
+    const lastSatsRef = useRef<number | null>(null);
+    useEffect(() => {
+        setAmount(String(liveAmount ?? ""));
+        }, [liveAmount]);
+    useEffect(() => {
+        try {
+            const str = String(debouncedAmount ?? "");
+            const sats = toL1Amount(str); // "0.00123456" -> 123456
+            if (!Number.isFinite(sats)) return;
+            if (sats  <= 0 ) return;
+            if (sats < 2000) return;  // 0.00002 BTC minimum
+            if (lastSatsRef.current == sats) return;
+            lastSatsRef.current = sats;
+            fetchFeeEstimation(sats);
+        } catch (err) {
+            console.error("Error fetching fee estimation:", err);
         }
-
-        // Set new timeout for fee estimation
-        const newTimeout = setTimeout(async () => {
-          try {
-            const formattedAmount = toL1Amount(value.amount!);
-            if (formattedAmount == 0) {
-              return;
-            }
-            await fetchFeeEstimation(formattedAmount);
-          } catch (error) {
-            console.error("Error fetching fee estimation:", error);
-          }
-        }, 2000);
-
-        setFeeEstimationTimeout(newTimeout);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-      // Clear timeout on cleanup
-      if (feeEstimationTimeout) {
-        clearTimeout(feeEstimationTimeout);
-      }
-    };
-  }, [form, feeEstimationTimeout]);
-  // Add cleanup effect for component unmount
-  useEffect(() => {
-    return () => {
-      if (feeEstimationTimeout) {
-        clearTimeout(feeEstimationTimeout);
-      }
-    };
-  }, [feeEstimationTimeout]);
+    }, [debouncedAmount, fetchFeeEstimation]);
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
@@ -342,8 +309,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                       type="button"
                       onClick={() => {
                         if (balance) {
-                          form.setValue("amount", String(balance));
-                          setAmount(balance);
+                            form.setValue("amount", String(balance));
                         }
                       }}
                       disabled={
