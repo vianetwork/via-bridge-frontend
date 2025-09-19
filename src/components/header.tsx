@@ -9,6 +9,8 @@ import { toast } from "sonner";
 import { useState } from "react";
 import { Layer } from "@/services/config";
 import { useMobile } from "@/hooks/use-mobile";
+import { env } from "@/lib/env";
+import { BitcoinNetwork } from "@/services/bitcoin/types";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +23,8 @@ import {
 
 export default function Header() {
   const { isMobile } = useMobile();
+  const currentNetwork = env().NEXT_PUBLIC_NETWORK;
+  const isTestnet = currentNetwork === BitcoinNetwork.TESTNET || currentNetwork === BitcoinNetwork.REGTEST;
   const {
     isXverseConnected,
     isMetamaskConnected,
@@ -205,19 +209,48 @@ export default function Header() {
           </span>
         </div>
 
+        <nav className="hidden md:flex items-center gap-4">
+          <Link 
+            href="/" 
+            className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+          >
+            Bridge
+          </Link>
+          {isTestnet && (
+            <Link 
+              href="/faucet" 
+              className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+            >
+              Faucet
+            </Link>
+          )}
+        </nav>
+
         <div className="flex items-center gap-2">
           {isMobile ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 flex items-center gap-1.5">
-                  <Menu className="h-3.5 w-3.5" />
-                  <span>Wallets</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                {renderWalletOptions()}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 flex items-center gap-1.5">
+                    <Menu className="h-3.5 w-3.5" />
+                    <span>Menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Navigation</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/">Bridge</Link>
+                  </DropdownMenuItem>
+                  {isTestnet && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/faucet">Faucet</Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  {renderWalletOptions()}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               {isXverseConnected ? (
