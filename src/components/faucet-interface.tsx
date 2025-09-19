@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,11 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Droplets, CheckCircle, Shield } from "lucide-react";
 import { toast } from "sonner";
-import { requestFaucetFunds } from "@/services/api/faucet";
+import { getTransactionHash, requestFaucetFunds } from "@/services/api/faucet";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import AltchaWidget, { AltchaWidgetRef } from "@/components/altcha-widget";
 import { useAltcha } from "@/hooks/use-altcha";
-import { API_BASE_URL } from "@/services/config";
+import { API_BASE_URL, getNetworkConfig } from "@/services/config";
+import path from "path";
 
 interface FaucetRequest {
   address: string;
@@ -24,6 +25,8 @@ interface FaucetRequest {
 export default function FaucetInterface() {
   const { viaAddress } = useWalletState();
   const altchaRef = useRef<AltchaWidgetRef>(null);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { altchaState, handleVerify, handleError, resetAltcha } = useAltcha();
   
   const [faucetRequest, setFaucetRequest] = useState<FaucetRequest>({
@@ -34,6 +37,18 @@ export default function FaucetInterface() {
   // Get AltCHA URLs from environment
   const altchaChallengeUrl = `${API_BASE_URL}/faucet/altcha-challenge`;
   const altchaVerifyUrl = `${API_BASE_URL}/faucet/altcha-verify`;
+
+  // Cleanup polling on component unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+      if (pollingTimeoutRef.current) {
+        clearTimeout(pollingTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleAddressChange = (value: string) => {
     setFaucetRequest(prev => ({
@@ -80,14 +95,9 @@ export default function FaucetInterface() {
       const result = await requestFaucetFunds(faucetRequest.address);
       
       if (result.success) {
-        setFaucetRequest(prev => ({
-          ...prev,
-          status: 'success',
-        }));
-        resetAltcha();
-        altchaRef.current?.reset();
-        toast.success("Faucet Request Successful", {
-          description: `Successfully requested test BTC to ${faucetRequest.address.slice(0, 6)}...${faucetRequest.address.slice(-4)}`,
+        startPollingForTransactionHash(faucetRequest.address);
+        toast.success("Faucet Request Submitted", {
+          description: `Request submitted for ${faucetRequest.address.slice(0, 6)}...${faucetRequest.address.slice(-4)}. Checking for transaction...`,
           duration: 5000
         });
       } else {
@@ -121,6 +131,115 @@ export default function FaucetInterface() {
 
   const isValidAddress = (address: string) => {
     return address.startsWith('0x') && address.length === 42;
+  };
+
+  // Helper function to clear polling intervals and timeouts
+  const clearPolling = () => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+      pollingIntervalRef.current = null;
+    }
+    if (pollingTimeoutRef.current) {
+      clearTimeout(pollingTimeoutRef.current);
+      pollingTimeoutRef.current = null;
+    }
+  };
+
+  // Helper function to reset AltCHA and clear polling
+  const resetAndClearPolling = () => {
+    resetAltcha();
+    altchaRef.current?.reset();
+    clearPolling();
+  };
+
+  // Helper function to handle polling timeout/error
+  const handlePollingTimeout = (errorMessage: string, toastTitle: string) => {
+    setFaucetRequest(prev => ({
+      ...prev,
+      status: 'error',
+      error: errorMessage
+    }));
+    resetAndClearPolling();
+    toast.error(toastTitle, {
+      description: errorMessage,
+      duration: 8000
+    });
+  };
+
+  const startPollingForTransactionHash = (address: string) => {
+    let attempts = 0;
+    const maxAttempts = 6; // 6 attempts * 10 seconds = 60 seconds (1 minute)
+    
+    const poll = async () => {
+      attempts++;
+      
+      try {
+        const transactionHash = await getTransactionHash(address);
+        
+        if (transactionHash.success && transactionHash.data) {
+          setFaucetRequest(prev => ({
+            ...prev,
+            status: 'success',
+            txHash: transactionHash.data
+          }));
+
+          resetAndClearPolling();
+          
+          toast.success("Transaction Confirmed", {
+            description: `Check the transaction on the explorer: ${path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', transactionHash.data)}`,
+            duration: 5000
+          });
+          return;
+        }
+
+        if(transactionHash.error) {
+          handlePollingTimeout(
+            'Something went wrong. Please check your wallet for balance updates.',
+            'Transaction Check Failed'
+          );
+        }
+        
+        if (attempts >= maxAttempts) {
+          handlePollingTimeout(
+            'Transaction not found after 1 minute. Please check your wallet for balance updates.',
+            'Transaction Check Timeout'
+          );
+        }
+      } catch (error) {
+        console.error("Error polling for transaction hash:", error);
+        
+        if (attempts >= maxAttempts) {
+          handlePollingTimeout(
+            'Unable to verify transaction. Please check your wallet for balance updates.',
+            'Transaction Verification Failed'
+          );
+        }
+      }
+    };
+
+    poll();
+    
+    pollingIntervalRef.current = setInterval(poll, 10000); // Poll every 10 seconds
+    
+    pollingTimeoutRef.current = setTimeout(() => {
+      clearPolling();
+        
+      setFaucetRequest(prev => {
+        if (prev.status === 'loading') {
+          return {
+            ...prev,
+            status: 'error',
+            error: 'Transaction not found after 1 minute. Please check your wallet for balance updates.'
+          };
+        }
+        return prev;
+      });
+      
+      toast.error("Transaction Check Timeout", {
+        description: "Transaction not found after 1 minute. Please check your wallet for balance updates.",
+        duration: 8000
+      });
+    }, 70000);
   };
 
   return (
@@ -167,7 +286,27 @@ export default function FaucetInterface() {
               <CheckCircle className="h-4 w-4 flex-shrink-0" />
               <AlertDescription className="flex-1">
                 <div className="space-y-2">
-                  <p>Funds requested successfully!</p>
+                  {faucetRequest.txHash && (
+                  <p>Funds are sent successfully with <a 
+                    href={`${path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', faucetRequest.txHash)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 underline"
+                  >
+                    transaction
+                  </a>!</p>
+                  )}
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {faucetRequest.status === 'error' && (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertDescription className="text-red-800">
+                <div className="space-y-2">
+                  <p className="font-medium">Request Failed</p>
+                  <p className="text-sm">{faucetRequest.error}</p>
                 </div>
               </AlertDescription>
             </Alert>

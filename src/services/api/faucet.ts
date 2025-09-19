@@ -65,3 +65,23 @@ export async function requestFaucetFunds(
     };
   }
 }
+
+export interface TransactionHashResponse {
+  success: boolean;
+  error?: string;
+  data?: string;
+}
+
+export async function getTransactionHash(address: string): Promise<TransactionHashResponse> {
+  try {
+  const response = await axios.get<TransactionHashResponse>(
+    `${API_BASE_URL}/faucet/get-transaction-hash?address=${address}`,
+  );
+    return response.data;
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'An unexpected error occurred',
+    };
+  }
+}

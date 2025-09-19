@@ -3,7 +3,7 @@ import { env } from "@/lib/env";
 
 
 // Define the API base URL
-export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5050";
 
 export enum Layer {
   L1,
@@ -21,7 +21,7 @@ export const VIA_NETWORK_CONFIG = {
       decimals: 18
     },
     rpcUrls: ['http://0.0.0.0:3050'],
-    blockExplorerUrls: ['']
+    blockExplorerUrls: ['https://testnet.blockscout.onvia.org']
   },
   [BitcoinNetwork.TESTNET]: {
     chainId: "0x6287",
@@ -32,7 +32,7 @@ export const VIA_NETWORK_CONFIG = {
       decimals: 18
     },
     rpcUrls: ['https://via.testnet.viablockchain.dev'],
-    blockExplorerUrls: ['']
+    blockExplorerUrls: ['https://testnet.blockscout.onvia.org']
   },
   [BitcoinNetwork.MAINNET]: {
     chainId: "0x1467",
