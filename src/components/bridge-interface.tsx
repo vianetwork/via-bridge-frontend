@@ -132,7 +132,7 @@ export default function BridgeInterface() {
                     <p className="text-sm text-center text-muted-foreground max-w-[280px]">
                       Please switch to the correct Bitcoin network to continue.
                     </p>
-                    <Button onClick={() => switchNetwork(Layer.L2)}>Switch Network</Button>
+                    <Button onClick={() => switchNetwork(Layer.L1)}>Switch Network</Button>
                   </div>
                 )
               ) : (

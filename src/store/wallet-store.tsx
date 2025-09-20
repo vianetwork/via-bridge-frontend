@@ -6,6 +6,7 @@ import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
+import * as net from "node:net";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -427,15 +428,45 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       switch (layer) {
         case Layer.L1:
-          // For Xverse, we need to disconnect and reconnect
           if (isXverseConnected) {
-            await get().disconnectXverse();
-            return await get().connectXverse();
+            // Ask Xverse to switch to Bitcoin network via Sats connect
+            const { request } = await import("sats-connect");
+            const { BRIDGE_CONFIG } = await import("@/services/config");
+
+            // Map env() network to display the name used by sats-connect
+            const toXverseName = (net: string): string => {
+              switch (net.toLowerCase()) {
+                case "mainnet": return "Mainnet";
+                case "testnet4": return "Testnet4";
+                case "regtest": return "Regtest";
+                default: return net;
+              }
+            };
+
+            const targetName = toXverseName(BRIDGE_CONFIG.defaultNetwork);
+
+            // Switch network using Sats Connect documented shape — docs: https://docs.xverse.app/sats-connect/wallet-methods/wallet_changenetwork
+            const tryChangeNetwork = async (): Promise<boolean> => {
+              try {
+                const res: any = await request("wallet_changeNetwork", { name: targetName } as any);
+                return res?.status === "success";
+              } catch (e: any) {
+                console.error("wallet_changeNetwork failed", e);
+                return false;
+              }
+            };
+
+            const switched = await tryChangeNetwork();
+            if (switched) {
+              await get().checkXverseConnection();
+              walletEvents.networkChanged.emit();
+              return true;
+            }
           }
           break;
         case Layer.L2:
           if (isMetamaskConnected) {
-            // For MetaMask, we can request network switch
+            // For MetaMask, we can request a network switch
             const bestProvider = await getPreferredWeb3ProviderAsync();
             if (!bestProvider) {
               throw new Error("Wallet not found or not accessible");
@@ -555,7 +586,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const { request, AddressPurpose } = await import("sats-connect");
 
       const res = await request('wallet_getNetwork', null) as any;
-      if (!res.status) {
+      if (res?.status !== "success") {
         set({ isXverseConnected: false });
         return;
       }
@@ -563,8 +594,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Check if connected to the correct network
       const { BRIDGE_CONFIG } = await import("@/services/config");
       const expectedNetwork = BRIDGE_CONFIG.defaultNetwork;
-      const connectedNetwork = res.result.bitcoin.name.toLowerCase();
-      const isCorrect = expectedNetwork === connectedNetwork;
+      // Xverse may report the test network as "Signet" while our config uses Testnet 4
+      // Normalize both wallet responses and config
+      const normalize = (name?: string): string => {
+        const n = (name || "").toLowerCase();
+        return n === "signet" ? "testnet4" : n;
+      };
+      const connectedNetwork = normalize(res.result?.bitcoin?.name);
+      const isCorrect = normalize(expectedNetwork) === connectedNetwork;
 
       set({ isCorrectBitcoinNetwork: isCorrect });
 
