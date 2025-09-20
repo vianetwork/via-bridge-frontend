@@ -2,11 +2,10 @@ import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
-import { createWalletError, WalletNotFoundError } from "@/utils/wallet-errors";
+import { WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
-import * as net from "node:net";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -22,8 +21,6 @@ export const walletEvents = {
 export type TransactionStatus =
   'Pending' |
   'InProgress' |
-  'Processed' |
-  'Failed' |
   'ExecutedOnL2' |
   'CommittedToL1' |
   'ProvedOnL1' |
@@ -363,7 +360,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       console.log(`🔗 Using ${bestProvider.name} (${bestProvider.rdns})`);
 
-      // Ensure selection reflects chosen provider and emits walletChanged if changed
+      // Ensure selection reflects the chosen provider and emits walletChanged if changed
       get().setSelectedWallet(bestProvider.rdns);
 
       const accounts = await bestProvider.provider.request({
@@ -621,7 +618,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             isXverseConnected: true
           });
 
-          // Load local transactions when wallet is already connected
+          // Load local transactions when the wallet is already connected
           get().loadLocalTransactions();
 
           console.log("✅ Xverse wallet already connected");
