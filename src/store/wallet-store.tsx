@@ -125,8 +125,7 @@ interface WalletState {
   connectMetamask: () => Promise<boolean>;
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
-  switchNetwork: (layer: Layer) => void;
-
+  switchNetwork: (layer: Layer) => Promise<boolean | void>;
   connectWallet: (rdns: string) => Promise<boolean>;
   refreshAvailableWallets: () => void;
 
@@ -479,6 +478,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
                 params: [{ chainId: expectedChainId }],
               });
               set({ isCorrectViaNetwork: true });
+              walletEvents.networkChanged.emit();
               return true;
             } catch (switchError: any) {
               // This error code indicates that the chain has not been added to MetaMask
@@ -488,6 +488,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
                   params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
                 });
                 set({ isCorrectViaNetwork: true });
+                walletEvents.networkChanged.emit();
                 return true;
               }
               throw switchError;
