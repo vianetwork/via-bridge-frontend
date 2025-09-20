@@ -15,7 +15,7 @@ import Image from "next/image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
 import { isAddress } from "ethers";
-import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS } from "@/services/constants";
+import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS, FEE_RESERVE_BTC, MIN_DEPOSIT_BTC, MIN_DEPOSIT_SATS } from "@/services/constants";
 import { cn } from "@/lib/utils";
 import { BRIDGE_CONFIG } from "@/services/config";
 import { FormAmountSlider } from "@/components/form-amount-slider";
@@ -35,8 +35,8 @@ interface FormContext {
 const depositFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= 0.0002, {
-      message: "Minimum amount is 0.0002 BTC (20000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= MIN_DEPOSIT_BTC, {
+        message: `Minimum amount is ${MIN_DEPOSIT_BTC} BTC (${MIN_DEPOSIT_SATS.toLocaleString()} satoshis)`,
     })
     .superRefine((val, ctx) => {
       // Get balance from context
@@ -138,7 +138,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const handleMaxAmount = () => {
     if (balance) {
       // Set a slightly lower amount to account for transaction fees
-      const maxAmount = Math.max(0, parseFloat(balance) - 0.0001).toFixed(8);
+        const maxAmount = Math.max(0, parseFloat(balance) - FEE_RESERVE_BTC).toFixed(8);
       form.setValue("amount", maxAmount);
     }
   };
@@ -363,8 +363,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                           if (!balance) return;
                           const bal = parseFloat(String(balance));
                           if (!Number.isFinite(bal) || bal <= 0) return;
-                          const feeReserve = 0.0001; // aligned with MAX button
-                          const max = Math.max(0, bal - feeReserve);
+                          const max = Math.max(0, bal - FEE_RESERVE_BTC);
                           const currentStr = form.getValues("amount") ?? "";
                           const current = parseFloat(currentStr || "0");
                           if (Number.isFinite(current) && current > max) {
@@ -421,8 +420,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   form={form}
                   name="amount"
                   balance={Number.parseFloat(String(balance))}
-                  min={0.002} //20,000 sat min
-                  feeReserve={0.0001} // reserve for fees, aligns with MAX
+                  min={MIN_DEPOSIT_BTC}//20,000 sat min
+                  feeReserve={FEE_RESERVE_BTC} // reserve for fees, aligns with MAX
                   isLoading={isLoadingBalance}
                   pulseWhenEmpty={!(field.value && String(field.value).trim())}
                   unit="BTC"

@@ -17,6 +17,7 @@ import { getViaBalance } from "@/services/via/balance";
 import { cn } from "@/lib/utils";
 import { toL1Amount } from "@/helpers";
 import { FormAmountSlider } from "@/components/form-amount-slider";
+import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
 import { useDebounce } from "@/hooks/useDebounce";
 
 interface WithdrawFormProps {
@@ -27,8 +28,8 @@ interface WithdrawFormProps {
 const withdrawFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= 0.00002, {
-      message: "Minimum amount is 0.00002 BTC (2000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= MIN_WITHDRAW_BTC, {
+      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} satoshis)`,
     }),
   recipientBitcoinAddress: z
     .string()
@@ -52,7 +53,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [amount, setAmount] = useState("0");
-  // TODO REMOVE const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Import the wallet store to get the Bitcoin address
   const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation } = useWalletStore();
@@ -108,7 +108,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
             const sats = toL1Amount(str); // "0.00123456" -> 123456
             if (!Number.isFinite(sats)) return;
             if (sats  <= 0 ) return;
-            if (sats < 2000) return;  // 0.00002 BTC minimum
+            if (sats <  MIN_WITHDRAW_SATS) return;  // 0.00002 BTC minimum
             if (lastSatsRef.current == sats) return;
             lastSatsRef.current = sats;
             fetchFeeEstimation(sats);
@@ -352,7 +352,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     form={form}
                     name="amount"
                     balance={Number.parseFloat(String(balance))}
-                    min={0.0002}
+                    min={MIN_WITHDRAW_BTC}
                     feeReserve={0}
                     isLoading={isLoadingBalance}
                     pulseWhenEmpty={!(field.value && String(field.value).trim())}
