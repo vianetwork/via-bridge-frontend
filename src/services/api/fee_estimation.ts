@@ -19,7 +19,7 @@ export async function fetchFeeEstimation(amount: number, signal?: AbortSignal): 
     if(!Number.isFinite(amount) || amount <= 0) throw new Error("Invalid amount");
     let payload: FeeEstimationResponse;
     try {
-        const { data } = await axios.get<FeeEstimationResponse>(API_BASE_URL + "/fees-estimation", { params: { amount }, signal });
+        const { data } = await axios.get<FeeEstimationResponse>(API_BASE_URL + "/fee-estimation", { params: { amount }, signal });
         payload = data;
     } catch (err) {
         if (isAxiosError(err) && err.code === "ERR_CANCELED") throw err;
