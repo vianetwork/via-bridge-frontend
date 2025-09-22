@@ -104,12 +104,13 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
         }, [liveAmount]);
     useEffect(() => {
         try {
-            const str = String(debouncedAmount ?? "");
-            const sats = toL1Amount(str); // "0.00123456" -> 123456
+            const str = String(debouncedAmount ?? "").trim();
+          if (!str) return;  // if the user hasn't typed a number yet, don't do anything'
+          const sats = toL1Amount(str);
             if (!Number.isFinite(sats)) return;
             if (sats  <= 0 ) return;
             if (sats <  MIN_WITHDRAW_SATS) return;  // 0.00002 BTC minimum
-            if (lastSatsRef.current == sats) return;
+            if (lastSatsRef.current === sats) return;
             lastSatsRef.current = sats;
             fetchFeeEstimation(sats);
         } catch (err) {
@@ -448,7 +449,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
             disabled={
               isSubmitting ||
               !feeEstimation ||
-              toL1Amount(amount.toString()) - feeEstimation.fee < 0 ||
+              toL1Amount(amount || "0") - feeEstimation.fee <0 ||
               isLoadingFeeEstimation ||
               !form.watch("amount") ||
               parseFloat(form.watch("amount") || "0") <= 0 ||
