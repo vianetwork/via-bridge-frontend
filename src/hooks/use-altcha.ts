@@ -15,11 +15,11 @@ export function useAltcha() {
     isLoading: false,
   });
 
-  const handleVerify = useCallback(() => {
+  const handleVerify = useCallback((token: string) => {
     setAltchaState(prev => {
       const newState = {
         ...prev,
-        token: null,
+        token: token,
         isVerified: true,
         hasError: false,
         isLoading: false,

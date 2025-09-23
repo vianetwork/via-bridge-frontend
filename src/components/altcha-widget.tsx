@@ -5,7 +5,6 @@ import type { AltchaWidget, AltchaWidgetMethods } from '@/types/altcha';
 
 interface AltchaWidgetProps {
   challengeUrl?: string;
-  verifyUrl?: string;
   onStateChange?: (ev: Event | CustomEvent) => void;
   onVerify?: (token: string) => void;
   onError?: () => void;
@@ -21,7 +20,6 @@ export interface AltchaWidgetRef {
 
 const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(({ 
   challengeUrl,
-  verifyUrl,
   onStateChange,
   onVerify,
   onError,
@@ -74,8 +72,10 @@ const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(({
     }
 
     const handleStateChange = (ev: Event | CustomEvent) => {
+      console.log("handleStateChange", ev);
       if ('detail' in ev) {
         const detail = (ev as CustomEvent).detail;
+        console.log("detail", detail);
         if (detail.state === "verified") {
           setValue(detail.payload);
           onVerify?.(detail.payload);
@@ -121,7 +121,6 @@ const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(({
       <altcha-widget
         ref={widgetRef}
         challengeurl={challengeUrl}
-        verifyurl={verifyUrl}
         debug={debug}
         test={test}
         hidefooter

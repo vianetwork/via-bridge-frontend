@@ -36,7 +36,6 @@ export default function FaucetInterface() {
 
   // Get AltCHA URLs from environment
   const altchaChallengeUrl = `${API_BASE_URL}/faucet/altcha-challenge`;
-  const altchaVerifyUrl = `${API_BASE_URL}/faucet/altcha-verify`;
 
   // Cleanup polling on component unmount
   useEffect(() => {
@@ -92,7 +91,7 @@ export default function FaucetInterface() {
     setFaucetRequest(prev => ({ ...prev, status: 'loading' }));
 
     try {
-      const result = await requestFaucetFunds(faucetRequest.address);
+      const result = await requestFaucetFunds(faucetRequest.address, altchaState.token!);
       
       if (result.success) {
         startPollingForTransactionHash(faucetRequest.address);
@@ -322,7 +321,6 @@ export default function FaucetInterface() {
                 <AltchaWidget
                   ref={altchaRef}
                   challengeUrl={altchaChallengeUrl}
-                  verifyUrl={altchaVerifyUrl}
                   onVerify={handleVerify}
                   onError={handleError}
                   debug={false}

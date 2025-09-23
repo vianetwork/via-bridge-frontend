@@ -14,21 +14,16 @@ export interface FaucetRequestData {
 /**
  * Request funds from the VIA testnet faucet
  * @param address - The VIA network address to receive funds
+ * @param altchaToken - The Altcha verification token
  * @returns Promise<FaucetResponse>
  */
 export async function requestFaucetFunds(
   address: string,
+  altchaToken: string,
 ): Promise<FaucetResponse> {
   try {
     const response = await axios.post<FaucetResponse>(
-      `${API_BASE_URL}/faucet/request-tokens?address=${address}`,
-      {},
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Forwarded-For': '1.1.1.1',
-        },
-      }
+      `${API_BASE_URL}/faucet/request-tokens?address=${address}&altchaToken=${altchaToken}`,
     );
 
     return response.data;
