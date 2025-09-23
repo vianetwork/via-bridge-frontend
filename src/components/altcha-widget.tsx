@@ -72,10 +72,8 @@ const AltchaWidget = forwardRef<AltchaWidgetRef, AltchaWidgetProps>(({
     }
 
     const handleStateChange = (ev: Event | CustomEvent) => {
-      console.log("handleStateChange", ev);
       if ('detail' in ev) {
         const detail = (ev as CustomEvent).detail;
-        console.log("detail", detail);
         if (detail.state === "verified") {
           setValue(detail.payload);
           onVerify?.(detail.payload);
