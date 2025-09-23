@@ -55,7 +55,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [amount, setAmount] = useState("0");
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation } = useWalletStore();
+  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -117,6 +117,14 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
             console.error("Error fetching fee estimation:", err);
         }
     }, [debouncedAmount, fetchFeeEstimation]);
+
+    // Check that net sats >= 0 when both amount and fee are known
+    const netSats =
+      feeEstimation
+        ? toL1Amount((amount || "0")) - feeEstimation.fee
+        : 0;
+    const insufficientNet = feeEstimation ? netSats < 0 : false;
+    const hasAmount = Boolean((form.watch("amount") || "").trim());
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
@@ -214,7 +222,8 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     setIsSuccess(false);
                     setTxHash(null);
                     setExplorerUrl(null);
-                    // setAmount(0);
+                    resetFeeEstimation();
+                    lastSatsRef.current = null;
                     form.reset();
                   }}
                 >
@@ -408,7 +417,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                         </div>
 
                         {(() => {
-                          const btcAmount = Math.max(0, toL1Amount(amount.toString()) - feeEstimation.fee);
+                          const btcAmount = Math.max(0, toL1Amount(amount || "0") - feeEstimation.fee);
 
                           const getColorClass = (amount: number) => {
                             if (amount < 250) return "text-red-500";
@@ -443,6 +452,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           )}
 
           {/* Submit Button */}
+          {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
           <Button
             type="submit"
             className="w-full"

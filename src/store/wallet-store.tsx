@@ -111,6 +111,7 @@ interface WalletState {
   clearTransactions: () => void;
   fetchTransactions: () => Promise<void>;
   fetchFeeEstimation: (amount: number) => Promise<void>;
+  resetFeeEstimation: () => void;
   addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   removeLocalTransaction: (txHash: string) => void;
   mergeTransactions: (apiTransactions: Transaction[]) => Transaction[];
@@ -263,7 +264,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
   },
-
+  
+  resetFeeEstimation: () => {
+    set({ feeEstimation: null, isLoadingFeeEstimation: false });
+  },
+  
   fetchTransactions: async () => {
     const { bitcoinAddress, viaAddress } = get();
 
