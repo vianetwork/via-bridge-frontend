@@ -3,8 +3,10 @@ import { BrowserProvider, Provider, Signer } from "via-ethers";
 import { ethers } from "ethers";
 import { L2_BTC_DECIMALS } from "../constants";
 import { getNetworkConfig } from "../config";
-import {getPreferredWeb3Provider, getPreferredWeb3ProviderAsync} from "@/utils/ethereum-provider";
+import {getPreferredWeb3ProviderAsync} from "@/utils/ethereum-provider";
 import { useWalletStore } from "@/store/wallet-store";
+import {eip6963Store} from "@/utils/eip6963-provider";
+import { withTimeout } from "@/utils/promise";
 
 export interface WithdrawParams {
   amount: string;
@@ -18,22 +20,46 @@ export interface WithdrawResult {
 
 export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawResult> {
   try {
-    const best = await getPreferredWeb3Provider();
-    if (!best) {
+    const { selectedWallet, viaAddress } = useWalletStore.getState();
+    let chosen: { provider: EIP1193Provider; name: string; rdns: string} | null = null;
+    if (selectedWallet) {
+      const detail = eip6963Store.getProviderByRdns(selectedWallet);
+      if (detail) chosen = { provider: detail.provider, name: detail.info.name, rdns: detail.info.rdns };
+    }
+
+    if (!chosen) chosen = await getPreferredWeb3ProviderAsync(5000);
+
+    if (!chosen) {
       const msg = "No EVM wallet found. Please install Metamask, Rabby or Coinbase Wallet to continue.";
       toast.error(msg, {description: msg,});
       throw new Error(msg);
     }
-    const browserProvider = new BrowserProvider(best.provider);
+
+    const providerApi = chosen.provider;
+    const browserProvider = new BrowserProvider((providerApi));
     const provider = new Provider(getNetworkConfig().rpcUrls[0]);
-    
-    // Get the browser signer and ensure it has the required properties
+
+    // ensure accounts are available, open a popup if necessary
+    let accounts = await providerApi.request({ method: 'eth_requestAccounts' }).catch(() => []) as string[];
+    if (!accounts || accounts.length === 0) {
+      accounts = await withTimeout(
+      providerApi.request({ method: "eth_requestAccounts" }) as Promise<string[]>,
+      2000,
+        "Wallet not connected. Please connect your wallet and try again."
+    );
+    }
+
+    const signerAddr = accounts[0];
+    if(!signerAddr) {
+      const msg = "No accounts returned from wallet. Please connect your wallet and try again.";
+      toast.error("Wallet error", {description: msg,});
+      throw new Error(msg);
+    }
+
+    // Get network info
     const browserSigner = await browserProvider.getSigner();
     const network = await browserProvider.getNetwork();
 
-    // Check account, chain id and balance
-    const signerAddr = await browserSigner.getAddress();
-    const { viaAddress }  = useWalletStore.getState();
     if (viaAddress && viaAddress.toLowerCase() !== signerAddr.toLowerCase()) {
       const msg = `Active wallet address (${signerAddr}) differs from connected address (${viaAddress}). Please re-connect to the correct wallet.`;
       toast.error(msg, {description: msg,});
@@ -50,7 +76,12 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
 
     // Convert amount to L2 token decimals (18 decimals) and wallet balance check before signing
     const l2SatsAmount = ethers.parseUnits(params.amount, L2_BTC_DECIMALS);
-    const balWei = await provider.getBalance(signerAddr);
+    const balWei = await withTimeout(
+      provider.getBalance(signerAddr),
+    5000, // 5-second timeout
+    "Balance check timed out. Please try again."
+    );
+
     if (balWei < l2SatsAmount) {
       const msg = "Insufficient balance to cover withdrawal. Please check your wallet balance and try again.";
       toast.error("Insufficient balance", {description: msg,});
@@ -58,22 +89,18 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     }
     
     // Create the VIA signer
-    const signer = Signer.from(
-      browserSigner as unknown as Parameters<typeof Signer.from>[0],
+    const signer = Signer.from(browserSigner as unknown as Parameters<typeof Signer.from>[0],
       Number(network.chainId),
       provider
     );
     
-    // Execute withdrawal
-    const tx = await signer.withdraw({
-      to: params.recipientBitcoinAddress,
-      amount: l2SatsAmount,
-    });
+    const tx = await withTimeout(
+      signer.withdraw({to: params.recipientBitcoinAddress,  amount: l2SatsAmount,}),
+      10000, // 10-second timeout
+      "Wallet did not open to sign the transaction. Open your wallet and try again."
+    );
 
-    // Wait for transaction receipt
-    const receipt = await tx.wait();
-    const txHash = receipt.hash;
-
+    const txHash = tx.hash;
     const explorerUrl = `https://testnet.blockscout.onvia.org/tx/${txHash}`;
 
     return {
@@ -87,4 +114,4 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     });
     throw error;
   }
-} 
+}
