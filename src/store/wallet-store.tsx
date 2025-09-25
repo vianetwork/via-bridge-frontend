@@ -486,7 +486,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
               walletEvents.networkChanged.emit();
               return true;
             } catch (switchError: any) {
-              // This error code indicates that the chain has not been added to MetaMask
+              // This error code indicates that the chain has not been added to the user wallet
               if (switchError.code === 4902) {
                 await provider.request({
                   method: 'wallet_addEthereumChain',

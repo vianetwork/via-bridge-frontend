@@ -8,6 +8,10 @@ import { useWalletStore } from "@/store/wallet-store";
 import {eip6963Store} from "@/utils/eip6963-provider";
 import { withTimeout } from "@/utils/promise";
 
+const CONNECT_TIMEOUT_MS = 10000; // 10-second timeout
+const BALANCE_TIMEOUT_MS = 5000; // 5-second timeout
+const SIGN_TIMEOUT_MS = 20000;  // 20-second timeout
+
 export interface WithdrawParams {
   amount: string;
   recipientBitcoinAddress: string;
@@ -27,7 +31,7 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       if (detail) chosen = { provider: detail.provider, name: detail.info.name, rdns: detail.info.rdns };
     }
 
-    if (!chosen) chosen = await getPreferredWeb3ProviderAsync(5000);
+    if (!chosen) chosen = await getPreferredWeb3ProviderAsync(CONNECT_TIMEOUT_MS);
 
     if (!chosen) {
       const msg = "No EVM wallet found. Please install Metamask, Rabby or Coinbase Wallet to continue.";
@@ -35,18 +39,19 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       throw new Error(msg);
     }
 
-    const providerApi = chosen.provider;
+    const providerApi = chosen.provider; // injected provider from the selected wallet (MetaMask/Rabby/Coinbase)
     const browserProvider = new BrowserProvider((providerApi));
     const provider = new Provider(getNetworkConfig().rpcUrls[0]);
 
-    // ensure accounts are available, open a popup if necessary
-    let accounts = await providerApi.request({ method: 'eth_requestAccounts' }).catch(() => []) as string[];
+    // Wallet handshake: first probe existing accounts (eth_accounts, no popup).
+    // If none, prompt connect (eth_requestAccounts) with a timeout to avoid freezing UI.
+    let accounts = (await providerApi.request({ method: "eth_accounts" }).catch(() => [])) as string[];
     if (!accounts || accounts.length === 0) {
       accounts = await withTimeout(
-      providerApi.request({ method: "eth_requestAccounts" }) as Promise<string[]>,
-      2000,
-        "Wallet not connected. Please connect your wallet and try again."
-    );
+        providerApi.request({ method: "eth_requestAccounts" }) as Promise<string[]>,
+        CONNECT_TIMEOUT_MS,
+        "Wallet did not open to connect. Please open your wallet and try again."
+      );
     }
 
     const signerAddr = accounts[0];
@@ -78,7 +83,7 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     const l2SatsAmount = ethers.parseUnits(params.amount, L2_BTC_DECIMALS);
     const balWei = await withTimeout(
       provider.getBalance(signerAddr),
-    5000, // 5-second timeout
+    BALANCE_TIMEOUT_MS,
     "Balance check timed out. Please try again."
     );
 
@@ -93,11 +98,11 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       Number(network.chainId),
       provider
     );
-    
+
     const tx = await withTimeout(
       signer.withdraw({to: params.recipientBitcoinAddress,  amount: l2SatsAmount,}),
-      10000, // 10-second timeout
-      "Wallet did not open to sign the transaction. Open your wallet and try again."
+      SIGN_TIMEOUT_MS, // 10-second timeout
+      "No signing request detected. Your wallet may be locked or the popup was blocked. Unlock your wallet and approve the transaction. If no prompt appears, open the wallet extension manually and try again."
     );
 
     const txHash = tx.hash;
@@ -107,11 +112,13 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       txHash,
       explorerUrl,
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error("Withdrawal error:", error);
-    toast.error("Withdrawal failed", {
-      description: "There was an error processing your withdrawal. Please try again.",
-    });
+    if (error?.code === 4001) {
+      toast.error("Request rejected", {description: "You rejected the request in your wallet.",});
+    } else {
+      toast.error("Withdrawal failed", {description: (error as Error)?.message || "There was an error processing your withdrawal. Please try again.",});
+    }
     throw error;
   }
 }
