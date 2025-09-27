@@ -15,8 +15,11 @@ import Image from "next/image";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
 import { isAddress } from "ethers";
-import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS } from "@/services/constants";
+import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS, FEE_RESERVE_BTC, MIN_DEPOSIT_BTC, MIN_DEPOSIT_SATS } from "@/services/constants";
 import { cn } from "@/lib/utils";
+import { BRIDGE_CONFIG } from "@/services/config";
+import { FormAmountSlider } from "@/components/form-amount-slider";
+
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -32,8 +35,8 @@ interface FormContext {
 const depositFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= 0.0002, {
-      message: "Minimum amount is 0.0002 BTC (20000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= MIN_DEPOSIT_BTC, {
+        message: `Minimum amount is ${MIN_DEPOSIT_BTC} BTC (${MIN_DEPOSIT_SATS.toLocaleString()} satoshis)`,
     })
     .superRefine((val, ctx) => {
       // Get balance from context
@@ -135,7 +138,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const handleMaxAmount = () => {
     if (balance) {
       // Set a slightly lower amount to account for transaction fees
-      const maxAmount = Math.max(0, parseFloat(balance) - 0.0001).toFixed(8);
+        const maxAmount = Math.max(0, parseFloat(balance) - FEE_RESERVE_BTC).toFixed(8);
       form.setValue("amount", maxAmount);
     }
   };
@@ -183,11 +186,19 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
 
     } catch (error) {
       console.error("Deposit error:", error);
-      toast.error("Deposit Failed", {
-        description: error instanceof Error ? error.message : "There was an error processing your deposit. Please try again.",
-        duration: 5000,
-        className: "text-base font-medium",
-      });
+      if (error instanceof Error && error.message.includes("No UTXOs found with at least")) {
+        toast("Waiting for confirmations", {
+          description: `We couldn't find any UTXOs with at least ${BRIDGE_CONFIG.minBlockConfirmations} confirmations yet. Please wait for your transactions to be confirmed and try again.`,
+          duration: 5000,
+          className: "text-base font-medium",
+        });
+      } else {
+        toast.error("Deposit Failed", {
+          description: error instanceof Error ? error.message : "There was an error processing your deposit. Please try again.",
+          duration: 5000,
+          className: "text-base font-medium",
+        });
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -340,6 +351,31 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                         "border-red-500 focus-visible:ring-red-500"
                       )}
                       {...field}
+                      onChange={(e) => {
+                        // Let users type freely; keep RHF in sync
+                        field.onChange(e.target.value);
+                      }}
+                      onBlur={(e) => {
+                        // Mark as touched first
+                        field.onBlur();
+                        // Clamp to fee-aware MAX if user-entered amount exceeds it (use handleMaxAmount for consistency)
+                        try {
+                          if (!balance) return;
+                          const bal = parseFloat(String(balance));
+                          if (!Number.isFinite(bal) || bal <= 0) return;
+                          const max = Math.max(0, bal - FEE_RESERVE_BTC);
+                          const currentStr = form.getValues("amount") ?? "";
+                          const current = parseFloat(currentStr || "0");
+                          if (Number.isFinite(current) && current > max) {
+                            handleMaxAmount();
+                            // Ensure validation after clamping
+                            // Note: RHF setValue in handleMaxAmount won't validate by default
+                            form.trigger("amount");
+                          }
+                        } catch {
+                          // no-op: keep user's value if parsing fails
+                        }
+                      }}
                     />
                     <button
                       type="button"
@@ -376,6 +412,24 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                       </span>
                     )}
                   </div>
+                )}
+
+                {/* balance usage progress and slider*/}
+                {balance && Number(balance) >0 && (
+                  <FormAmountSlider
+                  form={form}
+                  name="amount"
+                  balance={Number.parseFloat(String(balance))}
+                  min={MIN_DEPOSIT_BTC}//20,000 sat min
+                  feeReserve={FEE_RESERVE_BTC} // reserve for fees, aligns with MAX
+                  isLoading={isLoadingBalance}
+                  pulseWhenEmpty={!(field.value && String(field.value).trim())}
+                  unit="BTC"
+                  progressClassName="bg-green-500"
+                  sliderAccentClassName="accent-green500"
+                  ariaLabel="Deposit amount"
+                  decimals={8}
+                  />
                 )}
 
                 <FormField
@@ -431,4 +485,5 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     </div>
   );
 }
+
 

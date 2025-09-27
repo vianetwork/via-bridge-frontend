@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -16,6 +16,9 @@ import { useWalletStore } from "@/store/wallet-store";
 import { getViaBalance } from "@/services/via/balance";
 import { cn } from "@/lib/utils";
 import { toL1Amount } from "@/helpers";
+import { FormAmountSlider } from "@/components/form-amount-slider";
+import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
+import { useDebounce } from "@/hooks/useDebounce";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -25,8 +28,8 @@ interface WithdrawFormProps {
 const withdrawFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= 0.00002, {
-      message: "Minimum amount is 0.00002 BTC (2000 satoshis)",
+    .refine((val) => Number.parseFloat(val) >= MIN_WITHDRAW_BTC, {
+      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} satoshis)`,
     }),
   recipientBitcoinAddress: z
     .string()
@@ -50,10 +53,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [amount, setAmount] = useState("0");
-  const [feeEstimationTimeout, setFeeEstimationTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation } = useWalletStore();
+  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -94,60 +96,35 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     fetchBalance();
   }, [viaAddress]);
 
-  // Update amount state when form amount changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "amount" && value.amount) {
-        setAmount(value.amount);
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form]);
-
-  // Update the existing useEffect that watches form changes
-  useEffect(() => {
-    const subscription = form.watch((value, { name }) => {
-      if (name === "amount" && value.amount) {
-        setAmount(value.amount);
-
-        // Clear existing timeout
-        if (feeEstimationTimeout) {
-          clearTimeout(feeEstimationTimeout);
+    const liveAmount = form.watch("amount");
+    const debouncedAmount = useDebounce(liveAmount, 600); // 600ms debounce delay
+    const lastSatsRef = useRef<number | null>(null);
+    useEffect(() => {
+        setAmount(String(liveAmount ?? ""));
+        }, [liveAmount]);
+    useEffect(() => {
+        try {
+            const str = String(debouncedAmount ?? "").trim();
+          if (!str) return;  // if the user hasn't typed a number yet, don't do anything'
+          const sats = toL1Amount(str);
+            if (!Number.isFinite(sats)) return;
+            if (sats  <= 0 ) return;
+            if (sats <  MIN_WITHDRAW_SATS) return;  // 0.00002 BTC minimum
+            if (lastSatsRef.current === sats) return;
+            lastSatsRef.current = sats;
+            fetchFeeEstimation(sats);
+        } catch (err) {
+            console.error("Error fetching fee estimation:", err);
         }
+    }, [debouncedAmount, fetchFeeEstimation]);
 
-        // Set new timeout for fee estimation
-        const newTimeout = setTimeout(async () => {
-          try {
-            const formattedAmount = toL1Amount(value.amount!);
-            if (formattedAmount == 0) {
-              return;
-            }
-            await fetchFeeEstimation(formattedAmount);
-          } catch (error) {
-            console.error("Error fetching fee estimation:", error);
-          }
-        }, 2000);
-
-        setFeeEstimationTimeout(newTimeout);
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-      // Clear timeout on cleanup
-      if (feeEstimationTimeout) {
-        clearTimeout(feeEstimationTimeout);
-      }
-    };
-  }, [form, feeEstimationTimeout]);
-  // Add cleanup effect for component unmount
-  useEffect(() => {
-    return () => {
-      if (feeEstimationTimeout) {
-        clearTimeout(feeEstimationTimeout);
-      }
-    };
-  }, [feeEstimationTimeout]);
+    // Check that net sats >= 0 when both amount and fee are known
+    const netSats =
+      feeEstimation
+        ? toL1Amount((amount || "0")) - feeEstimation.fee
+        : 0;
+    const insufficientNet = feeEstimation ? netSats < 0 : false;
+    const hasAmount = Boolean((form.watch("amount") || "").trim());
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
@@ -245,7 +222,8 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     setIsSuccess(false);
                     setTxHash(null);
                     setExplorerUrl(null);
-                    // setAmount(0);
+                    resetFeeEstimation();
+                    lastSatsRef.current = null;
                     form.reset();
                   }}
                 >
@@ -341,8 +319,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                       type="button"
                       onClick={() => {
                         if (balance) {
-                          form.setValue("amount", String(balance));
-                          setAmount(balance);
+                            form.setValue("amount", String(balance));
                         }
                       }}
                       disabled={
@@ -377,6 +354,24 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                       </span>
                     )}
                   </div>
+                )}
+
+                {/* balance usage progress */}
+                {balance && Number(balance) >0 && (
+                  <FormAmountSlider
+                    form={form}
+                    name="amount"
+                    balance={Number.parseFloat(String(balance))}
+                    min={MIN_WITHDRAW_BTC}
+                    feeReserve={0}
+                    isLoading={isLoadingBalance}
+                    pulseWhenEmpty={!(field.value && String(field.value).trim())}
+                    unit="BTC"
+                    progressClassName="bg-green-500"
+                    sliderAccentClassName="accent-green-500"
+                    ariaLabel="Withdraw amount"
+                    decimals={8}
+                    />
                 )}
 
                 <FormField
@@ -422,7 +417,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                         </div>
 
                         {(() => {
-                          const btcAmount = Math.max(0, toL1Amount(amount.toString()) - feeEstimation.fee);
+                          const btcAmount = Math.max(0, toL1Amount(amount || "0") - feeEstimation.fee);
 
                           const getColorClass = (amount: number) => {
                             if (amount < 250) return "text-red-500";
@@ -457,13 +452,14 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           )}
 
           {/* Submit Button */}
+          {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
           <Button
             type="submit"
             className="w-full"
             disabled={
               isSubmitting ||
               !feeEstimation ||
-              toL1Amount(amount.toString()) - feeEstimation.fee < 0 ||
+              toL1Amount(amount || "0") - feeEstimation.fee <0 ||
               isLoadingFeeEstimation ||
               !form.watch("amount") ||
               parseFloat(form.watch("amount") || "0") <= 0 ||

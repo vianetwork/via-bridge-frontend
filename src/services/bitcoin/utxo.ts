@@ -21,6 +21,10 @@ export async function getUTXOs(
       const response = await axiosInstance.get(`${url}/address/${address}/utxo`);
       return response.data;
     } catch (error) {
+      // If it's the specific "no confirmed UTXOs" validation, rethrow as-is for the UI to handle
+      if (error instanceof Error && error.message.includes("No UTXOs found with at least")) {
+        throw error;
+      }
       console.warn(`Failed to get UTXOs from ${url},`, error);
       continue;
     }

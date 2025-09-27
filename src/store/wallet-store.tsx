@@ -1,8 +1,11 @@
 import { create } from 'zustand';
 import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
-import { getMetaMaskProvider } from "@/utils/ethereum-provider";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
+import { WalletNotFoundError } from "@/utils/wallet-errors";
 import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
+import { maskAddress } from "@/utils";
+import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -11,13 +14,13 @@ export const walletEvents = {
   metamaskDisconnected: createEvent<void>('metamask-disconnected'),
   xverseDisconnected: createEvent<void>('xverse-disconnected'),
   networkChanged: createEvent<void>('network-changed'),
+  walletChanged: createEvent<string>('wallet-changed'),
+  walletRefreshed: createEvent<void>('wallet-refreshed'),
 };
 
 export type TransactionStatus =
   'Pending' |
   'InProgress' |
-  'Processed' |
-  'Failed' |
   'ExecutedOnL2' |
   'CommittedToL1' |
   'ProvedOnL1' |
@@ -91,6 +94,10 @@ interface WalletState {
   localTransactions: Transaction[];
   feeEstimation: FeeEstimation | null;
 
+  // Multi wallet support
+  availableWallets: Array<{name: string, rdns: string, icon?: string}>;
+  selectedWallet: string | null; // rdns of selected wallet
+
   // Actions
   setBitcoinAddress: (address: string | null) => void;
   setBitcoinPublicKey: (publicKey: string | null) => void;
@@ -104,18 +111,24 @@ interface WalletState {
   clearTransactions: () => void;
   fetchTransactions: () => Promise<void>;
   fetchFeeEstimation: (amount: number) => Promise<void>;
+  resetFeeEstimation: () => void;
   addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   removeLocalTransaction: (txHash: string) => void;
   mergeTransactions: (apiTransactions: Transaction[]) => Transaction[];
   loadLocalTransactions: () => void;
   clearLocalTransactions: () => void;
 
+  setAvailableWallets: (wallets: Array<{name: string, rdns: string, icon?: string}>) => void;
+  setSelectedWallet: (rdns: string) => void;
+
   // Wallet operations
   connectXverse: () => Promise<boolean>;
   connectMetamask: () => Promise<boolean>;
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
-  switchNetwork: (layer: Layer) => void;
+  switchNetwork: (layer: Layer) => Promise<boolean | void>;
+  connectWallet: (rdns: string) => Promise<boolean>;
+  refreshAvailableWallets: () => void;
 
   // Helper methods
   checkXverseConnection: () => Promise<void>;
@@ -137,6 +150,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   localTransactions: [],
   feeEstimation: null,
 
+  availableWallets: [],
+  selectedWallet: null,
+
   // Setters
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
   setBitcoinPublicKey: (publicKey) => set({ bitcoinPublicKey: publicKey }),
@@ -146,6 +162,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
 
+  setAvailableWallets: (wallets) => set({ availableWallets: wallets }),
+  setSelectedWallet: (rdns) => {
+    const prev = get().selectedWallet;
+    if (prev !== rdns) {
+      set({ selectedWallet: rdns });
+      // Notify services that the active EVM wallet changed
+      walletEvents.walletChanged.emit(rdns);
+    }
+  },
   addTransaction: (tx) => set(state => ({
     transactions: [
       {
@@ -239,7 +264,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
   },
-
+  
+  resetFeeEstimation: () => {
+    set({ feeEstimation: null, isLoadingFeeEstimation: false });
+  },
+  
   fetchTransactions: async () => {
     const { bitcoinAddress, viaAddress } = get();
 
@@ -326,14 +355,19 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      console.log("🔹 Connecting to MetaMask wallet...");
+      console.log("🔹 Connecting to wallet...");
             
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        throw new Error("MetaMask not found. Please install MetaMask extension.");
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+      if (!bestProvider) {
+        throw new Error("No wallet found. Please install MetaMask, Rabby, or another compatible wallet extension.");
       }
 
-      const accounts = await provider.request({
+      console.log(`🔗 Using ${bestProvider.name} (${bestProvider.rdns})`);
+
+      // Ensure selection reflects the chosen provider and emits walletChanged if changed
+      get().setSelectedWallet(bestProvider.rdns);
+
+      const accounts = await bestProvider.provider.request({
         method: "eth_requestAccounts",
       }) as string[];
 
@@ -353,12 +387,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       walletEvents.metamaskConnected.emit();
       return true;
     } catch (error: any) {
-      const METAMASK_USER_REJECTION_ERROR_CODE = 4001;
-      if (error.code === METAMASK_USER_REJECTION_ERROR_CODE) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
         console.log("Connection rejected by user");
         return false;
       }
-      console.error("MetaMask connection error:", error);
+      console.error("Wallet connection error:", error);
       throw error;
     }
   },
@@ -395,19 +429,50 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       switch (layer) {
         case Layer.L1:
-          // For Xverse, we need to disconnect and reconnect
           if (isXverseConnected) {
-            await get().disconnectXverse();
-            return await get().connectXverse();
+            // Ask Xverse to switch to Bitcoin network via Sats connect
+            const { request } = await import("sats-connect");
+            const { BRIDGE_CONFIG } = await import("@/services/config");
+
+            // Map env() network to display the name used by sats-connect
+            const toXverseName = (net: string): string => {
+              switch (net.toLowerCase()) {
+                case "mainnet": return "Mainnet";
+                case "testnet4": return "Testnet4";
+                case "regtest": return "Regtest";
+                default: return net;
+              }
+            };
+
+            const targetName = toXverseName(BRIDGE_CONFIG.defaultNetwork);
+
+            // Switch network using Sats Connect documented shape — docs: https://docs.xverse.app/sats-connect/wallet-methods/wallet_changenetwork
+            const tryChangeNetwork = async (): Promise<boolean> => {
+              try {
+                const res: any = await request("wallet_changeNetwork", { name: targetName } as any);
+                return res?.status === "success";
+              } catch (e: any) {
+                console.error("wallet_changeNetwork failed", e);
+                return false;
+              }
+            };
+
+            const switched = await tryChangeNetwork();
+            if (switched) {
+              await get().checkXverseConnection();
+              walletEvents.networkChanged.emit();
+              return true;
+            }
           }
           break;
         case Layer.L2:
           if (isMetamaskConnected) {
-            // For MetaMask, we can request network switch
-            const provider = getMetaMaskProvider();
-            if (!provider) {
-              throw new Error("MetaMask not found or not accessible");
+            // For MetaMask, we can request a network switch
+            const bestProvider = await getPreferredWeb3ProviderAsync();
+            if (!bestProvider) {
+              throw new Error("Wallet not found or not accessible");
             }
+            const provider = bestProvider.provider;
 
             const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
             const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
@@ -418,15 +483,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
                 params: [{ chainId: expectedChainId }],
               });
               set({ isCorrectViaNetwork: true });
+              walletEvents.networkChanged.emit();
               return true;
             } catch (switchError: any) {
-              // This error code indicates that the chain has not been added to MetaMask
+              // This error code indicates that the chain has not been added to the user wallet
               if (switchError.code === 4902) {
                 await provider.request({
                   method: 'wallet_addEthereumChain',
                   params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
                 });
                 set({ isCorrectViaNetwork: true });
+                walletEvents.networkChanged.emit();
                 return true;
               }
               throw switchError;
@@ -441,13 +508,88 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     walletEvents.networkChanged.emit();
   },
 
+  connectWallet: async (rdns: string) => {
+    try {
+      console.log(`🔹 Connecting to wallet with rdns: ${rdns}`);
+      
+      const { eip6963Store } = await import("@/utils/eip6963-provider");
+      const providerDetail = eip6963Store.getProviderByRdns(rdns);
+      
+      if (!providerDetail) {
+        throw new WalletNotFoundError(rdns);
+      }
+
+      const provider = providerDetail.provider;
+      
+      // Request account access
+      const accounts = await provider.request({
+        method: "eth_requestAccounts",
+      }) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from wallet");
+      }
+
+      const address = accounts[0];
+      set({
+        viaAddress: address,
+        isMetamaskConnected: true, // For now, treating all EIP-6963 wallets as "metamask-like"
+      });
+      // Route selection through setter to emit WalletChanged
+      get().setSelectedWallet(rdns);
+
+      // Check network after connection
+      await get().checkMetamaskNetwork();
+
+      console.log(`✅ Wallet ${providerDetail.info.name} connected, address:`, maskAddress(address));
+      walletEvents.metamaskConnected.emit();
+      return true;
+    } catch (error: any) {
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
+        console.log("Connection rejected by user");
+        return false;
+      }
+      console.error(`Wallet connection error for ${rdns}:`, error);
+      throw error;
+    }
+  },
+
+  refreshAvailableWallets: () => {
+  try {
+    console.log("🔄 Refreshing available wallets...");
+    import("@/utils/eip6963-provider")
+      .then(({ eip6963Store }) => {
+        const providers = eip6963Store.getAllWalletProviders();
+        const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
+          name: resolveDisplayName(provider),
+          rdns: provider.info.rdns,
+          icon: resolveIcon(provider)
+        }));
+
+        set({ availableWallets: wallets });
+        console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
+        walletEvents.walletRefreshed.emit();
+      })
+      .catch((error: any) => {
+        console.error("Error refreshing available wallets:", error);
+        // Don't throw, just log the error and continue with empty array
+        set({ availableWallets: [] });
+      });
+    } catch (error: any) {
+      console.error("Error refreshing available wallets:", error);
+      // Don't throw, just log the error and continue with empty array
+      set({ availableWallets: [] });
+    }
+  },
+
   // Helper methods
   checkXverseConnection: async () => {
     try {
       const { request, AddressPurpose } = await import("sats-connect");
 
       const res = await request('wallet_getNetwork', null) as any;
-      if (!res.status) {
+      if (res?.status !== "success") {
         set({ isXverseConnected: false });
         return;
       }
@@ -455,8 +597,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Check if connected to the correct network
       const { BRIDGE_CONFIG } = await import("@/services/config");
       const expectedNetwork = BRIDGE_CONFIG.defaultNetwork;
-      const connectedNetwork = res.result.bitcoin.name.toLowerCase();
-      const isCorrect = expectedNetwork === connectedNetwork;
+      // Xverse may report the test network as "Signet" while our config uses Testnet 4
+      // Normalize both wallet responses and config
+      const normalize = (name?: string): string => {
+        const n = (name || "").toLowerCase();
+        return n === "signet" ? "testnet4" : n;
+      };
+      const connectedNetwork = normalize(res.result?.bitcoin?.name);
+      const isCorrect = normalize(expectedNetwork) === connectedNetwork;
 
       set({ isCorrectBitcoinNetwork: isCorrect });
 
@@ -476,7 +624,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             isXverseConnected: true
           });
 
-          // Load local transactions when wallet is already connected
+          // Load local transactions when the wallet is already connected
           get().loadLocalTransactions();
 
           console.log("✅ Xverse wallet already connected");
@@ -491,31 +639,31 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   checkMetamaskNetwork: async () => {
     try {
-      const provider = getMetaMaskProvider();
-      if (!provider) {
-        console.warn("MetaMask provider not found");
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+      if (!bestProvider) {
+        console.warn("Wallet provider not found");
         return;
       }
 
       const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
       const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-      const chainId = await provider.request({ method: 'eth_chainId' });
+      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' });
       const isCorrect = chainId === expectedChainId;
 
       set({ isCorrectViaNetwork: isCorrect });
 
       if (!isCorrect) {
         try {
-          await provider.request({
+          await bestProvider.provider.request({
             method: 'wallet_switchEthereumChain',
             params: [{ chainId: expectedChainId }],
           });
           set({ isCorrectViaNetwork: true });
           return true;
         } catch (switchError: any) {
-          // This error code indicates that the chain has not been added to MetaMask
+          // This error code indicates that the chain has not been added to the wallet
           if (switchError.code === 4902) {
-            await provider.request({
+            await bestProvider.provider.request({
               method: 'wallet_addEthereumChain',
               params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
             });
@@ -526,7 +674,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
     } catch (error) {
-      console.error("Error checking MetaMask network:", error);
+      console.error("Error checking wallet network:", error);
     }
   }
 }));

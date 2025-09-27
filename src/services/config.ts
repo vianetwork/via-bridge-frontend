@@ -4,6 +4,9 @@ import { env } from "@/lib/env";
 
 // Define the API base URL
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";
+export const FEE_ESTIMATION_URL =
+  process.env.NEXT_PUBLIC_FEE_ESTIMATION_URL ||
+  `${API_BASE_URL}/fee-estimation`;
 
 export enum Layer {
   L1,
@@ -86,4 +89,4 @@ export const BRIDGE_CONFIG = {
   minBlockConfirmations: 0, // No confirmation required for chained deposits
   defaultNetwork: env().NEXT_PUBLIC_NETWORK,
   viaChainId: VIA_NETWORK_CONFIG[env().NEXT_PUBLIC_NETWORK].chainId,
-} as const; 
+} as const;
