@@ -1,6 +1,3 @@
-import WalletConnectButton from "@/components/wallet-connect-button";
-import { walletTypes } from "sats-connect";
-
 /**
  * Wallet-specific error types
  */
@@ -12,7 +9,7 @@ export class WalletError extends Error {
     public userMessage?: string,
   ) {
     super(message);
-    this.name = 'WalletError'
+    this.name = 'WalletError';
   }
 }
 
@@ -24,7 +21,7 @@ export class WalletNotFoundError extends WalletError {
       walletType,
       `${walletType} is not installed. Please install ${walletType} wallet extension`
     );
-    this.name = 'WalletNotFoundError'
+    this.name = 'WalletNotFoundError';
   }
 }
 
@@ -36,7 +33,7 @@ export class UserRejectedError extends WalletError {
       walletType,
       'Connection request was cancelled. Please try again and approve connection'
     );
-    this.name = 'UserRejectedError'
+    this.name = 'UserRejectedError';
   }
 }
 
@@ -48,7 +45,7 @@ export class NetworkError extends WalletError {
       walletType,
       `Please switch to ${expectedNetwork} network in ${walletType} wallet`
     );
-    this.name = 'NetworkError'
+    this.name = 'NetworkError';
   }
 }
 
@@ -60,12 +57,12 @@ export class ProviderConflictError extends WalletError {
       undefined,
       'Multiple providers detected. Consider disabling wallet extensions you do not (want to) use.'
     );
-    this.name = 'ProviderConflictError'
+    this.name = 'ProviderConflictError';
   }
 }
 
 export class WalletConnectionError extends WalletError {
-  constructor(walletType: string, originalError?: any) {
+  constructor(walletType: string) {
     super(
       `Connection failed for ${walletType} wallet`,
       'CONNECTION_FAILED',
@@ -85,7 +82,7 @@ export function createWalletError(error: any, walletType: string): WalletError {
   }
 
   if (error.message?.includes('connection') || error.code === 'CONNECTION_FAILED') {
-    return new WalletConnectionError(walletType, error);
+    return new WalletConnectionError(walletType);
   }
 
   return new WalletError(error.message || 'Unknown wallet error', 'UNKNOWN_ERROR', walletType);

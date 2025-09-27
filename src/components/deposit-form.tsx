@@ -355,7 +355,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                         // Let users type freely; keep RHF in sync
                         field.onChange(e.target.value);
                       }}
-                      onBlur={(e) => {
+                      onBlur={() => {
                         // Mark as touched first
                         field.onBlur();
                         // Clamp to fee-aware MAX if user-entered amount exceeds it (use handleMaxAmount for consistency)

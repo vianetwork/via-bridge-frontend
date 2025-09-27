@@ -138,12 +138,12 @@ export class EIP6963ProviderStore {
     const walletTypes = new Map<string, EIP6963ProviderDetail[]>();
 
     this.providers.forEach(provider => {
-      const walletType = this.getWalletType(provider.info.rdns)
+      const walletType = this.getWalletType(provider.info.rdns);
       if (!walletTypes.has(walletType)) {
         walletTypes.set(walletType, []);
       }
       walletTypes.get(walletType)!.push(provider);
-    })
+    });
 
     // Check for conflicts 
     walletTypes.forEach((providers, walletType) => {
@@ -160,7 +160,7 @@ export class EIP6963ProviderStore {
           `Multiple ${walletType} providers detected. Consider disabling wallet extensions you do not (want to) use.`
         );
       }
-    })
+    });
 
     return conflicts;
   }
@@ -204,7 +204,7 @@ export class EIP6963ProviderStore {
       await Promise.race([this.providerReadyPromise, timeoutPromise]);
       console.log(`EIP6963ProviderStore: waitForProviders - Provider detected!`);
     } catch (error) {
-      console.warn(`EIP6963ProviderStore: waitForProviders - No wallet provider detected within ${timeout}ms timeout period`);
+      console.warn(`EIP6963ProviderStore: waitForProviders - No wallet provider detected within ${timeout}ms timeout period: ${error}`);
     }
   }
 }

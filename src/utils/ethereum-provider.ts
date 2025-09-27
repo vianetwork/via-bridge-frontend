@@ -39,7 +39,7 @@ export const getCoinbaseProvider = (): EIP1193Provider | null => {
     return eip6963Provider.provider;
   }
   return null;
-}
+};
 
 /**
  * Get all available wallet providers discovered in the browser
