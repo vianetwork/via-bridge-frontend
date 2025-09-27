@@ -7,10 +7,9 @@ import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Loader2, ExternalLink, HelpCircle } from "lucide-react";
+import { Loader2, ExternalLink, HelpCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import Image from "next/image";
 import { executeWithdraw } from "@/services/bridge/withdraw";
 import { useWalletStore } from "@/store/wallet-store";
 import { getViaBalance } from "@/services/via/balance";
@@ -19,6 +18,7 @@ import { toL1Amount } from "@/helpers";
 import { FormAmountSlider } from "@/components/form-amount-slider";
 import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
 import { useDebounce } from "@/hooks/useDebounce";
+import NetworkRouteBanner from "@/components/ui/network-route-banner";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -250,43 +250,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
 
   return (
     <div className="w-full max-w-md min-w-[300px] sm:min-w-[360px] mx-auto">
-      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-            <div className="h-3 w-3 rounded-full bg-primary" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">VIA</span>
-            <span className="text-xs text-muted-foreground">Network</span>
-          </div>
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
-            <Image
-              src="/bitcoin-logo.svg"
-              alt="BTC"
-              width={14}
-              height={14}
-              className="text-amber-500"
-            />
-            <span className="text-xs font-medium">BTC</span>
-          </div>
-          <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Image
-            src="/bitcoin-logo.svg"
-            alt="Bitcoin"
-            width={20}
-            height={20}
-            className="text-amber-500"
-          />
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Bitcoin</span>
-            <span className="text-xs text-muted-foreground">Network</span>
-          </div>
-        </div>
-      </div>
+      <NetworkRouteBanner direction="withdraw" />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
