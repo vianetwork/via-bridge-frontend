@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, ArrowLeft } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faViacoin, faBitcoin } from "@fortawesome/free-brands-svg-icons";
@@ -47,21 +47,20 @@ function Side({ network }: { network: Network }) {
 }
 
 export default function NetworkRouteBanner({direction, tokenSymbol = "BTC", className,}: NetworkRouteBannerProps) {
-  const [left, right]: [Network, Network] =
+  const [fromNet, toNet]: [Network, Network] =
     direction === "deposit" ? ["bitcoin", "via"] : ["via", "bitcoin"];
-  const Arrow = direction === "deposit" ? ArrowRight : ArrowLeft;
 
   return (
     <div className={cn("flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4", className)}>
-      <Side network={left} />
+      <Side network={fromNet} />
       <div className="flex flex-col items-center gap-1">
         <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
           <FontAwesomeIcon icon={faBitcoin} className="text-amber-500" style={{ width: 14, height: 14 }} />
           <span className="text-xs font-medium">{tokenSymbol}</span>
         </div>
-        <Arrow className="h-5 w-10 text-primary" strokeWidth={2.5} />
+        <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
       </div>
-      <Side network={right} />
+      <Side network={toNet} />
     </div>
   );
 }
