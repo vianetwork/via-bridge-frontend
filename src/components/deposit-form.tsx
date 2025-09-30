@@ -19,6 +19,8 @@ import { cn } from "@/lib/utils";
 import { BRIDGE_CONFIG } from "@/services/config";
 import { FormAmountSlider } from "@/components/form-amount-slider";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
+import AddressFieldWithWallet from "@/components/address-field-with-wallet";
+
 
 
 interface DepositFormProps {
@@ -83,7 +85,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
-  const { viaAddress, addLocalTransaction } = useWalletStore();
+  const { addLocalTransaction } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
@@ -103,12 +105,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     }
   }, [balance, form]);
 
-  // Auto-fill the recipient VIA address when available
-  useEffect(() => {
-    if (viaAddress) {
-      form.setValue("recipientViaAddress", viaAddress);
-    }
-  }, [viaAddress, form]);
+  // Recipient VIA address is managed by AddressFieldWithWallet (connect + autofill + manual override)
 
   // Fetch Bitcoin balance when address is available
   useEffect(() => {
@@ -394,26 +391,22 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   decimals={8}
                   />
                 )}
-
-                <FormField
-                  control={form.control}
-                  name="recipientViaAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm">Recipient VIA Address</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="0x..."
-                          className="placeholder:text-muted-foreground/60"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </FormItem>
             )}
+          />
+
+          <FormField control = {form.control} name="recipientViaAddress" render={( {field }) => (
+            <FormItem>
+              <AddressFieldWithWallet
+                mode="via"
+                label="Recipient VIA Address"
+                placeholder="0x..."
+                value={field.value || ""}
+                onChange={field.onChange}
+              />
+              <FormMessage/>
+            </FormItem>
+          )}
           />
 
           {txHash && (
