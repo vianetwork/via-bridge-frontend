@@ -140,9 +140,26 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     }
   };
 
+  // Derived form validity for CTA state
+  const recipient = form.watch("recipientViaAddress");
+  const recipientValid = verifyRecipientAddress(recipient);
+  const amountStr = form.watch("amount") || "0";
+  const amountValid =
+    parseFloat(amountStr) >= MIN_DEPOSIT_BTC &&
+    (!balance || parseFloat(amountStr) <= parseFloat(String(balance)));
+  const canSubmit = amountValid && recipientValid;
+
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
       setIsSubmitting(true);
+
+      if (!verifyRecipientAddress(values.recipientViaAddress)) {
+        toast.error("Invalid recipient address", {
+          description: "Enter a valid VIA address or connect your wallet to autofill.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
 
       if (!bitcoinAddress || !bitcoinPublicKey) {
         throw new Error("Bitcoin address or public key not found");
@@ -395,15 +412,13 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
             )}
           />
 
+          {!recipientValid && (
+            <div id="recipient-requirement" className="text-xs text-muted-foreground">Enter a valid VIA address or connect your wallet to autofill.</div>
+          )}
+
           <FormField control = {form.control} name="recipientViaAddress" render={( {field }) => (
             <FormItem>
-              <AddressFieldWithWallet
-                mode="via"
-                label="Recipient VIA Address"
-                placeholder="0x..."
-                value={field.value || ""}
-                onChange={field.onChange}
-              />
+              <AddressFieldWithWallet mode="via" label="Recipient VIA Address" placeholder="0x..." value={field.value || ""} onChange={field.onChange}/>
               <FormMessage/>
             </FormItem>
           )}
@@ -419,12 +434,10 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
             <Button
               type="submit"
               className="w-full"
-              disabled={
-                isSubmitting ||
-                !form.watch("amount") ||
-                parseFloat(form.watch("amount") || "0") <= 0 ||
-                (!!balance && parseFloat(form.watch("amount") || "0") > parseFloat(balance))
-              }
+              disabled={isSubmitting || !canSubmit}
+              aria-disabled={isSubmitting || !canSubmit}
+              aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
+              title={!recipientValid ? "Enter or connect a recipient VIA address" : undefined}
             >
               {isSubmitting ? (
                 <>
@@ -432,7 +445,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   Processing...
                 </>
               ) : (
-                "Deposit"
+                canSubmit ? "Deposit" : (!recipient ? "Connect wallet or enter address" : "Enter a valid VIA address")
               )}
             </Button>
           </div>
