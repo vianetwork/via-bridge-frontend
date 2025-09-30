@@ -2,7 +2,7 @@
 
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Wallet } from "lucide-react";
+import { AlertTriangle, Wallet, Copy, Check } from "lucide-react";
 import { useWalletStore } from "@/store/wallet-store";
 import { Layer } from "@/services/config";
 import { maskAddress } from "@/utils";
@@ -56,6 +56,7 @@ export default function AddressFieldWithWallet({
   // Local UI state
   const [showManual, setShowManual] = useState(false); // Explicitly reveal manual entry UI
   const [userHasTyped, setUserHasTyped] = useState(false); // Set after the user starts typing into the input
+  const [copied, setCopied] = useState(false); // Track if the address has been copied to clipboard
 
   /**
    * Autofill behavior:
@@ -125,6 +126,16 @@ export default function AddressFieldWithWallet({
             <span className="text-xs text-slate-700">Using your wallet address: <span className="font-mono">{maskAddress(walletAddress)}</span></span>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant='ghost' className="h-7 px-2 text-xs" onClick={async() => {
+              try {
+                await navigator.clipboard.writeText(walletAddress);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch {}
+            }}
+                    aria-label="Copy address to clipboard">
+              {copied ? <Check className='h-3.5 w-3.5 text-green-600'/> : <Copy className="h-3.5 w-3.5" />}
+            </Button>
             {/* Allows switching to manual entry, revealing the input */}
             <Button  size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => setShowManual(true)}>Enter a different address</Button>
           </div>
@@ -212,6 +223,28 @@ export default function AddressFieldWithWallet({
               <span className="text-[10px] text-slate-400">Enter {isEvm ? "VIA" : "Bitcoin"} address manually</span>
             </div>
           </div>
+
+          {/* Security Warning */}
+          {usingManual && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+              <div className="flex gap-2">
+                <div className="w-4 h-4 bg-amber-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-2.5 h-2.5 text-amber-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  <div className="font-medium text-sm text-amber-800 mb-1">
+                    Always double-check your address
+                  </div>
+                  <div className="text-xs text-amber-700 space-y-1">
+                    <div>Funds sent to wrong address cannot be recovered.</div>
+                    <div>Consider connecting your wallet for safety.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Live preview of the recipient and source (manual vs. wallet) */}
           {value && (
