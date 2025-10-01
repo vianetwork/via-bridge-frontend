@@ -19,6 +19,7 @@ import { FormAmountSlider } from "@/components/form-amount-slider";
 import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
 import { useDebounce } from "@/hooks/useDebounce";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
+import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -55,7 +56,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [amount, setAmount] = useState("0");
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
+  const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -66,13 +67,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       recipientBitcoinAddress: "",
     },
   });
-
-  // Auto-fill the recipient Bitcoin address when available
-  useEffect(() => {
-    if (bitcoinAddress) {
-      form.setValue("recipientBitcoinAddress", bitcoinAddress);
-    }
-  }, [bitcoinAddress, form]);
 
   // Fetch VIA balance when address is available
   useEffect(() => {
@@ -338,24 +332,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     />
                 )}
 
-                <FormField
-                  control={form.control}
-                  name="recipientBitcoinAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm">Recipient Bitcoin Address</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="bc1..."
-                          className="placeholder:text-muted-foreground/60"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
                 {field.value && (
                   <div className="text-xs text-muted-foreground mt-4 min-h-[1rem]">
                     {isLoadingFeeEstimation ? (
@@ -404,6 +380,16 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     )}
                   </div>
                 )}
+              </FormItem>
+            )}
+          />
+          
+          <FormField control={form.control} name="recipientBitcoinAddress" render={({ field }) => (
+              <FormItem>
+                <FormControl>
+                  <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange}/>
+                </FormControl>
+                <FormMessage />
               </FormItem>
             )}
           />
