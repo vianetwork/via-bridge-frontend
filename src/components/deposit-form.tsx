@@ -13,7 +13,7 @@ import { executeDeposit } from "@/services/bridge/deposit";
 import { getBitcoinBalance } from "@/services/bitcoin/balance";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useWalletStore } from "@/store/wallet-store";
-import { isAddress } from "ethers";
+import { getAddress } from "ethers";
 import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS, FEE_RESERVE_BTC, MIN_DEPOSIT_BTC, MIN_DEPOSIT_SATS } from "@/services/constants";
 import { cn } from "@/lib/utils";
 import { BRIDGE_CONFIG } from "@/services/config";
@@ -70,13 +70,15 @@ const depositFormSchema = z.object({
 });
 
 const verifyRecipientAddress = (address: string): boolean => {
-  if (!isAddress(address)) {
+  try {
+    const normalizedAddress = getAddress(address);
+    // check if the recipientAddress is not a system contract address
+    const invalidReceiverBn = BigInt(SYSTEM_CONTRACTS_ADDRESSES_RANGE);
+    const recipientAddressBn = BigInt(normalizedAddress);
+    return recipientAddressBn > invalidReceiverBn; // Reject reserved/system addresses by numeric threshold
+  } catch {
     return false;
   }
-  // Check if the recipientAddress is not a system contract address
-  const invalidReceiverBn = BigInt(SYSTEM_CONTRACTS_ADDRESSES_RANGE);
-  const recipientAddressBn = BigInt(address);
-  return recipientAddressBn > invalidReceiverBn;
 };
 
 export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransactionSubmitted }: DepositFormProps) {
@@ -149,6 +151,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     parseFloat(amountStr) >= MIN_DEPOSIT_BTC &&
     (!balance || parseFloat(amountStr) <= parseFloat(String(balance)));
   const canSubmit = amountValid && recipientValid;
+  const ctaLabel = canSubmit ? "Deposit" :  (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter deposit amount" : "Enter a valid VIA address"));
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
@@ -164,10 +167,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
         throw new Error("Bitcoin address or public key not found");
       }
 
-      // Remove '0x' prefix if present
-      const recipientAddress = values.recipientViaAddress.startsWith('0x')
-        ? values.recipientViaAddress.slice(2)
-        : values.recipientViaAddress;
+      const normalizedAddress = getAddress(values.recipientViaAddress); // EIP-55 checksummed 0x address
+      const recipientAddress = normalizedAddress.slice(2); // bridge API expects a raw 20-byte hex string (no "0x"), so we strip the prefix.
 
       // Execute the deposit
       const result = await executeDeposit({
@@ -440,8 +441,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
 
           <div className="space-y-2">
             <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
-              aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
-              title={!recipientValid ? "Enter or connect a recipient VIA address" : undefined}
+              aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}  title={!canSubmit ? ctaLabel : undefined}
             >
               {isSubmitting ? (
                 <>
@@ -449,7 +449,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   Processing...
                 </>
               ) : (
-                canSubmit ? "Deposit" : (!recipient ? "Connect wallet or enter address" : "Enter a valid VIA address")
+                ctaLabel
               )}
             </Button>
           </div>

@@ -127,7 +127,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const amountValid =
     parseFloat(amountStr) >= MIN_WITHDRAW_BTC &&
     (!balance || parseFloat(amountStr) <= parseFloat(balance));
+
   const canSubmit = amountValid && recipientValid;
+  const ctaLabel = canSubmit ? "Withdraw" : (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter withdraw amount" : "Enter a valid BTC address"));
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
@@ -426,8 +428,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           {/* Submit Button */}
           {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
           <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
-            aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
-            title={!recipientValid ? "Enter or connect a recipient BTC address" : undefined}
+                  aria-disabled={isSubmitting || !canSubmit} title={!canSubmit ? ctaLabel: undefined}
           >
             {isSubmitting ? (
               <>
@@ -435,7 +436,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                 Processing...
               </>
             ) : (
-              "Withdraw"
+              ctaLabel
             )}
           </Button>
         </form>
