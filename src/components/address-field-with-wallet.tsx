@@ -218,8 +218,10 @@ export default function AddressFieldWithWallet({
                 if (!userHasTyped && e.target.value.trim().length > 0) setUserHasTyped(true);
                 onChange(e.target.value);
               }}
-              className="font-mono border-2 border-dashed border-slate-300 bg-slate-50/50 focus:border-blue-500 focus:bg-white" aria-label={label ?? (isEvm ? "Recipient VIA Address" : "Recipient Bitcoin Address")}/>
-            <div className="absolute inset-y-0 right-3 flex items-center">
+              className="peer font-mono border-2 border-dashed border-slate-300 bg-slate-50/50 focus:border-blue-500 focus:bg-white placeholder-shown:pr-28 pr-3"
+              aria-label={label ?? (isEvm ? "Recipient VIA Address" : "Recipient Bitcoin Address")}
+            />
+            <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center transition-opacity duration-150 opacity-0 peer-placeholder-shown:opacity-100">
               <span className="text-[10px] text-slate-400">Enter {isEvm ? "VIA" : "Bitcoin"} address manually</span>
             </div>
           </div>
