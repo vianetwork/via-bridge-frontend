@@ -21,8 +21,6 @@ import { FormAmountSlider } from "@/components/form-amount-slider";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 
-
-
 interface DepositFormProps {
   bitcoinAddress: string | null
   bitcoinPublicKey: string | null
@@ -37,8 +35,13 @@ interface FormContext {
 const depositFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= MIN_DEPOSIT_BTC, {
-        message: `Minimum amount is ${MIN_DEPOSIT_BTC} BTC (${MIN_DEPOSIT_SATS.toLocaleString()} satoshis)`,
+    .refine((val) => {
+      const v = String(val ?? "").trim();
+      if (!v) return true; // don’t error on empty; defer to UX/submit
+      const n = Number.parseFloat(v);
+      return Number.isFinite(n) && n >= MIN_DEPOSIT_BTC;
+    }, {
+      message: `Minimum amount is ${MIN_DEPOSIT_BTC} BTC (${MIN_DEPOSIT_SATS.toLocaleString()} sats)`,
     })
     .superRefine((val, ctx) => {
       // Get balance from context
@@ -120,9 +123,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
         setBalance(balanceInBtc);
       } catch (error) {
         console.error("Error fetching balance:", error);
-        toast.error("Failed to fetch balance", {
-          description: "Could not retrieve your Bitcoin balance. Please try again later.",
-        });
+        toast.error("Failed to fetch balance", {description: "Could not retrieve your Bitcoin balance. Please try again later.",});
       } finally {
         setIsLoadingBalance(false);
       }
@@ -154,9 +155,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
       setIsSubmitting(true);
 
       if (!verifyRecipientAddress(values.recipientViaAddress)) {
-        toast.error("Invalid recipient address", {
-          description: "Enter a valid VIA address or connect your wallet to autofill.",
-        });
+        toast.error("Invalid recipient address", {description: "Enter a valid VIA address or connect your wallet to autofill.",});
         setIsSubmitting(false);
         return;
       }
@@ -366,7 +365,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     </button>
                   </div>
                 </FormControl>
-                <FormMessage/>
+                {(form.formState.touchedFields.amount || form.formState.isSubmitted) &&
+                  String(form.getValues("amount") || "").trim().length > 0 && (
+                    <FormMessage />
+                  )
+                }
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -419,7 +422,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
           <FormField control = {form.control} name="recipientViaAddress" render={( {field }) => (
             <FormItem>
               <AddressFieldWithWallet mode="via" label="Recipient VIA Address" placeholder="0x..." value={field.value || ""} onChange={field.onChange}/>
-              <FormMessage/>
+              {(form.formState.isSubmitted ||
+                (form.formState.dirtyFields.recipientViaAddress &&
+                  String(form.getValues("recipientViaAddress") || "").trim().length > 0)
+              ) && (
+                <FormMessage />
+              )}
             </FormItem>
           )}
           />
@@ -431,12 +439,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
           )}
 
           <div className="space-y-2">
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={isSubmitting || !canSubmit}
-              aria-disabled={isSubmitting || !canSubmit}
-              aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
+            <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
+              aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
               title={!recipientValid ? "Enter or connect a recipient VIA address" : undefined}
             >
               {isSubmitting ? (
