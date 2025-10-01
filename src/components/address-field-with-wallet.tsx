@@ -112,7 +112,7 @@ export default function AddressFieldWithWallet({
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>Wrong network. {isEvm ? "Switch to VIA network" : "Switch to the correct Bitcoin network"} to auto-fill</span>
           </div>
-          <Button size="sm" variant="secondary" className="h-6 px-2 text-xs" onClick={() => store.switchNetwork(isEvm ? Layer.L2 : Layer.L1)}>Switch</Button>
+          <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-xs" onClick={() => store.switchNetwork(isEvm ? Layer.L2 : Layer.L1)}>Switch</Button>
         </div>
       )}
 
@@ -126,7 +126,7 @@ export default function AddressFieldWithWallet({
             <span className="text-xs text-slate-700">Using your wallet address: <span className="font-mono">{maskAddress(walletAddress)}</span></span>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant='ghost' className="h-7 px-2 text-xs" onClick={async() => {
+            <Button type="button" size="sm" variant='ghost' className="h-7 px-2 text-xs" onClick={async() => {
               try {
                 await navigator.clipboard.writeText(walletAddress);
                 setCopied(true);
@@ -137,7 +137,7 @@ export default function AddressFieldWithWallet({
               {copied ? <Check className='h-3.5 w-3.5 text-green-600'/> : <Copy className="h-3.5 w-3.5" />}
             </Button>
             {/* Allows switching to manual entry, revealing the input */}
-            <Button  size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => setShowManual(true)}>Enter a different address</Button>
+            <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => setShowManual(true)}>Enter a different address</Button>
           </div>
         </div>
       )}
@@ -151,7 +151,7 @@ export default function AddressFieldWithWallet({
             </div>
             <span className="text-xs text-slate-600">Wallet detected: {maskAddress(walletAddress)}</span>
           </div>
-          <Button size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
+          <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
               const shouldReplace =
                 !value ||
                 value.trim() === "" ||
@@ -175,10 +175,10 @@ export default function AddressFieldWithWallet({
               <div className="text-xs text-slate-600 mb-3">Your address will be automatically filled in</div>
               <div className="flex gap-2">
                 {/* Connect wallet CTA (Metamask for EVM, Xverse for BTC) */}
-                <Button size="sm" onClick={() => (isEvm ? store.connectMetamask() : store.connectXverse())} className="bg-blue-600 hover:bg-blue-700">{isEvm ? "Connect Wallet" : "Connect Xverse"}</Button>
+                <Button type="button" size="sm" onClick={() => (isEvm ? store.connectMetamask() : store.connectXverse())} className="bg-blue-600 hover:bg-blue-700">{isEvm ? "Connect Wallet" : "Connect Xverse"}</Button>
                 {/* Allow user to enter manually even while disconnected */}
                 {allowManualOverride && (
-                  <Button variant="ghost" size="sm" className="text-slate-600" onClick={() => setShowManual(true)}>Enter manually</Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-slate-600" onClick={() => setShowManual(true)}>Enter manually</Button>
                 )}
               </div>
             </div>
@@ -198,7 +198,7 @@ export default function AddressFieldWithWallet({
                 </div>
                 <span className="text-sm text-slate-600">Switch to connected wallet address</span>
               </div>
-              <Button size="sm" variant="secondary" className="h-6 px-2 text-xs"
+              <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-xs"
                 onClick={() => {
                   const shouldReplace =
                     !value ||

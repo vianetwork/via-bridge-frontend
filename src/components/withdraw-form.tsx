@@ -20,6 +20,7 @@ import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
 import { useDebounce } from "@/hooks/useDebounce";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
+import { verifyBitcoinAddress } from "@/utils/address";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -29,21 +30,20 @@ interface WithdrawFormProps {
 const withdrawFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= MIN_WITHDRAW_BTC, {
-      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} satoshis)`,
+    .refine((val) => {
+      const v = String(val ?? "").trim();
+      if (!v) return true; // no error when empty; defer to user interaction/submit
+      const n = Number.parseFloat(v);
+      return Number.isFinite(n) && n >= MIN_WITHDRAW_BTC;
+    }, {
+      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} sats)`,
     }),
   recipientBitcoinAddress: z
     .string()
-    .min(1, { message: "Bitcoin address is required" })
-    .refine((val) => {
-      if (val.startsWith("bc1") || val.startsWith("tb1") || val.startsWith("bcr")) {
-        return val.length >= 42 && val.length <= 62;
-      }
-      // TODO: Add support for Bitcoin address formats other than bech32 (SegWit)
-      return false;
-    }, {
-      message: "Invalid Bitcoin address format",
-    }),
+    .trim()
+    .refine((val) => val.length === 0 || verifyBitcoinAddress(val), {
+      message: "invalid Bitcoin address",
+    }),  // TODO: Add support for Bitcoin address formats other than Bech32 (SegWit)
 });
 
 export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: WithdrawFormProps) {
@@ -120,16 +120,34 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     const insufficientNet = feeEstimation ? netSats < 0 : false;
     const hasAmount = Boolean((form.watch("amount") || "").trim());
 
+  // Derived form validity for CTA state
+  const recipient = form.watch("recipientBitcoinAddress");
+  const recipientValid = verifyBitcoinAddress(recipient);
+  const amountStr = form.watch("amount") || "0" ;
+  const amountValid =
+    parseFloat(amountStr) >= MIN_WITHDRAW_BTC &&
+    (!balance || parseFloat(amountStr) <= parseFloat(balance));
+  const canSubmit = amountValid && recipientValid;
+
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
-      toast.error("VIA address is required", {
-        description: "Please connect your VIA wallet to proceed with the withdrawal.",
-      });
+      toast.error("VIA address is required", {description: "Please connect your VIA wallet to proceed with the withdrawal.",});
       return;
     }
 
     try {
       setIsSubmitting(true);
+      if (!verifyBitcoinAddress(values.recipientBitcoinAddress)) {
+        // Do not show a toast for empty input; UI already guides the user
+        if ((values.recipientBitcoinAddress || "").trim().length === 0) {
+          setIsSubmitting(false);
+          return;
+        }
+        toast.error("Invalid Bitcoin address", {description: "Please enter a valid Bitcoin address or connect your wallet to autofill.",});
+        setIsSubmitting(false);
+        return;
+      }
+
       const result = await executeWithdraw({
         amount: values.amount,
         recipientBitcoinAddress: values.recipientBitcoinAddress,
@@ -289,7 +307,10 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     </button>
                   </div>
                 </FormControl>
-                <FormMessage />
+                {((form.formState.touchedFields.amount || form.formState.isSubmitted) &&
+                  String(form.getValues("amount") || "").trim().length > 0) && (
+                  <FormMessage />
+                )}
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -386,10 +407,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           
           <FormField control={form.control} name="recipientBitcoinAddress" render={({ field }) => (
               <FormItem>
-                <FormControl>
-                  <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange}/>
-                </FormControl>
-                <FormMessage />
+                <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange}/>
+                {(form.formState.isSubmitted || (form.formState.dirtyFields.recipientBitcoinAddress && String(form.getValues("recipientBitcoinAddress") || "").trim().length > 0)
+                ) && (
+                  <FormMessage />
+                )}
               </FormItem>
             )}
           />
@@ -403,19 +425,9 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
 
           {/* Submit Button */}
           {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={
-              isSubmitting ||
-              !feeEstimation ||
-              toL1Amount(amount || "0") - feeEstimation.fee <0 ||
-              isLoadingFeeEstimation ||
-              !form.watch("amount") ||
-              parseFloat(form.watch("amount") || "0") <= 0 ||
-              (!!balance &&
-                parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
-            }
+          <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
+            aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}
+            title={!recipientValid ? "Enter or connect a recipient BTC address" : undefined}
           >
             {isSubmitting ? (
               <>
