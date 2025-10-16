@@ -18,3 +18,17 @@ export function maskAddress(address: string, visibleStart = 6, visibleEnd = 4): 
 export function maskAddresses(addresses: string[], visibleStart = 6, visibleEnd = 4): string[] {
   return addresses.map((a) => maskAddress(a, visibleStart, visibleEnd));
 }
+
+/**
+ * Verify a Bitcoin address (simple bech32 length/prefix check).
+ * Supports bc1 (mainnet), tb1 (testnet), and bcr (regtest).
+ * NOTE: This mirrors the current zod refine used in forms. Replace with a full bech32 decoded if needed later.
+ */
+export function verifyBitcoinAddress(address: string): boolean {
+  if (!address) return false;
+  if (address.startsWith("bc1") || address.startsWith("tb1") || address.startsWith("bcr")) {
+    const len = address.length;
+    return len >= 42 && len <= 62;
+  }
+  return false;
+}
