@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { ExternalLink, Loader2, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 import { executeDeposit } from "@/services/bridge/deposit";
 import { getBitcoinBalance } from "@/services/bitcoin/balance";
@@ -18,8 +18,10 @@ import { SYSTEM_CONTRACTS_ADDRESSES_RANGE, L1_BTC_DECIMALS, FEE_RESERVE_BTC, MIN
 import { cn } from "@/lib/utils";
 import { BRIDGE_CONFIG } from "@/services/config";
 import { FormAmountSlider } from "@/components/form-amount-slider";
+import { useDebounce } from "@/hooks/useDebounce";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
+import { toL1Amount } from "@/helpers";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -90,7 +92,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
-  const { addLocalTransaction } = useWalletStore();
+  const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
@@ -125,7 +127,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
         setBalance(balanceInBtc);
       } catch (error) {
         console.error("Error fetching balance:", error);
-        toast.error("Failed to fetch balance", {description: "Could not retrieve your Bitcoin balance. Please try again later.",});
+        toast.error("Failed to fetch balance", { description: "Could not retrieve your Bitcoin balance. Please try again later.", });
       } finally {
         setIsLoadingBalance(false);
       }
@@ -134,11 +136,35 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     fetchBalance();
   }, [bitcoinAddress]);
 
+  // Live amount debounced to avoid unnecessary re-renders
+  const [amount, setAmount] = useState("0");
+  const liveAmount = form.watch("amount");
+  const debouncedAmount = useDebounce(liveAmount, 600);
+  const lastSatsRef = useRef<number | null>(null);
+  useEffect(() => {
+    setAmount(String(liveAmount ?? ""));
+  }, [liveAmount]);
+  useEffect(() => {
+    try {
+      const str = String(debouncedAmount ?? "").trim();
+      if (!str) return;
+      const sats = toL1Amount(str);
+      if (!Number.isFinite(sats)) return;
+      if (sats <= 0) return;
+      if (sats < MIN_DEPOSIT_SATS) return;
+      if (lastSatsRef.current === sats) return;
+      lastSatsRef.current = sats;
+      fetchFeeEstimation(sats);
+    } catch (err) {
+      console.error("Error fetching fee estimation:", err);
+    }
+  }, [debouncedAmount, fetchFeeEstimation]);
+
   // Function to handle max amount button click
   const handleMaxAmount = () => {
     if (balance) {
       // Set a slightly lower amount to account for transaction fees
-        const maxAmount = Math.max(0, parseFloat(balance) - FEE_RESERVE_BTC).toFixed(8);
+      const maxAmount = Math.max(0, parseFloat(balance) - FEE_RESERVE_BTC).toFixed(8);
       form.setValue("amount", maxAmount);
     }
   };
@@ -151,14 +177,18 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
     parseFloat(amountStr) >= MIN_DEPOSIT_BTC &&
     (!balance || parseFloat(amountStr) <= parseFloat(String(balance)));
   const canSubmit = amountValid && recipientValid;
-  const ctaLabel = canSubmit ? "Deposit" :  (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter deposit amount" : "Enter a valid VIA address"));
+  const ctaLabel = canSubmit ? "Deposit" : (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter deposit amount" : "Enter a valid VIA address"));
+
+  const netSats = feeEstimation ? toL1Amount((amount || "0")) - feeEstimation.fee : 0;
+  const insufficientNet = feeEstimation ? netSats < 0 : false;
+  const hasAmount = Boolean((form.watch("amount") || "").trim());
 
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
     try {
       setIsSubmitting(true);
 
       if (!verifyRecipientAddress(values.recipientViaAddress)) {
-        toast.error("Invalid recipient address", {description: "Enter a valid VIA address or connect your wallet to autofill.",});
+        toast.error("Invalid recipient address", { description: "Enter a valid VIA address or connect your wallet to autofill.", });
         setIsSubmitting(false);
         return;
       }
@@ -256,10 +286,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                       href={explorerUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 font-medium"
+                      className="w-full"
                     >
-                      View on Explorer
-                      <ExternalLink className="h-3.5 w-3.5" />
+                      <Button variant="outline" className="w-full">
+                        Track Transaction
+                        <ExternalLink className="ml-2 h-4 w-4" />
+                      </Button>
                     </a>
                   </div>
                   <p className="font-mono text-xs bg-background/80 p-3 rounded-md break-all text-muted-foreground">
@@ -275,6 +307,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                     setIsSuccess(false);
                     setTxHash(null);
                     setExplorerUrl(null);
+                    resetFeeEstimation();
+                    lastSatsRef.current = null;
                     form.reset();
                   }}
                 >
@@ -396,21 +430,66 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                 )}
 
                 {/* balance usage progress and slider*/}
-                {balance && Number(balance) >0 && (
+                {balance && Number(balance) > 0 && (
                   <FormAmountSlider
-                  form={form}
-                  name="amount"
-                  balance={Number.parseFloat(String(balance))}
-                  min={MIN_DEPOSIT_BTC}//20,000 sat min
-                  feeReserve={FEE_RESERVE_BTC} // reserve for fees, aligns with MAX
-                  isLoading={isLoadingBalance}
-                  pulseWhenEmpty={!(field.value && String(field.value).trim())}
-                  unit="BTC"
-                  progressClassName="bg-green-500"
-                  sliderAccentClassName="accent-green500"
-                  ariaLabel="Deposit amount"
-                  decimals={8}
+                    form={form}
+                    name="amount"
+                    balance={Number.parseFloat(String(balance))}
+                    min={MIN_DEPOSIT_BTC}//20,000 sat min
+                    feeReserve={FEE_RESERVE_BTC} // reserve for fees, aligns with MAX
+                    isLoading={isLoadingBalance}
+                    pulseWhenEmpty={!(field.value && String(field.value).trim())}
+                    unit="BTC"
+                    progressClassName="bg-green-500"
+                    sliderAccentClassName="accent-green500"
+                    ariaLabel="Deposit amount"
+                    decimals={8}
                   />
+                )}
+
+                {field.value && (
+                  <div className="text-xs text-muted-foreground mt-4 min-h-[1rem]">
+                    {isLoadingFeeEstimation ? (
+                      <div className="w-48 h-4 rounded bg-muted animate-pulse" />
+                    ) : feeEstimation !== null && (
+                      <div className="border border-muted rounded-md bg-muted/40 px-4 py-3 space-y-2">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <div className="flex items-center gap-1">
+                            Estimated network fee:{" "}
+                            <span className="font-medium text-foreground">
+                              {feeEstimation.fee.toLocaleString()} sats
+                            </span>
+                          </div>
+                          {/* Tooltip */}
+                          <div className="relative group">
+                            <HelpCircle className="h-4 w-4 text-gray-400 hover:text-gray-600 cursor-help" />
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 transform sm:left-auto sm:right-0 sm:translate-x-0 mb-2 px-2 py-1.5 text-xs text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 shadow-lg border border-gray-700 pointer-events-none">
+                              <div className="text-left leading-snug">
+                                This is the estimated fee required to process your deposit through the verifier network. Any unused amount will be refunded to your wallet.
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        {(() => {
+                          const satsPostFee = Math.max(0, toL1Amount(amount || "0") - feeEstimation.fee);
+                          const getColorClass = (sats: number) => {
+                            if (sats < 250) return "text-red-500";
+                            if (sats < 1000) return "text-orange-500";
+                            return "text-green-500";
+                          };
+                          const colorClass = getColorClass(satsPostFee);
+                          return (
+                            <div className={`text-xs ${colorClass}`}>
+                              Minimum BTC you will receive:{" "}
+                              <span className={`font-medium ${colorClass}`}>
+                                {satsPostFee.toLocaleString()} sats
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
                 )}
               </FormItem>
             )}
@@ -420,15 +499,15 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
             <div id="recipient-requirement" className="text-xs text-muted-foreground">Enter a valid VIA address or connect your wallet to autofill.</div>
           )}
 
-          <FormField control = {form.control} name="recipientViaAddress" render={( {field }) => (
+          <FormField control={form.control} name="recipientViaAddress" render={({ field }) => (
             <FormItem>
-              <AddressFieldWithWallet mode="via" label="Recipient VIA Address" placeholder="0x..." value={field.value || ""} onChange={field.onChange}/>
+              <AddressFieldWithWallet mode="via" label="Recipient VIA Address" placeholder="0x..." value={field.value || ""} onChange={field.onChange} />
               {(form.formState.isSubmitted ||
                 (form.formState.dirtyFields.recipientViaAddress &&
                   String(form.getValues("recipientViaAddress") || "").trim().length > 0)
               ) && (
-                <FormMessage />
-              )}
+                  <FormMessage />
+                )}
             </FormItem>
           )}
           />
@@ -440,8 +519,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
           )}
 
           <div className="space-y-2">
+            {hasAmount && insufficientNet && (
+              <div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>
+            )}
             <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
-              aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined}  title={!canSubmit ? ctaLabel : undefined}
+              aria-disabled={isSubmitting || !canSubmit} aria-describedby={!recipientValid ? "recipient-requirement" : undefined} title={!canSubmit ? ctaLabel : undefined}
             >
               {isSubmitting ? (
                 <>
