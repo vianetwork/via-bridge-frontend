@@ -39,8 +39,9 @@ export async function fetchFeeEstimation(amount: number, signal?: AbortSignal): 
 /**
  * Fetches an estimation of the deposit fee for a given amount.
  *
- * Note: The amount parameter is currently unused as deposit execution gas is amount-agnostic on this L2.
- * The fee is calculated as: GAS_LIMIT × gasPrice, converted from 18-decimal wei to 8-decimal units.
+ * Note: Deposit gas usage does not depend on the numeric amount.
+ * The 'amount' parameter is validated for API consistency but is not used in the fee calculation.
+ * This estimates only the L2 execution cost (GAS_LIMIT * gasPrice) and then scales 18-decimal wei to an 8-decimal display unit.
  *
  * @param {number} amount - The deposit amount for which the fee estimation is needed. Must be a positive, finite number.
  * @param {AbortSignal} [_signal] - (Optional) AbortSignal to allow request cancellation.
@@ -49,6 +50,8 @@ export async function fetchFeeEstimation(amount: number, signal?: AbortSignal): 
  */
 export async function fetchDepositFeeEstimation(amount: number, _signal?: AbortSignal): Promise<number> {
   if (!Number.isFinite(amount) || amount <= 0) throw new Error("invalid amount");
+  // Unused for now; reserved for future cancellation support
+  void _signal;
 
   // https://github.com/vianetwork/via-core/blob/main/core/lib/types/src/l1/via_l1.rs#L14
   const GAS_LIMIT = 300_000n; // Fixed gas limit to required to execute deposit
