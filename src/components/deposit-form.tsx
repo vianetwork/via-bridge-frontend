@@ -92,7 +92,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Import the wallet store to get the VIA address
-  const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
+  const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchDepositFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof depositFormSchema> & FormContext>({
     resolver: zodResolver(depositFormSchema),
@@ -154,11 +154,11 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
       if (sats < MIN_DEPOSIT_SATS) return;
       if (lastSatsRef.current === sats) return;
       lastSatsRef.current = sats;
-      fetchFeeEstimation(sats);
+      fetchDepositFeeEstimation(sats); // deposit fee depnds on gas limit * live gas price
     } catch (err) {
       console.error("Error fetching fee estimation:", err);
     }
-  }, [debouncedAmount, fetchFeeEstimation]);
+  }, [debouncedAmount, fetchDepositFeeEstimation]);
 
   // Function to handle max amount button click
   const handleMaxAmount = () => {
