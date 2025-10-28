@@ -7,10 +7,9 @@ import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowRight, Loader2, ExternalLink, HelpCircle } from "lucide-react";
+import { Loader2, ExternalLink, HelpCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import Image from "next/image";
 import { executeWithdraw } from "@/services/bridge/withdraw";
 import { useWalletStore } from "@/store/wallet-store";
 import { getViaBalance } from "@/services/via/balance";
@@ -19,6 +18,9 @@ import { toL1Amount } from "@/helpers";
 import { FormAmountSlider } from "@/components/form-amount-slider";
 import { MIN_WITHDRAW_BTC, MIN_WITHDRAW_SATS } from "@/services/constants";
 import { useDebounce } from "@/hooks/useDebounce";
+import NetworkRouteBanner from "@/components/ui/network-route-banner";
+import AddressFieldWithWallet from "@/components/address-field-with-wallet";
+import { verifyBitcoinAddress } from "@/utils/address";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -28,21 +30,20 @@ interface WithdrawFormProps {
 const withdrawFormSchema = z.object({
   amount: z
     .string()
-    .refine((val) => Number.parseFloat(val) >= MIN_WITHDRAW_BTC, {
-      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} satoshis)`,
+    .refine((val) => {
+      const v = String(val ?? "").trim();
+      if (!v) return true; // no error when empty; defer to user interaction/submit
+      const n = Number.parseFloat(v);
+      return Number.isFinite(n) && n >= MIN_WITHDRAW_BTC;
+    }, {
+      message: `Minimum amount is ${MIN_WITHDRAW_BTC} BTC (${MIN_WITHDRAW_SATS.toLocaleString()} sats)`,
     }),
   recipientBitcoinAddress: z
     .string()
-    .min(1, { message: "Bitcoin address is required" })
-    .refine((val) => {
-      if (val.startsWith("bc1") || val.startsWith("tb1") || val.startsWith("bcr")) {
-        return val.length >= 42 && val.length <= 62;
-      }
-      // TODO: Add support for Bitcoin address formats other than bech32 (SegWit)
-      return false;
-    }, {
-      message: "Invalid Bitcoin address format",
-    }),
+    .trim()
+    .refine((val) => val.length === 0 || verifyBitcoinAddress(val), {
+      message: "invalid Bitcoin address",
+    }),  // TODO: Add support for Bitcoin address formats other than Bech32 (SegWit)
 });
 
 export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: WithdrawFormProps) {
@@ -55,7 +56,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [amount, setAmount] = useState("0");
 
   // Import the wallet store to get the Bitcoin address
-  const { bitcoinAddress, addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
+  const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
 
   const form = useForm<z.infer<typeof withdrawFormSchema>>({
     resolver: zodResolver(withdrawFormSchema),
@@ -66,13 +67,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       recipientBitcoinAddress: "",
     },
   });
-
-  // Auto-fill the recipient Bitcoin address when available
-  useEffect(() => {
-    if (bitcoinAddress) {
-      form.setValue("recipientBitcoinAddress", bitcoinAddress);
-    }
-  }, [bitcoinAddress, form]);
 
   // Fetch VIA balance when address is available
   useEffect(() => {
@@ -126,16 +120,36 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     const insufficientNet = feeEstimation ? netSats < 0 : false;
     const hasAmount = Boolean((form.watch("amount") || "").trim());
 
+  // Derived form validity for CTA state
+  const recipient = form.watch("recipientBitcoinAddress");
+  const recipientValid = verifyBitcoinAddress(recipient);
+  const amountStr = form.watch("amount") || "0" ;
+  const amountValid =
+    parseFloat(amountStr) >= MIN_WITHDRAW_BTC &&
+    (!balance || parseFloat(amountStr) <= parseFloat(balance));
+
+  const canSubmit = amountValid && recipientValid;
+  const ctaLabel = canSubmit ? "Withdraw" : (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter withdraw amount" : "Enter a valid BTC address"));
+
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (!viaAddress) {
-      toast.error("VIA address is required", {
-        description: "Please connect your VIA wallet to proceed with the withdrawal.",
-      });
+      toast.error("VIA address is required", {description: "Please connect your VIA wallet to proceed with the withdrawal.",});
       return;
     }
 
     try {
       setIsSubmitting(true);
+      if (!verifyBitcoinAddress(values.recipientBitcoinAddress)) {
+        // Do not show a toast for empty input; UI already guides the user
+        if ((values.recipientBitcoinAddress || "").trim().length === 0) {
+          setIsSubmitting(false);
+          return;
+        }
+        toast.error("Invalid Bitcoin address", {description: "Please enter a valid Bitcoin address or connect your wallet to autofill.",});
+        setIsSubmitting(false);
+        return;
+      }
+
       const result = await executeWithdraw({
         amount: values.amount,
         recipientBitcoinAddress: values.recipientBitcoinAddress,
@@ -250,43 +264,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
 
   return (
     <div className="w-full max-w-md min-w-[300px] sm:min-w-[360px] mx-auto">
-      <div className="flex items-center justify-between bg-muted/50 rounded-lg p-3 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-            <div className="h-3 w-3 rounded-full bg-primary" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">VIA</span>
-            <span className="text-xs text-muted-foreground">Network</span>
-          </div>
-        </div>
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1 px-2 py-1 bg-primary/5 rounded-full">
-            <Image
-              src="/bitcoin-logo.svg"
-              alt="BTC"
-              width={14}
-              height={14}
-              className="text-amber-500"
-            />
-            <span className="text-xs font-medium">BTC</span>
-          </div>
-          <ArrowRight className="h-5 w-10 text-primary" strokeWidth={2.5} />
-        </div>
-        <div className="flex items-center gap-2">
-          <Image
-            src="/bitcoin-logo.svg"
-            alt="Bitcoin"
-            width={20}
-            height={20}
-            className="text-amber-500"
-          />
-          <div className="flex flex-col">
-            <span className="text-sm font-medium">Bitcoin</span>
-            <span className="text-xs text-muted-foreground">Network</span>
-          </div>
-        </div>
-      </div>
+      <NetworkRouteBanner direction="withdraw" />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
@@ -331,7 +309,10 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     </button>
                   </div>
                 </FormControl>
-                <FormMessage />
+                {((form.formState.touchedFields.amount || form.formState.isSubmitted) &&
+                  String(form.getValues("amount") || "").trim().length > 0) && (
+                  <FormMessage />
+                )}
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -373,24 +354,6 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     decimals={8}
                     />
                 )}
-
-                <FormField
-                  control={form.control}
-                  name="recipientBitcoinAddress"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-sm">Recipient Bitcoin Address</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="bc1..."
-                          className="placeholder:text-muted-foreground/60"
-                          {...field}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
 
                 {field.value && (
                   <div className="text-xs text-muted-foreground mt-4 min-h-[1rem]">
@@ -443,6 +406,17 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
               </FormItem>
             )}
           />
+          
+          <FormField control={form.control} name="recipientBitcoinAddress" render={({ field }) => (
+              <FormItem>
+                <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange}/>
+                {(form.formState.isSubmitted || (form.formState.dirtyFields.recipientBitcoinAddress && String(form.getValues("recipientBitcoinAddress") || "").trim().length > 0)
+                ) && (
+                  <FormMessage />
+                )}
+              </FormItem>
+            )}
+          />
           {txHash && (
             <Alert className="bg-primary/5 border-primary/10">
               <AlertDescription className="text-sm break-all text-primary/80">
@@ -453,19 +427,8 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
 
           {/* Submit Button */}
           {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={
-              isSubmitting ||
-              !feeEstimation ||
-              toL1Amount(amount || "0") - feeEstimation.fee <0 ||
-              isLoadingFeeEstimation ||
-              !form.watch("amount") ||
-              parseFloat(form.watch("amount") || "0") <= 0 ||
-              (!!balance &&
-                parseFloat(form.watch("amount") || "0") > parseFloat(String(balance)))
-            }
+          <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
+                  aria-disabled={isSubmitting || !canSubmit} title={!canSubmit ? ctaLabel: undefined}
           >
             {isSubmitting ? (
               <>
@@ -473,7 +436,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                 Processing...
               </>
             ) : (
-              "Withdraw"
+              ctaLabel
             )}
           </Button>
         </form>

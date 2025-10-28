@@ -3,7 +3,6 @@ import { L1_BTC_DECIMALS, L2_BTC_DECIMALS } from "../constants";
 import { ethers } from "ethers";
 import { TransactionStatus } from "@/store/wallet-store";
 import { API_BASE_URL, API_CONFIG, BRIDGE_CONFIG, getNetworkConfig } from "../config";
-import path from "path";
 
 // Define types for the API response
 interface Deposit {
@@ -88,7 +87,7 @@ export function mapApiTransactionsToAppFormat(data: TransactionsResponse["data"]
     txHash: deposit.l1_tx_id,
     l1ExplorerUrl: API_CONFIG.endpoints.bitcoin.explorer[BRIDGE_CONFIG.defaultNetwork] + deposit.l1_tx_id,
     l2TxHash: deposit.l2_tx_hash || undefined,
-    l2ExplorerUrl: deposit.l2_tx_hash ? path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', deposit.l2_tx_hash) : undefined,
+    l2ExplorerUrl: deposit.l2_tx_hash ? new URL(`tx/${deposit.l2_tx_hash}`, getNetworkConfig().blockExplorerUrls[0]).toString() : undefined,
   }));
 
   const mappedWithdrawals = withdrawals.map(withdrawal => ({
@@ -98,7 +97,7 @@ export function mapApiTransactionsToAppFormat(data: TransactionsResponse["data"]
     status: withdrawal.status as TransactionStatus,
     timestamp: withdrawal.created_at * 1000,
     txHash: withdrawal.l2_tx_hash,
-    l2ExplorerUrl: path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', withdrawal.l2_tx_hash),
+    l2ExplorerUrl: new URL(`tx/${withdrawal.l2_tx_hash}`, getNetworkConfig().blockExplorerUrls[0]).toString(),
     l1TxHash: withdrawal.bridge_withdrawal?.tx_id || undefined,
     l1ExplorerUrl: withdrawal.bridge_withdrawal?.tx_id ? API_CONFIG.endpoints.bitcoin.explorer[BRIDGE_CONFIG.defaultNetwork] + withdrawal.bridge_withdrawal.tx_id : undefined,
   }));

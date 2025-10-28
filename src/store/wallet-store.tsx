@@ -3,7 +3,7 @@ import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { WalletNotFoundError } from "@/utils/wallet-errors";
-import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation } from "@/services/api";
+import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation, fetchDepositFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 
@@ -111,6 +111,7 @@ interface WalletState {
   clearTransactions: () => void;
   fetchTransactions: () => Promise<void>;
   fetchFeeEstimation: (amount: number) => Promise<void>;
+  fetchDepositFeeEstimation(amount: number): Promise<void>;
   resetFeeEstimation: () => void;
   addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   removeLocalTransaction: (txHash: string) => void;
@@ -264,7 +265,30 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
 
   },
-  
+
+  fetchDepositFeeEstimation: async (amount: number) => {
+    if (amount == 0) return;
+
+    // latest-wins gating
+    // increment a local request counter and only commit if still the latest
+    const g = get() as any;
+    g.__depReqId = (g.__depReqId || 0) + 1;
+    const reqId = g.__depReqId;
+    
+    try {
+      set({ isLoadingFeeEstimation: true });
+      const fee = await fetchDepositFeeEstimation(amount);
+      // only commit if this is the latest request
+      if ((get() as any).__depReqId === reqId){
+       set( () => ({feeEstimation: {fee}}));       
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      set({ isLoadingFeeEstimation: false });
+    }
+  },
+
   resetFeeEstimation: () => {
     set({ feeEstimation: null, isLoadingFeeEstimation: false });
   },
