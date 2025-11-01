@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Layer } from "@/services/config";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { useMobile } from "@/hooks/use-mobile";
+import { WalletConnectButton as EVMSelectorButton } from "@/components/wallets/connect-button";
 import { env } from "@/lib/env";
 import {
   DropdownMenu,
@@ -188,11 +189,8 @@ export default function Header() {
           )}
         </>
       ) : (
-        <DropdownMenuItem
-          onClick={handleConnectMetamask}
-          disabled={isConnectingMetaMask}
-        >
-          {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
+        <DropdownMenuItem asChild>
+          <EVMSelectorButton />
         </DropdownMenuItem>
       )}
     </>
@@ -287,14 +285,15 @@ export default function Header() {
                   <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
                 </Button>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectMetamask}
-                  disabled={isConnectingMetaMask}
-                >
-                  {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
-                </Button>
+                <EVMSelectorButton />
+                // <Button
+                //   variant="outline"
+                //   size="sm"
+                //   onClick={handleConnectMetamask}
+                //   disabled={isConnectingMetaMask}
+                // >
+                //   {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
+                // </Button>
               )}
             </div>
           )}
