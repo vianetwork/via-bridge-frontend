@@ -4,12 +4,13 @@ import Image from "next/image";
 import Link from "next/link";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
-import { LogOut, AlertCircle, Menu } from "lucide-react";
+import { LogOut, AlertCircle, Menu, Droplet } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Layer } from "@/services/config";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { useMobile } from "@/hooks/use-mobile";
+import { env } from "@/lib/env";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ import {
 
 export default function Header() {
   const { isMobile } = useMobile();
+  const enableFaucet = env().NEXT_PUBLIC_ENABLE_FAUCET;
   const {
     isXverseConnected,
     isMetamaskConnected,
@@ -131,7 +133,7 @@ export default function Header() {
             </Button>
           </DropdownMenuItem>
           {!isCorrectBitcoinNetwork && (
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => handleSwitchNetwork(Layer.L1)}
               className="text-amber-600"
             >
@@ -141,7 +143,7 @@ export default function Header() {
           )}
         </>
       ) : (
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={handleConnectXverse}
           disabled={isConnectingXverse}
         >
@@ -150,7 +152,7 @@ export default function Header() {
       )}
 
       <DropdownMenuSeparator />
-      
+
       <DropdownMenuLabel>VIA Wallet</DropdownMenuLabel>
       {isMetamaskConnected ? (
         <>
@@ -172,7 +174,7 @@ export default function Header() {
             </Button>
           </DropdownMenuItem>
           {!isCorrectViaNetwork && (
-            <DropdownMenuItem 
+            <DropdownMenuItem
               onClick={() => handleSwitchNetwork(Layer.L2)}
               className="text-amber-600"
             >
@@ -182,7 +184,7 @@ export default function Header() {
           )}
         </>
       ) : (
-        <DropdownMenuItem 
+        <DropdownMenuItem
           onClick={handleConnectMetamask}
           disabled={isConnectingMetaMask}
         >
@@ -213,24 +215,46 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {enableFaucet && (
+            <Link
+              href="/faucet"
+              className="flex items-center gap-1 text font-medium text-slate-600 hover:text-slate-900 transition-colors border-2 border-blue-600 rounded-md px-2 py-1"
+            >
+              <Droplet className="w-4 h-4 text-blue-400" />
+              Testnet Faucet
+            </Link>
+          )}
+
           {isMobile ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-8 flex items-center gap-1.5">
-                  <Menu className="h-3.5 w-3.5" />
-                  <span>Wallets</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-64">
-                {renderWalletOptions()}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8 flex items-center gap-1.5">
+                    <Menu className="h-3.5 w-3.5" />
+                    <span>Menu</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel>Navigation</DropdownMenuLabel>
+                  <DropdownMenuItem asChild>
+                    <Link href="/">Bridge</Link>
+                  </DropdownMenuItem>
+                  {(enableFaucet) && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/faucet">Faucet</Link>
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                  {renderWalletOptions()}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           ) : (
             <div className="flex items-center gap-2">
               {isXverseConnected ? (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="flex items-center gap-2"
                   onClick={handleDisconnectXverse}
                 >
@@ -238,8 +262,8 @@ export default function Header() {
                   <span>BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
                 </Button>
               ) : (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={handleConnectXverse}
                   disabled={isConnectingXverse}
@@ -247,11 +271,11 @@ export default function Header() {
                   {isConnectingXverse ? "Connecting..." : "Connect Xverse"}
                 </Button>
               )}
-              
+
               {isMetamaskConnected ? (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <Button
+                  variant="outline"
+                  size="sm"
                   className="flex items-center gap-2"
                   onClick={handleDisconnectMetamask}
                 >
@@ -259,8 +283,8 @@ export default function Header() {
                   <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
                 </Button>
               ) : (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={handleConnectMetamask}
                   disabled={isConnectingMetaMask}
