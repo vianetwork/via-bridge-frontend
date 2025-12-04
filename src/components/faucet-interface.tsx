@@ -13,7 +13,7 @@ import { useWalletState } from "@/hooks/use-wallet-state";
 import AltchaWidget, { AltchaWidgetRef } from "@/components/altcha-widget";
 import { useAltcha } from "@/hooks/use-altcha";
 import { API_BASE_URL, getNetworkConfig } from "@/services/config";
-import path from "path";
+import WalletConnectButton from "@/components/wallet-connect-button";
 
 interface FaucetRequest {
   address: string;
@@ -23,12 +23,19 @@ interface FaucetRequest {
 }
 
 export default function FaucetInterface() {
-  const { viaAddress } = useWalletState();
+  const {
+    viaAddress,
+    isMetamaskConnected,
+    connectMetamask,
+    disconnectMetamask,
+  } = useWalletState();
+
+
   const altchaRef = useRef<AltchaWidgetRef>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { altchaState, handleVerify, handleError, resetAltcha } = useAltcha();
-  
+
   const [faucetRequest, setFaucetRequest] = useState<FaucetRequest>({
     address: viaAddress || "",
     status: 'idle'
@@ -57,6 +64,13 @@ export default function FaucetInterface() {
       error: undefined
     }));
   };
+
+  useEffect(() => {
+    if (viaAddress) {
+      handleUseConnectedWallet();
+    }
+  }, [viaAddress]);
+
 
   const handleUseConnectedWallet = () => {
     if (viaAddress) {
@@ -92,12 +106,12 @@ export default function FaucetInterface() {
 
     try {
       const result = await requestFaucetFunds(faucetRequest.address, altchaState.token!);
-      
+
       if (result.success) {
         startPollingForTransactionHash(faucetRequest.address);
         toast.success("Faucet Request Submitted", {
           description: `Request submitted for ${faucetRequest.address.slice(0, 6)}...${faucetRequest.address.slice(-4)}. Checking for transaction...`,
-          duration: 5000
+          duration: 10000
         });
       } else {
         setFaucetRequest(prev => ({
@@ -109,7 +123,7 @@ export default function FaucetInterface() {
         altchaRef.current?.reset();
         toast.error("Faucet Request Failed", {
           description: result.error || 'Failed to request funds from faucet',
-          duration: 5000
+          duration: 10000
         });
       }
     } catch (error) {
@@ -123,7 +137,7 @@ export default function FaucetInterface() {
       altchaRef.current?.reset();
       toast.error("Faucet Request Failed", {
         description: errorMessage,
-        duration: 5000
+        duration: 10000
       });
     }
   };
@@ -168,13 +182,13 @@ export default function FaucetInterface() {
   const startPollingForTransactionHash = (address: string) => {
     let attempts = 0;
     const maxAttempts = 6; // 6 attempts * 10 seconds = 60 seconds (1 minute)
-    
+
     const poll = async () => {
       attempts++;
-      
+
       try {
         const transactionHash = await getTransactionHash(address);
-        
+
         if (transactionHash.success && transactionHash.data) {
           setFaucetRequest(prev => ({
             ...prev,
@@ -183,21 +197,33 @@ export default function FaucetInterface() {
           }));
 
           resetAndClearPolling();
-          
           toast.success("Transaction Confirmed", {
-            description: `Check the transaction on the explorer: ${path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', transactionHash.data)}`,
-            duration: 5000
+            description: (
+              <span>
+                Check the transaction on the explorer{' '}
+                <a
+                  href={`${getNetworkConfig().blockExplorerUrls[0]}/tx/0x${faucetRequest.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-800 underline"
+                >
+                  0x{faucetRequest.txHash}
+                </a>
+              </span>
+            ),
+            duration: 10000,
           });
+
           return;
         }
 
-        if(transactionHash.error) {
+        if (transactionHash.error) {
           handlePollingTimeout(
             'Something went wrong. Please check your wallet for balance updates.',
             'Transaction Check Failed'
           );
         }
-        
+
         if (attempts >= maxAttempts) {
           handlePollingTimeout(
             'Transaction not found after 1 minute. Please check your wallet for balance updates.',
@@ -206,7 +232,7 @@ export default function FaucetInterface() {
         }
       } catch (error) {
         console.error("Error polling for transaction hash:", error);
-        
+
         if (attempts >= maxAttempts) {
           handlePollingTimeout(
             'Unable to verify transaction. Please check your wallet for balance updates.',
@@ -217,12 +243,12 @@ export default function FaucetInterface() {
     };
 
     poll();
-    
+
     pollingIntervalRef.current = setInterval(poll, 10000); // Poll every 10 seconds
-    
+
     pollingTimeoutRef.current = setTimeout(() => {
       clearPolling();
-        
+
       setFaucetRequest(prev => {
         if (prev.status === 'loading') {
           return {
@@ -233,10 +259,10 @@ export default function FaucetInterface() {
         }
         return prev;
       });
-      
+
       toast.error("Transaction Check Timeout", {
         description: "Transaction not found after 1 minute. Please check your wallet for balance updates.",
-        duration: 8000
+        duration: 10000
       });
     }, 70000);
   };
@@ -253,109 +279,117 @@ export default function FaucetInterface() {
             Enter your VIA network wallet address to receive test BTC for development and testing.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="address">VIA Address</Label>
-            <div className="flex gap-2">
-              <Input
-                id="address"
-                placeholder="0x..."
-                value={faucetRequest.address}
-                onChange={(e) => handleAddressChange(e.target.value)}
-                className={!isValidAddress(faucetRequest.address) && faucetRequest.address ? 'border-red-500' : ''}
-              />
-              {viaAddress && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleUseConnectedWallet}
-                  className="whitespace-nowrap"
-                >
-                  Use Wallet Address
-                </Button>
-              )}
-            </div>
-            {faucetRequest.address && !isValidAddress(faucetRequest.address) && (
-              <p className="text-sm text-red-500">Please enter a valid VIA address (0x...)</p>
-            )}
-          </div>
-
-          {faucetRequest.status === 'success' && (
-            <Alert>
-              <CheckCircle className="h-4 w-4 flex-shrink-0" />
-              <AlertDescription className="flex-1">
-                <div className="space-y-2">
-                  {faucetRequest.txHash && (
-                  <p>Funds are sent successfully with <a 
-                    href={`${path.join(getNetworkConfig().blockExplorerUrls[0], 'tx', faucetRequest.txHash)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 underline"
-                  >
-                    transaction
-                  </a>!</p>
-                  )}
+        {
+          !isMetamaskConnected ? (
+            <WalletConnectButton
+              walletType="metamask"
+              isConnected={isMetamaskConnected}
+              onConnect={connectMetamask}
+              onDisconnect={disconnectMetamask}
+            />
+          ) :
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address">VIA Address</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="address"
+                    placeholder="0x..."
+                    value={faucetRequest.address}
+                    onChange={(e) => handleAddressChange(e.target.value)}
+                    className={!isValidAddress(faucetRequest.address) && faucetRequest.address ? 'border-red-500' : ''}
+                  />
+                  {/* {viaAddress && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseConnectedWallet}
+                      className="whitespace-nowrap"
+                    >
+                      Use Wallet Address
+                    </Button>
+                  )} */}
                 </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {faucetRequest.status === 'error' && (
-            <Alert className="border-red-200 bg-red-50">
-              <AlertDescription className="text-red-800">
-                <div className="space-y-2">
-                  <p className="font-medium">Request Failed</p>
-                  <p className="text-sm">{faucetRequest.error}</p>
-                </div>
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {altchaChallengeUrl && (
-            <div className="space-y-2">
-              <Label className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                Security Verification
-              </Label>
-              <div className="flex items-center justify-center">
-                <AltchaWidget
-                  ref={altchaRef}
-                  challengeUrl={altchaChallengeUrl}
-                  onVerify={handleVerify}
-                  onError={handleError}
-                  debug={false}
-                  test={false}
-                />
+                {faucetRequest.address && !isValidAddress(faucetRequest.address) && (
+                  <p className="text-sm text-red-500">Please enter a valid VIA address (0x...)</p>
+                )}
               </div>
-            </div>
-          )}
 
-          <Button
-            onClick={handleRequestFunds}
-            disabled={
-              faucetRequest.status === 'loading' || 
-              !isValidAddress(faucetRequest.address) ||
-              (!!altchaChallengeUrl && !altchaState.isVerified)
-            }
-            className="w-full"
-          >
-            {faucetRequest.status === 'loading' ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Requesting Funds...
-              </>
-            ) : (
-              <>
-                Request Test BTC
-              </>
-            )}
-          </Button>
+              {faucetRequest.status === 'success' && (
+                <Alert>
+                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                  <AlertDescription className="flex-1">
+                    <div className="space-y-2">
+                      {faucetRequest.txHash && (
+                        <p>Funds are sent successfully with <a
+                          href={`${getNetworkConfig().blockExplorerUrls[0]}/tx/0x${faucetRequest.txHash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          transaction
+                        </a>!</p>
+                      )}
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
 
-          <div className="text-xs text-slate-500 space-y-1">
-            <p>• Funds are distributed on testnet</p>
-            <p>• Use responsibly for testing purposes only</p>
-          </div>
-        </CardContent>
+              {faucetRequest.status === 'error' && (
+                <Alert className="border-red-200 bg-red-50">
+                  <AlertDescription className="text-red-800">
+                    <div className="space-y-2">
+                      <p className="font-medium">Request Failed</p>
+                      <p className="text-sm">{faucetRequest.error}</p>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {altchaChallengeUrl && (
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    Security Verification
+                  </Label>
+                  <div className="flex items-center justify-center">
+                    <AltchaWidget
+                      ref={altchaRef}
+                      challengeUrl={altchaChallengeUrl}
+                      onVerify={handleVerify}
+                      onError={handleError}
+                      debug={false}
+                      test={false}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <Button
+                onClick={handleRequestFunds}
+                disabled={
+                  faucetRequest.status === 'loading' ||
+                  !isValidAddress(faucetRequest.address) ||
+                  (!!altchaChallengeUrl && !altchaState.isVerified)
+                }
+                className="w-full"
+              >
+                {faucetRequest.status === 'loading' ? (
+                  <>
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                    Requesting Funds...
+                  </>
+                ) : (
+                  <>Request Test BTC</>
+                )}
+              </Button>
+
+              <div className="text-xs text-slate-500 space-y-1">
+                <p>• Funds are distributed on VIA testnet</p>
+                <p>• Use responsibly for testing purposes only</p>
+              </div>
+            </CardContent>
+        }
       </Card>
     </div>
   );
