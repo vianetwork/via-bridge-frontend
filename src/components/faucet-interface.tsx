@@ -202,12 +202,12 @@ export default function FaucetInterface() {
               <span>
                 Check the transaction on the explorer{' '}
                 <a
-                  href={`${getNetworkConfig().blockExplorerUrls[0]}/tx/0x${faucetRequest.txHash}`}
+                  href={`${getNetworkConfig().blockExplorerUrls[0]}/tx/0x${transactionHash.data}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-blue-600 hover:text-blue-800 underline"
                 >
-                  0x{faucetRequest.txHash}
+                  0x{transactionHash.data}
                 </a>
               </span>
             ),
