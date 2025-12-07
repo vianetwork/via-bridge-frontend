@@ -37,6 +37,7 @@ interface Transaction {
   txHash: string;
   l1ExplorerUrl?: string;
   l2ExplorerUrl?: string;
+  symbol?: string;
 }
 
 interface FeeEstimation {
@@ -95,7 +96,7 @@ interface WalletState {
   feeEstimation: FeeEstimation | null;
 
   // Multi wallet support
-  availableWallets: Array<{name: string, rdns: string, icon?: string}>;
+  availableWallets: Array<{ name: string, rdns: string, icon?: string }>;
   selectedWallet: string | null; // rdns of selected wallet
 
   // Actions
@@ -119,7 +120,7 @@ interface WalletState {
   loadLocalTransactions: () => void;
   clearLocalTransactions: () => void;
 
-  setAvailableWallets: (wallets: Array<{name: string, rdns: string, icon?: string}>) => void;
+  setAvailableWallets: (wallets: Array<{ name: string, rdns: string, icon?: string }>) => void;
   setSelectedWallet: (rdns: string) => void;
 
   // Wallet operations
@@ -274,13 +275,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const g = get() as any;
     g.__depReqId = (g.__depReqId || 0) + 1;
     const reqId = g.__depReqId;
-    
+
     try {
       set({ isLoadingFeeEstimation: true });
       const fee = await fetchDepositFeeEstimation(amount);
       // only commit if this is the latest request
-      if ((get() as any).__depReqId === reqId){
-       set( () => ({feeEstimation: {fee}}));       
+      if ((get() as any).__depReqId === reqId) {
+        set(() => ({ feeEstimation: { fee } }));
       }
     } catch (error) {
       console.error(error);
@@ -292,7 +293,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   resetFeeEstimation: () => {
     set({ feeEstimation: null, isLoadingFeeEstimation: false });
   },
-  
+
   fetchTransactions: async () => {
     const { bitcoinAddress, viaAddress } = get();
 
@@ -380,7 +381,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   connectMetamask: async () => {
     try {
       console.log("🔹 Connecting to wallet...");
-            
+
       const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) {
         throw new Error("No wallet found. Please install MetaMask, Rabby, or another compatible wallet extension.");
@@ -535,16 +536,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   connectWallet: async (rdns: string) => {
     try {
       console.log(`🔹 Connecting to wallet with rdns: ${rdns}`);
-      
+
       const { eip6963Store } = await import("@/utils/eip6963-provider");
       const providerDetail = eip6963Store.getProviderByRdns(rdns);
-      
+
       if (!providerDetail) {
         throw new WalletNotFoundError(rdns);
       }
 
       const provider = providerDetail.provider;
-      
+
       // Request account access
       const accounts = await provider.request({
         method: "eth_requestAccounts",
@@ -580,26 +581,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   refreshAvailableWallets: () => {
-  try {
-    console.log("🔄 Refreshing available wallets...");
-    import("@/utils/eip6963-provider")
-      .then(({ eip6963Store }) => {
-        const providers = eip6963Store.getAllWalletProviders();
-        const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
-          name: resolveDisplayName(provider),
-          rdns: provider.info.rdns,
-          icon: resolveIcon(provider)
-        }));
+    try {
+      console.log("🔄 Refreshing available wallets...");
+      import("@/utils/eip6963-provider")
+        .then(({ eip6963Store }) => {
+          const providers = eip6963Store.getAllWalletProviders();
+          const wallets = providers.map((provider: EIP6963ProviderDetail) => ({
+            name: resolveDisplayName(provider),
+            rdns: provider.info.rdns,
+            icon: resolveIcon(provider)
+          }));
 
-        set({ availableWallets: wallets });
-        console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
-        walletEvents.walletRefreshed.emit();
-      })
-      .catch((error: any) => {
-        console.error("Error refreshing available wallets:", error);
-        // Don't throw, just log the error and continue with empty array
-        set({ availableWallets: [] });
-      });
+          set({ availableWallets: wallets });
+          console.log(`✅ Found ${wallets.length} available wallets:`, wallets);
+          walletEvents.walletRefreshed.emit();
+        })
+        .catch((error: any) => {
+          console.error("Error refreshing available wallets:", error);
+          // Don't throw, just log the error and continue with empty array
+          set({ availableWallets: [] });
+        });
     } catch (error: any) {
       console.error("Error refreshing available wallets:", error);
       // Don't throw, just log the error and continue with empty array

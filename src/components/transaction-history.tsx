@@ -104,7 +104,7 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
                       {tx.status === 'Processed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {tx.status === 'Failed' && <XCircle className="h-4 w-4 text-red-500" />}
 
-                      <span className="font-medium capitalize">{tx.type} {tx.amount} BTC</span>
+                      <span className="font-medium capitalize">{tx.type} {tx.amount} {tx.symbol || 'BTC'}</span>
                       <span className="text-xs text-muted-foreground">
                         {formatDistanceToNow(tx.timestamp, { addSuffix: true })}
                       </span>
