@@ -48,7 +48,8 @@ export default function Header() {
       if (connected) {
         toast.success("Xverse Connected", {
           description: "Successfully connected to your Xverse wallet.",
-          duration: 4000
+          duration: 4000,
+          dismissible: false,
         });
       }
     } catch (error) {
@@ -71,7 +72,8 @@ export default function Header() {
         const displayName = best?.name ?? "Web3 Wallet";
         toast.success(`${displayName} Connected`, {
           description: `Successfully connected to your ${displayName} wallet.`,
-          duration: 4000
+          duration: 4000,
+          dismissible: false,
         });
       }
     } catch (error) {
@@ -91,7 +93,8 @@ export default function Header() {
     disconnectXverse();
     toast.success("Xverse Disconnected", {
       description: "Successfully disconnected from your Xverse wallet.",
-      duration: 4000
+      duration: 4000,
+      dismissible: false,
     });
   };
 
@@ -101,7 +104,8 @@ export default function Header() {
     disconnectMetamask();
     toast.success(`${displayName} Disconnected`, {
       description: `Successfully disconnected from your ${displayName} wallet.`,
-      duration: 4000
+      duration: 4000,
+      dismissible: false,
     });
   };
 
@@ -221,7 +225,7 @@ export default function Header() {
               className="flex items-center gap-1 text font-medium text-slate-600 hover:text-slate-900 transition-colors border-2 border-blue-600 rounded-md px-2 py-1"
             >
               <Droplet className="w-4 h-4 text-blue-400" />
-              Testnet Faucet
+              VIA Testnet Faucet
             </Link>
           )}
 

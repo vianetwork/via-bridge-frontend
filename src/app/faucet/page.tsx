@@ -18,7 +18,7 @@ export default function FaucetPage() {
             VIA Testnet Faucet
           </h1>
           <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-            Get test BTC on the VIA network for testing and development
+            Get VIA Testnet BTC for testing and development
           </p>
         </div>
         <div className="flex items-start justify-center">

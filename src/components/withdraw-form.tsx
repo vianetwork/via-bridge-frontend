@@ -76,6 +76,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       try {
         setIsLoadingBalance(true);
         const balanceInBtc = await getViaBalance(viaAddress);
+        console.log("balanceInBtc", balanceInBtc);
         setBalance(balanceInBtc);
       } catch (error) {
         console.error("Error fetching balance:", error);
@@ -168,6 +169,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
         description: "Your withdrawal transaction has been submitted to the VIA network.",
         duration: 5000,
         className: "text-base font-medium",
+        dismissible: false,
       });
 
       onTransactionSubmitted();
@@ -331,7 +333,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                           "text-amber-500"
                         )}
                       >
-                        {(Number(balance)).toFixed(4)} BTC
+                        {(Number(balance)).toFixed(8)} BTC
                       </span>
                     )}
                   </div>
