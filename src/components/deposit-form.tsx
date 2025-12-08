@@ -215,6 +215,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
         description: "Your deposit transaction has been submitted to the Bitcoin network.",
         duration: 5000,
         className: "text-base font-medium",
+        dismissible: false,
       });
 
       // Add to onSubmit function after setting txHash and explorerUrl

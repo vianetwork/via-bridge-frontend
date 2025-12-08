@@ -39,6 +39,14 @@ export default function Footer() {
           >
             GitHub
           </a>
+          <a 
+            href="https://t.me/vianetwork_xyz" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="hover:text-primary transition-colors"
+          >
+            Telegram
+          </a>   
         </div>
       </div>
     </footer>
