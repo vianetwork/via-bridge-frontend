@@ -231,9 +231,12 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
             <AvailableBalanceDisplay balance={balance} unit={unit} isLoading={isLoadingBalance} />
           </div>
 
-          <div className="mb-6">
-            <AmountSlider value={amountNumber} max={maxAmount} onChange={handleSliderChange} unit={unit}/>
-          </div>
+          {/*Amount slider conditionally shown if balance is available*/}
+          {balance && parseFloat(balance) > 0 &&(
+            <div className="mb-6">
+              <AmountSlider value={amountNumber} max={maxAmount} onChange={handleSliderChange} unit={unit}/>
+            </div>
+          )}
 
           {/*Transaction Summary*/}
           <div className="mb-8">
