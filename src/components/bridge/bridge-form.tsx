@@ -222,10 +222,12 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           {/*Network Lane*/}
           <NetworkLaneSelector route={route} onSwap={handleSwap} />
 
-          {/*Amount section*/}
-          <div className="space-y-6 mb-8">
-            <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} maxDisabled={!balance || parseFloat(balance) <= 0}/>
-          </div>
+          {/*Amount section conditionally shown if a balance is available*/}
+          { balance && parseFloat(balance) > 0 && (
+            <div className="space-y-6 mb-8">
+              <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} maxDisabled={!balance || parseFloat(balance) <= 0}/>
+            </div>
+          )}
 
           <div className="mb-6">
             <AvailableBalanceDisplay balance={balance} unit={unit} isLoading={isLoadingBalance} />
