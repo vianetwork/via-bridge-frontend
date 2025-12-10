@@ -13,7 +13,7 @@ import { useWalletState } from "@/hooks/use-wallet-state";
 import AltchaWidget, { AltchaWidgetRef } from "@/components/altcha-widget";
 import { useAltcha } from "@/hooks/use-altcha";
 import { API_BASE_URL, getNetworkConfig } from "@/services/config";
-import WalletConnectButton from "@/components/wallet-connect-button";
+import { WalletConnectButton } from "@/components/wallets/connect-button";
 
 interface FaucetRequest {
   address: string;
@@ -26,8 +26,6 @@ export default function FaucetInterface() {
   const {
     viaAddress,
     isMetamaskConnected,
-    connectMetamask,
-    disconnectMetamask,
   } = useWalletState();
 
 
@@ -283,13 +281,9 @@ export default function FaucetInterface() {
         </CardHeader>
         {
           !isMetamaskConnected ? (
-            <WalletConnectButton
-              walletType="metamask"
-              isConnected={isMetamaskConnected}
-              helperText={false}
-              onConnect={connectMetamask}
-              onDisconnect={disconnectMetamask}
-            />
+            <CardContent className="flex justify-center py-6">
+              <WalletConnectButton />
+            </CardContent>
           ) :
             <CardContent className="space-y-4">
               <div className="space-y-2">

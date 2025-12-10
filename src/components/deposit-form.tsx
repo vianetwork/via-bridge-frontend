@@ -1,3 +1,4 @@
+// src/components/deposit-form.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -22,6 +23,9 @@ import { useDebounce } from "@/hooks/useDebounce";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { toL1Amount } from "@/helpers";
+import ApprovalModal from "@/components/approval-modal";
+import { GetCurrentRoute } from "@/services/bridge/routes";
+import { isAbortError } from "@/utils/promise";
 
 interface DepositFormProps {
   bitcoinAddress: string | null
@@ -84,12 +88,32 @@ const verifyRecipientAddress = (address: string): boolean => {
 };
 
 export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransactionSubmitted }: DepositFormProps) {
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  // clean any in-flight operations if the component unmounts
+  useEffect(() => {
+    return () => {
+      abortController?.abort();
+    };
+  }, [abortController]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState(false);
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
+
+  // Get the current bridge route configuration
+  const bridgeRoute  = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork);
+  const { fromNetwork, toNetwork, token } = bridgeRoute;
+
+  // Calculate net BTC amount after fee estimation
+  const calculateNetBTCAmount = (amountBtc: string, fee: number) => {
+    const amountSats = toL1Amount(amountBtc);
+    const netSats = amountSats - fee;
+    return (netSats / Math.pow(10, L1_BTC_DECIMALS)).toFixed(8);
+  };
 
   // Import the wallet store to get the VIA address
   const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchDepositFeeEstimation, resetFeeEstimation } = useWalletStore();
@@ -183,7 +207,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const insufficientNet = feeEstimation ? netSats < 0 : false;
   const hasAmount = Boolean((form.watch("amount") || "").trim());
 
+  const handleCancelDeposit = () => {
+    abortController?.abort();
+  };
+
   async function onSubmit(values: z.infer<typeof depositFormSchema>) {
+    if (isSubmitting) return; // prevent concurrent submissions
     try {
       setIsSubmitting(true);
 
@@ -200,12 +229,19 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
       const normalizedAddress = getAddress(values.recipientViaAddress); // EIP-55 checksummed 0x address
       const recipientAddress = normalizedAddress.slice(2); // bridge API expects a raw 20-byte hex string (no "0x"), so we strip the prefix.
 
+      // abort controller
+      const controller = new AbortController();
+      setAbortController(controller);
+
+      setApprovalOpen(true);
+
       // Execute the deposit
       const result = await executeDeposit({
         bitcoinAddress,
         bitcoinPublicKey,
         recipientViaAddress: recipientAddress,
         amountInBtc: Number.parseFloat(values.amount),
+        signal: controller.signal,
       });
 
       setTxHash(result.txId);
@@ -231,6 +267,12 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
 
     } catch (error) {
       console.error("Deposit error:", error);
+      if (isAbortError(error)) {
+        toast.info("Deposit cancelled", {
+          description: "You cancelled the deposit transaction.",
+        });
+        return;
+      }
       if (error instanceof Error && error.message.includes("No UTXOs found with at least")) {
         toast("Waiting for confirmations", {
           description: `We couldn't find any UTXOs with at least ${BRIDGE_CONFIG.minBlockConfirmations} confirmations yet. Please wait for your transactions to be confirmed and try again.`,
@@ -246,6 +288,8 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
       }
     } finally {
       setIsSubmitting(false);
+      setApprovalOpen(false);
+      setAbortController(null);
     }
   }
 
@@ -430,6 +474,15 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
                   </div>
                 )}
 
+                {/* Alert when balance is zero */}
+                {balance && Number(balance) === 0 && (
+                  <Alert className="mt-3 bg-amber-50 border-amber-200">
+                    <AlertDescription className="text-amber-800 text-sm">
+                      Your Bitcoin balance is empty. Ensure you have the correct wallet connected or acquire BTC first to make deposits.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* balance usage progress and slider*/}
                 {balance && Number(balance) > 0 && (
                   <FormAmountSlider
@@ -538,6 +591,25 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
           </div>
         </form>
       </Form>
+
+      <ApprovalModal
+        open={approvalOpen}
+        onOpenChange={setApprovalOpen}
+        onCancel={handleCancelDeposit}
+        direction="deposit"
+        title="Waiting for Approval"
+        transactionData={{
+          fromAmount: form.getValues("amount") || "0",
+          toAmount: feeEstimation ? calculateNetBTCAmount(form.getValues("amount") || "0", feeEstimation.fee): undefined,
+          fromToken: token,
+          toToken: token,
+          fromNetwork: fromNetwork,
+          toNetwork: toNetwork,
+          recipientAddress: form.getValues("recipientViaAddress") || "",
+          networkFee: feeEstimation ? `${feeEstimation.fee.toLocaleString()} sats` : undefined,
+          estimatedTime: "15-30 minutes",
+        }}
+      />
     </div>
   );
 }

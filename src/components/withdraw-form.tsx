@@ -1,6 +1,9 @@
+// src/components/withdraw-form.tsx
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { GetCurrentRoute} from "@/services/bridge/routes";
+import { BRIDGE_CONFIG } from "@/services/config";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -21,6 +24,9 @@ import { useDebounce } from "@/hooks/useDebounce";
 import NetworkRouteBanner from "@/components/ui/network-route-banner";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { verifyBitcoinAddress } from "@/utils/address";
+import ApprovalModal from "@/components/approval-modal";
+import { L1_BTC_DECIMALS } from "@/services/constants";
+import { isAbortError } from "@/utils/promise";
 
 interface WithdrawFormProps {
   viaAddress: string | null
@@ -54,6 +60,25 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [amount, setAmount] = useState("0");
+  const [approvalOpen, setApprovalOpen] = useState(false);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  // Cleanup any-inflight operation if component unmounts'
+  useEffect(() => {
+    return () => {
+      abortController?.abort() ;
+    };
+  }, [abortController]);
+
+  // Get the current bridge route configuration
+  const bridgeRoute = GetCurrentRoute('withdraw', BRIDGE_CONFIG.defaultNetwork);
+  const { fromNetwork, toNetwork, token } = bridgeRoute;
+
+  // Calculate net BTC amount after fee estimation
+  const calculateNetBTCAmount = (amountBtc: string, fee: number) => {
+    const amountSats = toL1Amount(amountBtc);
+    const netSats = amountSats - fee;
+    return (netSats / Math.pow(10, L1_BTC_DECIMALS)).toFixed(8);
+  };
 
   // Import the wallet store to get the Bitcoin address
   const { addLocalTransaction, isLoadingFeeEstimation, feeEstimation, fetchFeeEstimation, resetFeeEstimation } = useWalletStore();
@@ -121,6 +146,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     const insufficientNet = feeEstimation ? netSats < 0 : false;
     const hasAmount = Boolean((form.watch("amount") || "").trim());
 
+    // handle cancellation from approval modal
+  const handleCancelWithdraw = () => {
+    if (abortController) abortController.abort();
+  };
+
   // Derived form validity for CTA state
   const recipient = form.watch("recipientBitcoinAddress");
   const recipientValid = verifyBitcoinAddress(recipient);
@@ -133,10 +163,11 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   const ctaLabel = canSubmit ? "Withdraw" : (!recipient ? "Connect wallet or enter address" : (recipientValid ? "Enter withdraw amount" : "Enter a valid BTC address"));
 
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
+    if (isSubmitting) return; // prevent concurrent submissions
     if (!viaAddress) {
       toast.error("VIA address is required", {description: "Please connect your VIA wallet to proceed with the withdrawal.",});
       return;
-    }
+  }
 
     try {
       setIsSubmitting(true);
@@ -151,9 +182,14 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
         return;
       }
 
+      const controller = new AbortController();
+      setAbortController(controller);
+      setApprovalOpen(true);
+
       const result = await executeWithdraw({
         amount: values.amount,
         recipientBitcoinAddress: values.recipientBitcoinAddress,
+        signal: controller.signal,
       });
       setTxHash(result.txHash);
       setExplorerUrl(result.explorerUrl);
@@ -175,8 +211,16 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
       onTransactionSubmitted();
     } catch (error) {
       console.error("Withdrawal error:", error);
+      if (isAbortError(error)) {
+        toast.info("Withdrawal cancelled", {
+          description: "You cancelled the withdrawal transaction.",
+        });
+        return;
+      }
     } finally {
       setIsSubmitting(false);
+      setApprovalOpen(false);
+      setAbortController(null);
     }
   }
 
@@ -339,6 +383,15 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                   </div>
                 )}
 
+                {/* Alert when balance is zero */}
+                {balance && Number(balance) === 0 && (
+                  <Alert className="mt-3 bg-amber-50 border-amber-200">
+                    <AlertDescription className="text-amber-800 text-sm">
+                      Your VIA balance is empty. Ensure you have the correct wallet connected or deposit BTC first to make withdrawals.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {/* balance usage progress */}
                 {balance && Number(balance) >0 && (
                   <FormAmountSlider
@@ -443,6 +496,23 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           </Button>
         </form>
       </Form>
+      <ApprovalModal
+        open={approvalOpen}
+        onOpenChange={setApprovalOpen}
+        onCancel={handleCancelWithdraw}
+        direction="withdraw"
+        title='Waiting for approval'
+        transactionData={{
+          fromAmount: form.getValues("amount") || "0",
+          toAmount: feeEstimation ? calculateNetBTCAmount(form.getValues("amount") || "0", feeEstimation.fee): undefined,
+          fromNetwork: fromNetwork,
+          toToken: token,
+          toNetwork: toNetwork,
+          fromToken: token,
+          recipientAddress: form.getValues("recipientBitcoinAddress") || "",
+          networkFee: feeEstimation ? `${feeEstimation.fee.toLocaleString()} sats` : undefined,
+        }}
+        />
     </div>
   );
 }
