@@ -16,7 +16,8 @@ export const VAULT_ABI = [
 ];
 
 export const BRIDGE_ABI = [
-  "function claimWithdrawal(uint256 nonce, uint256 shares, address l1Receiver) external"
+  "function claimWithdrawal(uint256 nonce, uint256 shares, address l1Receiver) external",
+  "function withdrawalInfo(bytes32 messageHash) view returns (bool isClaimed, uint256 batchNumber)"
 ];
 
 export const MESSAGE_MANAGER_ABI = [

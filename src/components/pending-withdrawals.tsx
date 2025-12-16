@@ -12,8 +12,8 @@ import {
 import { Loader2, ExternalLink, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { ethers } from "ethers";
 import { toast } from "sonner";
-import { BRIDGE_ABI, MESSAGE_MANAGER_ABI } from "@/services/ethereum/abis";
-import { EthereumNetwork, MESSAGE_MANAGER_ADDRESSES, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
+import { BRIDGE_ABI } from "@/services/ethereum/abis";
+import { EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
 import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
@@ -114,19 +114,21 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     autoSwitchToSepolia();
   }, [open, isMetamaskConnected, switchToEthereum, checkL1Network, viaAddress, l1Address, setIsL1Connected, setL1Address]);
 
-  // Filter pending withdrawals (withdrawals that are ExecutedOnL2 but not yet ExecutedOnL1)
+  // Filter withdrawals - include all withdrawals with required data
+  // We rely on on-chain checks (MessageManager + vault.withdrawalInfo) as source of truth
+  // Don't filter by API status/l1ExplorerUrl since API might be out of sync
   const pendingWithdrawalsBase = transactions
     .filter(tx => 
       tx.type === 'withdraw' && 
-      tx.isPendingClaim && 
       tx.withdrawalId && 
       tx.withdrawalShares &&
-      tx.withdrawalPayloadHash
+      tx.withdrawalPayloadHash &&
+      tx.withdrawalL1Vault
     )
     .map(tx => ({
       nonce: tx.withdrawalId!,
       shares: tx.withdrawalShares!,
-      l1Vault: tx.withdrawalL1Vault || '',
+      l1Vault: tx.withdrawalL1Vault!,
       l1Receiver: tx.withdrawalRecipient || l1Address || viaAddress || '',
       payloadHash: tx.withdrawalPayloadHash!,
       l2TxHash: tx.txHash,
@@ -138,18 +140,19 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
 
   // Check withdrawal readiness when transactions change (even when modal is closed)
   useEffect(() => {
-    // Get pending withdrawals from transactions
+    // Get withdrawals to check - we check ALL withdrawals with required data,
+    // not just those marked as pending, since we determine readiness from MessageManager
     const withdrawalsToCheck = transactions
       .filter(tx => 
         tx.type === 'withdraw' && 
-        tx.isPendingClaim && 
         tx.withdrawalId && 
         tx.withdrawalShares &&
-        tx.withdrawalPayloadHash
+        tx.withdrawalPayloadHash &&
+        tx.withdrawalL1Vault
       )
       .map(tx => ({
         payloadHash: tx.withdrawalPayloadHash!,
-        l1Vault: tx.withdrawalL1Vault || '',
+        l1Vault: tx.withdrawalL1Vault!,
         nonce: tx.withdrawalId!,
       }))
       .filter(w => w.payloadHash && w.l1Vault);
@@ -167,12 +170,10 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
       try {
         const sepoliaConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
         const provider = new ethers.JsonRpcProvider(sepoliaConfig.rpcUrls[0]);
-        const messageManagerAddress = MESSAGE_MANAGER_ADDRESSES[EthereumNetwork.SEPOLIA];
-        const messageManager = new ethers.Contract(messageManagerAddress, MESSAGE_MANAGER_ABI, provider);
 
         const statusMap = new Map<string, boolean>();
 
-        // Check each withdrawal's readiness
+        // Check each withdrawal's readiness by checking vault's withdrawalInfo
         for (const withdrawal of withdrawalsToCheck) {
           try {
             const payloadHash = withdrawal.payloadHash.startsWith('0x') 
@@ -183,20 +184,26 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
             const hexWithoutPrefix = payloadHash.slice(2);
             if (hexWithoutPrefix.length !== 64) {
               console.error(`Invalid payload hash length for withdrawal ${withdrawal.nonce}: expected 64 hex chars, got ${hexWithoutPrefix.length}`);
-              statusMap.set(withdrawal.payloadHash, false);
+              statusMap.set(payloadHash.toLowerCase(), false);
               continue;
             }
             
-            // Use the payload hash directly (it's already keccak256, so it's 32 bytes)
-            const [status, vault] = await messageManager.getMessageInfo(payloadHash);
-            
-            // Verify the vault matches
-            const vaultMatches = vault.toLowerCase() === withdrawal.l1Vault.toLowerCase();
-            statusMap.set(withdrawal.payloadHash, status && vaultMatches);
+            // Check the vault contract to see if this withdrawal exists and is claimed
+            const vaultContract = new ethers.Contract(withdrawal.l1Vault, BRIDGE_ABI, provider);
+            const [isClaimed] = await vaultContract.withdrawalInfo(payloadHash);
+
+            // Ready if withdrawal exists in mapping and is not claimed
+            // If withdrawal doesn't exist in mapping, isClaimed will be false (default)
+            const isReady = !isClaimed;
+            statusMap.set(payloadHash.toLowerCase(), isReady);
           } catch (error) {
-            console.error(`Error checking readiness for withdrawal ${withdrawal.nonce}:`, error);
+            console.error(`[PendingWithdrawals] Error checking withdrawal info for withdrawal ${withdrawal.nonce}:`, error);
             // On error, assume not ready
-            statusMap.set(withdrawal.payloadHash, false);
+            // Normalize the hash for consistent storage
+            const errorPayloadHash = withdrawal.payloadHash.startsWith('0x') 
+              ? withdrawal.payloadHash.toLowerCase() 
+              : `0x${withdrawal.payloadHash.toLowerCase()}`;
+            statusMap.set(errorPayloadHash, false);
           }
         }
 
@@ -208,7 +215,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
           onReadyCountChange(readyCount);
         }
       } catch (error) {
-        console.error("Error checking withdrawal readiness:", error);
+        console.error("[PendingWithdrawals] Error checking withdrawal readiness:", error);
         // On error, report 0 ready (only on client-side after mount)
         if (isMounted && onReadyCountChange) {
           onReadyCountChange(0);
@@ -222,13 +229,24 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   }, [transactions, onReadyCountChange, isMounted]);
 
   // Map readiness status to withdrawals
-  const pendingWithdrawals: PendingWithdrawal[] = pendingWithdrawalsBase.map(w => ({
-    ...w,
-    isReady: readinessStatus.get(w.payloadHash) ?? false,
-  }));
+  // Normalize payload hash for lookup (ensure 0x prefix and lowercase)
+  const pendingWithdrawals: PendingWithdrawal[] = pendingWithdrawalsBase.map(w => {
+    const normalizedHash = w.payloadHash.startsWith('0x') 
+      ? w.payloadHash.toLowerCase() 
+      : `0x${w.payloadHash.toLowerCase()}`;
+    const isReady = readinessStatus.get(normalizedHash) ?? false;
+    return {
+      ...w,
+      isReady,
+    };
+  });
 
   const handleClaim = async (withdrawal: PendingWithdrawal) => {
-    if (!isCorrectL1Network) {
+    // Check network state from store directly for more reliable check
+    const store = useWalletStore.getState();
+    const isOnSepolia = store.isCorrectL1Network;
+    
+    if (!isOnSepolia) {
       toast.error("Please connect to Sepolia network", {
         description: "You need to be connected to Sepolia network to claim withdrawals.",
       });
@@ -238,7 +256,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     try {
       setClaimingIds(prev => new Set(prev).add(withdrawal.nonce));
 
-      // Ensure we're on Sepolia
+      // Ensure we're on Sepolia and get signer
       const networkResult = await ensureEthereumNetwork(EthereumNetwork.SEPOLIA);
       if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
         throw new Error(networkResult.error || "Please switch your wallet to Sepolia network manually.");
@@ -249,35 +267,69 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
       // Use L1 vault address from API response
       const vaultAddress = withdrawal.l1Vault;
       
-      if (!vaultAddress || vaultAddress === "0x...") {
-        throw new Error("Vault address not found in withdrawal data.");
+      if (!vaultAddress || vaultAddress === "0x..." || !ethers.isAddress(vaultAddress)) {
+        throw new Error("Invalid vault address in withdrawal data.");
+      }
+
+      // Validate addresses
+      const l1Receiver = withdrawal.l1Receiver;
+      if (!l1Receiver || !ethers.isAddress(l1Receiver)) {
+        throw new Error("Invalid L1 receiver address in withdrawal data");
+      }
+
+      // Parse the nonce and shares from withdrawal data (from API)
+      let nonce: bigint;
+      let shares: bigint;
+      
+      try {
+        nonce = BigInt(withdrawal.nonce);
+        shares = BigInt(withdrawal.shares);
+      } catch (parseError) {
+        throw new Error(`Invalid nonce or shares value: ${parseError}`);
+      }
+
+      if (nonce < 0n || shares <= 0n) {
+        throw new Error("Invalid nonce or shares value");
       }
 
       const vaultContract = new ethers.Contract(vaultAddress, BRIDGE_ABI, signer);
-      
-      // Parse the nonce and shares from withdrawal data (from API)
-      const nonce = BigInt(withdrawal.nonce);
-      const shares = BigInt(withdrawal.shares);
-      // Use recipient from API response
-      const l1Receiver = withdrawal.l1Receiver;
-
-      if (!l1Receiver) {
-        throw new Error("L1 receiver address not found in withdrawal data");
-      }
-
-      console.log(`[Claim] Vault: ${vaultAddress}, Nonce: ${nonce}, Shares: ${shares}, Recipient: ${l1Receiver}`);
 
       toast.info("Claiming withdrawal...", {
         description: "Please sign the transaction in your wallet.",
       });
 
-      const tx = await vaultContract.claimWithdrawal(nonce, shares, l1Receiver);
+      // Call claimWithdrawal with proper error handling
+      let tx;
+      try {
+        tx = await vaultContract.claimWithdrawal(nonce, shares, l1Receiver);
+      } catch (txError: any) {
+        // Handle contract call errors
+        if (txError.code === 'ACTION_REJECTED' || txError.message?.includes('user rejected') || txError.message?.includes('User rejected')) {
+          throw { code: 'ACTION_REJECTED', message: 'User rejected the transaction' };
+        }
+        // Check for revert reasons
+        if (txError.reason) {
+          throw new Error(`Transaction failed: ${txError.reason}`);
+        }
+        if (txError.data) {
+          throw new Error(`Transaction failed: ${txError.message || 'Unknown error'}`);
+        }
+        throw txError;
+      }
       
       toast.info("Transaction submitted", {
         description: "Waiting for confirmation...",
       });
 
-      await tx.wait();
+      try {
+        await tx.wait();
+      } catch (waitError: any) {
+        // Transaction was sent but failed on-chain
+        if (waitError.receipt && waitError.receipt.status === 0) {
+          throw new Error("Transaction failed on-chain. Please check the transaction details.");
+        }
+        throw waitError;
+      }
 
       toast.success("Withdrawal claimed successfully!", {
         description: `Transaction: ${tx.hash}`,
@@ -292,13 +344,17 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     } catch (error: any) {
       console.error("Claim error:", error);
       
-      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected')) {
+      if (error.code === 'ACTION_REJECTED' || error.message?.includes('user rejected') || error.message?.includes('User rejected')) {
         toast.error("Transaction Rejected", {
-          description: "User rejected the transaction.",
+          description: "You rejected the transaction in your wallet.",
+        });
+      } else if (error.message) {
+        toast.error("Claim Failed", {
+          description: error.message,
         });
       } else {
         toast.error("Claim Failed", {
-          description: error.message || "Something went wrong. Please try again.",
+          description: "Something went wrong. Please try again.",
         });
       }
     } finally {
@@ -322,7 +378,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
               <Clock className="h-5 w-5" />
               Pending Withdrawals
             </span>
-            <Badge variant="secondary">{pendingWithdrawals.filter(w => w.isReady).length}</Badge>
+            {isMounted && <Badge variant="secondary">{pendingWithdrawals.filter(w => w.isReady).length}</Badge>}
           </DialogTitle>
         </DialogHeader>
 
@@ -389,13 +445,31 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
         )}
 
         {pendingWithdrawals.filter(w => w.isReady).length === 0 && !isCheckingReadiness ? (
-          <div className="text-center py-8 text-muted-foreground">
-            <p>No withdrawals ready to claim.</p>
-            {pendingWithdrawals.length > 0 && (
-              <p className="text-xs mt-2">
-                {pendingWithdrawals.length} withdrawal{pendingWithdrawals.length > 1 ? 's' : ''} pending verification...
-              </p>
-            )}
+          <div className="text-center py-8 space-y-4">
+            <div className="text-muted-foreground">
+              <p>No withdrawals ready to claim.</p>
+              {pendingWithdrawals.length > 0 && (
+                <p className="text-xs mt-2">
+                  {pendingWithdrawals.length} withdrawal{pendingWithdrawals.length > 1 ? 's' : ''} pending verification...
+                </p>
+              )}
+            </div>
+            
+            {/* Info message about withdrawals */}
+            <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg text-left max-w-md mx-auto">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-2">
+                  <p className="text-sm font-medium text-blue-900">
+                    Withdrawal Processing
+                  </p>
+                  <p className="text-xs text-blue-700 leading-relaxed">
+                    After you submit a withdrawal, you can withdraw again immediately. 
+                    When your withdrawal is ready to claim, it will appear here automatically.
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <div className="space-y-3 mt-4">
@@ -433,7 +507,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
                       </a>
                       <span>•</span>
                       <span>
-                        {new Date(withdrawal.timestamp).toLocaleDateString()}
+                        {isMounted ? new Date(withdrawal.timestamp).toLocaleDateString() : ''}
                       </span>
                     </div>
                   </div>

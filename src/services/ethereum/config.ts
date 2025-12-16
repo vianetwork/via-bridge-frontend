@@ -24,16 +24,6 @@ export const AAVE_POOL_ADDRESSES = {
   [EthereumNetwork.SEPOLIA]: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
 };
 
-// Bridge Contract Addresses (for claiming withdrawals on L1)
-export const BRIDGE_ADDRESSES = {
-  [EthereumNetwork.SEPOLIA]: process.env.NEXT_PUBLIC_BRIDGE_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000", // TODO: Add real bridge address
-};
-
-// Message Manager Contract Addresses (for checking withdrawal readiness)
-export const MESSAGE_MANAGER_ADDRESSES = {
-  [EthereumNetwork.SEPOLIA]: "0x51Df0d26818d3ee4Ff115defd96Eee88425A2Cd7",
-};
-
 export const SUPPORTED_ASSETS = [
   {
     symbol: "USDC",

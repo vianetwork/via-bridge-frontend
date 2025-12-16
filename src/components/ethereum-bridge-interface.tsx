@@ -373,16 +373,25 @@ export default function EthereumBridgeInterface() {
                             >
                                 Withdraw
                                 {pendingWithdrawalsCount > 0 && (
-                                    <button
+                                    <span
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             setIsPendingWithdrawalsOpen(true);
                                         }}
-                                        className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-bold hover:bg-red-600 transition-colors"
+                                        role="button"
+                                        tabIndex={0}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setIsPendingWithdrawalsOpen(true);
+                                            }
+                                        }}
+                                        className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-bold hover:bg-red-600 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
                                         title={`${pendingWithdrawalsCount} pending withdrawal${pendingWithdrawalsCount > 1 ? 's' : ''} ready to claim`}
                                     >
                                         {pendingWithdrawalsCount}
-                                    </button>
+                                    </span>
                                 )}
                             </TabsTrigger>
                         </TabsList>
@@ -476,7 +485,7 @@ export default function EthereumBridgeInterface() {
                                         <div className="flex items-center gap-2">
                                             <Clock className="h-4 w-4 text-blue-600" />
                                             <p className="text-sm text-blue-900">
-                                                You have <span className="font-semibold">{pendingWithdrawalsCount}</span> pending withdrawal claim{pendingWithdrawalsCount > 1 ? 's' : ''} ready to claim on Sepolia.
+                                                You have <span className="font-semibold">{pendingWithdrawalsCount}</span> pending withdrawal claim{pendingWithdrawalsCount > 1 ? 's' : ''}.
                                             </p>
                                         </div>
                                         <Button

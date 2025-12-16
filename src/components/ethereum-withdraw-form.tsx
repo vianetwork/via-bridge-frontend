@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -68,39 +68,62 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
     }, [balance, form]);
 
     // Fetch Balance from L2
-    useEffect(() => {
-        async function fetchBalance() {
-            // Need wallet address, correct network, and vault contract
-            if (!viaAddress || !isCorrectViaNetwork) return;
+    const fetchBalance = useCallback(async () => {
+        // Need wallet address, correct network, and vault contract
+        if (!viaAddress || !isCorrectViaNetwork) return;
 
-            try {
-                setIsLoadingBalance(true);
-                const networkConfig = getNetworkConfig();
-                const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
+        try {
+            setIsLoadingBalance(true);
+            const networkConfig = getNetworkConfig();
+            const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
 
-                // Check L2 balance
-                const targetContract = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
+            // Check L2 balance
+            const targetContract = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
 
-                if (!targetContract) {
-                    setBalance(null);
-                    return;
-                }
-
-                const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, provider);
-                const bal = await tokenContract.balanceOf(viaAddress);
-                const balFormatted = ethers.formatUnits(bal, asset.decimals);
-                setBalance(balFormatted);
-            } catch (err) {
-                console.error("Error fetching L2 balance:", err);
+            if (!targetContract) {
                 setBalance(null);
-            } finally {
-                setIsLoadingBalance(false);
+                return;
             }
-        }
 
-        fetchBalance();
-        // Refresh on wallet address, network state, asset, or yield mode change
+            const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, provider);
+            const bal = await tokenContract.balanceOf(viaAddress);
+            const balFormatted = ethers.formatUnits(bal, asset.decimals);
+            setBalance(balFormatted);
+        } catch (err) {
+            console.error("Error fetching L2 balance:", err);
+            setBalance(null);
+        } finally {
+            setIsLoadingBalance(false);
+        }
     }, [viaAddress, isCorrectViaNetwork, asset, isYield]);
+
+    // Initial fetch and refresh on dependencies change
+    useEffect(() => {
+        fetchBalance();
+    }, [fetchBalance]);
+
+    // Periodic refresh every 10 seconds
+    useEffect(() => {
+        if (!viaAddress || !isCorrectViaNetwork) return;
+
+        const interval = setInterval(() => {
+            fetchBalance();
+        }, 10000); // Refresh every 10 seconds
+
+        return () => clearInterval(interval);
+    }, [viaAddress, isCorrectViaNetwork, fetchBalance]);
+
+    // Refresh when tab becomes visible
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible' && viaAddress && isCorrectViaNetwork) {
+                fetchBalance();
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, [viaAddress, isCorrectViaNetwork, fetchBalance]);
 
 
     async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
@@ -157,6 +180,9 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
             toast.success("Withdrawal Submitted", {
                 description: `Withdrawing ${values.amount} ${asset.symbol}`,
             });
+
+            // Refresh balance after successful withdrawal
+            await fetchBalance();
         } catch (error: any) {
             console.error("Withdrawal error:", error);
             if (error?.code === 'ACTION_REJECTED' || error?.message?.includes('user rejected')) {
@@ -230,6 +256,21 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
                                     <p className="font-mono text-xs bg-background/80 p-3 rounded-md break-all text-muted-foreground">
                                         {txHash}
                                     </p>
+                                </div>
+                            </div>
+
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                    <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                    <div className="flex-1 space-y-1">
+                                        <p className="text-sm font-medium text-blue-900">
+                                            Next Steps
+                                        </p>
+                                        <p className="text-xs text-blue-700 leading-relaxed">
+                                            You can withdraw again immediately. When your withdrawal is ready to claim, 
+                                            it will appear in the <span className="font-semibold">Pending Withdrawals</span> modal automatically.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
 
