@@ -3,9 +3,12 @@ import { Layer } from '@/services/config';
 import { createEvent } from "@/utils/events";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { WalletNotFoundError } from "@/utils/wallet-errors";
-import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimation, fetchDepositFeeEstimation } from "@/services/api";
+import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchEthUserTransactions, mapEthApiTransactionsToAppFormat, fetchFeeEstimation, fetchDepositFeeEstimation } from "@/services/api";
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
+import { switchToL1Network, switchToL2Network } from "@/utils/network-switcher";
+import { switchToEthereumNetwork } from "@/utils/network-switcher";
+import { EthereumNetwork } from "@/services/ethereum/config";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -28,7 +31,7 @@ export type TransactionStatus =
   'Processed' |
   'Failed'
 
-interface Transaction {
+export interface Transaction {
   id: string;
   type: 'deposit' | 'withdraw';
   amount: string;
@@ -38,6 +41,13 @@ interface Transaction {
   l1ExplorerUrl?: string;
   l2ExplorerUrl?: string;
   symbol?: string;
+  // Additional fields for pending withdrawals
+  withdrawalId?: string; // nonce for claiming
+  withdrawalShares?: string; // shares amount for claiming
+  withdrawalRecipient?: string; // L1 recipient address for claiming
+  withdrawalL1Vault?: string; // L1 vault address for claiming
+  withdrawalPayloadHash?: string; // payload hash for checking readiness via MessageManager
+  isPendingClaim?: boolean; // true if withdrawal is ready to claim on L1
 }
 
 interface FeeEstimation {
@@ -85,11 +95,17 @@ interface WalletState {
   bitcoinAddress: string | null;
   bitcoinPublicKey: string | null;
   viaAddress: string | null;
+  chainId: string | null;
+  l1Address: string | null;
   isXverseConnected: boolean;
   isMetamaskConnected: boolean;
+  isL1Connected: boolean;
   isCorrectBitcoinNetwork: boolean;
   isCorrectViaNetwork: boolean;
-  transactions: Transaction[];
+  isCorrectL1Network: boolean;
+  btcTransactions: Transaction[];
+  ethTransactions: Transaction[];
+  transactions: Transaction[]; // Deprecated? Kept for compatibility if needed, or we can just remove it.
   isLoadingTransactions: boolean;
   isLoadingFeeEstimation: boolean;
   localTransactions: Transaction[];
@@ -103,20 +119,26 @@ interface WalletState {
   setBitcoinAddress: (address: string | null) => void;
   setBitcoinPublicKey: (publicKey: string | null) => void;
   setViaAddress: (address: string | null) => void;
+  setL1Address: (address: string | null) => void;
+  setChainId: (chainId: string | null) => void;
   setIsXverseConnected: (connected: boolean) => void;
   setIsMetamaskConnected: (connected: boolean) => void;
+  setIsL1Connected: (connected: boolean) => void;
   setIsCorrectBitcoinNetwork: (correct: boolean) => void;
   setIsCorrectViaNetwork: (correct: boolean) => void;
   addTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   updateTransactionStatus: (txHash: string, status: Transaction['status']) => void;
   clearTransactions: () => void;
-  fetchTransactions: () => Promise<void>;
+  fetchTransactions: () => Promise<void>; // Deprecated or wrapper
+  fetchBtcTransactions: () => Promise<void>;
+  fetchEthTransactions: () => Promise<void>;
+
   fetchFeeEstimation: (amount: number) => Promise<void>;
   fetchDepositFeeEstimation(amount: number): Promise<void>;
   resetFeeEstimation: () => void;
   addLocalTransaction: (tx: Omit<Transaction, 'id' | 'timestamp'>) => void;
   removeLocalTransaction: (txHash: string) => void;
-  mergeTransactions: (apiTransactions: Transaction[]) => Transaction[];
+  mergeTransactions: (apiTransactions: Transaction[], type?: 'BTC' | 'ETH') => Transaction[];
   loadLocalTransactions: () => void;
   clearLocalTransactions: () => void;
 
@@ -126,6 +148,7 @@ interface WalletState {
   // Wallet operations
   connectXverse: () => Promise<boolean>;
   connectMetamask: () => Promise<boolean>;
+  connectL1Wallet: () => Promise<boolean>;
   disconnectXverse: () => void;
   disconnectMetamask: () => void;
   switchNetwork: (layer: Layer) => Promise<boolean | void>;
@@ -135,6 +158,7 @@ interface WalletState {
   // Helper methods
   checkXverseConnection: () => Promise<void>;
   checkMetamaskNetwork: () => Promise<boolean | void>;
+  checkL1Network: () => Promise<void>;
 }
 
 export const useWalletStore = create<WalletState>((set, get) => ({
@@ -142,10 +166,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   bitcoinAddress: null,
   bitcoinPublicKey: null,
   viaAddress: null,
+  chainId: null,
+  l1Address: null,
   isXverseConnected: false,
   isMetamaskConnected: false,
+  isL1Connected: false,
   isCorrectBitcoinNetwork: false,
   isCorrectViaNetwork: false,
+  isCorrectL1Network: false,
+  btcTransactions: [],
+  ethTransactions: [],
   transactions: [],
   isLoadingTransactions: false,
   isLoadingFeeEstimation: false,
@@ -159,10 +189,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setBitcoinAddress: (address) => set({ bitcoinAddress: address }),
   setBitcoinPublicKey: (publicKey) => set({ bitcoinPublicKey: publicKey }),
   setViaAddress: (address) => set({ viaAddress: address }),
+  setL1Address: (address) => set({ l1Address: address }),
   setIsXverseConnected: (connected) => set({ isXverseConnected: connected }),
   setIsMetamaskConnected: (connected) => set({ isMetamaskConnected: connected }),
+  setIsL1Connected: (connected) => set({ isL1Connected: connected }),
   setIsCorrectBitcoinNetwork: (correct) => set({ isCorrectBitcoinNetwork: correct }),
   setIsCorrectViaNetwork: (correct) => set({ isCorrectViaNetwork: correct }),
+
+
+  setChainId: (chainId) => set({ chainId }),
 
   setAvailableWallets: (wallets) => set({ availableWallets: wallets }),
   setSelectedWallet: (rdns) => {
@@ -173,24 +208,36 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       walletEvents.walletChanged.emit(rdns);
     }
   },
-  addTransaction: (tx) => set(state => ({
-    transactions: [
-      {
-        ...tx,
-        id: tx.txHash,
-        timestamp: Date.now(),
-      },
-      ...state.transactions
-    ]
-  })),
+  addTransaction: (tx) => {
+    const newTx = {
+      ...tx,
+      id: tx.txHash,
+      timestamp: Date.now(),
+    };
+
+    set(state => {
+      const isBTC = tx.symbol === 'BTC';
+      return {
+        transactions: [newTx, ...state.transactions], // Legacy
+        btcTransactions: isBTC ? [newTx, ...state.btcTransactions] : state.btcTransactions,
+        ethTransactions: !isBTC ? [newTx, ...state.ethTransactions] : state.ethTransactions,
+      };
+    });
+  },
 
   updateTransactionStatus: (txHash, status) => set(state => ({
     transactions: state.transactions.map(tx =>
       tx.txHash === txHash ? { ...tx, status } : tx
+    ),
+    btcTransactions: state.btcTransactions.map(tx =>
+      tx.txHash === txHash ? { ...tx, status } : tx
+    ),
+    ethTransactions: state.ethTransactions.map(tx =>
+      tx.txHash === txHash ? { ...tx, status } : tx
     )
   })),
 
-  clearTransactions: () => set({ transactions: [] }),
+  clearTransactions: () => set({ transactions: [], btcTransactions: [], ethTransactions: [] }),
 
   // Enhanced local transaction methods with localStorage
   addLocalTransaction: (tx) => {
@@ -206,8 +253,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Save to localStorage
       saveLocalTransactionsToStorage(updatedLocalTransactions);
 
+      const isBTC = tx.symbol === 'BTC';
+
       return {
-        localTransactions: updatedLocalTransactions
+        localTransactions: updatedLocalTransactions,
+        // Optimistically update the relevant list too
+        btcTransactions: isBTC ? [newTransaction, ...state.btcTransactions] : state.btcTransactions,
+        ethTransactions: !isBTC ? [newTransaction, ...state.ethTransactions] : state.ethTransactions
       };
     });
   },
@@ -235,12 +287,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     saveLocalTransactionsToStorage([]);
   },
 
-  mergeTransactions: (apiTransactions) => {
+  mergeTransactions: (apiTransactions, type) => {
     const { localTransactions } = get();
+
+    // Filter local transactions based on type if specified
+    const relevantLocalTxs = type
+      ? localTransactions.filter(tx => type === 'BTC' ? tx.symbol === 'BTC' : tx.symbol !== 'BTC')
+      : localTransactions;
 
     // Filter out local transactions that are now in the API response
     const apiTxHashes = apiTransactions.map(tx => tx.txHash);
-    const remainingLocalTxs = localTransactions.filter(tx => !apiTxHashes.includes(tx.txHash));
+    const remainingLocalTxs = relevantLocalTxs.filter(tx => !apiTxHashes.includes(tx.txHash));
 
     // Merge and sort all transactions
     return [...apiTransactions, ...remainingLocalTxs].sort((a, b) => b.timestamp - a.timestamp);
@@ -294,39 +351,76 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ feeEstimation: null, isLoadingFeeEstimation: false });
   },
 
+  // Deprecated parent fetcher
   fetchTransactions: async () => {
-    const { bitcoinAddress, viaAddress } = get();
+    await Promise.all([
+      get().fetchBtcTransactions(),
+      get().fetchEthTransactions()
+    ]);
+  },
 
-    if (!bitcoinAddress && !viaAddress) {
+  fetchBtcTransactions: async () => {
+    const { bitcoinAddress, viaAddress } = get();
+    if (!bitcoinAddress || !viaAddress) {
+      set({ btcTransactions: [] });
       return;
     }
 
     try {
       set({ isLoadingTransactions: true });
       const apiTransactions = await fetchUserTransactions(bitcoinAddress, viaAddress);
-      const formattedTransactions = mapApiTransactionsToAppFormat(apiTransactions);
+      const formattedTransactions = mapApiTransactionsToAppFormat(apiTransactions)
+        .map(tx => ({ ...tx, symbol: 'BTC' }));
 
-      // Use the mergeTransactions method to combine API and local transactions
-      const mergedTransactions = get().mergeTransactions(formattedTransactions);
+      const merged = get().mergeTransactions(formattedTransactions, 'BTC');
+      set({ btcTransactions: merged });
 
-      set({ transactions: mergedTransactions });
-
-      // Get transaction hashes that are now confirmed by the API
+      // Clean up confirmed local
       const confirmedTxHashes = formattedTransactions.map(tx => tx.txHash);
-
-      // Remove confirmed transactions from local storage and state
       if (confirmedTxHashes.length > 0) {
         removeTransactionsFromStorage(confirmedTxHashes);
-
-        // Update local transactions state by removing confirmed ones
         set(state => ({
-          localTransactions: state.localTransactions.filter(tx =>
-            !confirmedTxHashes.includes(tx.txHash)
-          )
+          localTransactions: state.localTransactions.filter(tx => !confirmedTxHashes.includes(tx.txHash))
         }));
       }
-    } catch (error) {
-      console.error("Failed to fetch transactions:", error);
+
+    } catch (e) {
+      console.error("Error fetching BTC transactions", e);
+    } finally {
+      set({ isLoadingTransactions: false });
+    }
+  },
+
+  fetchEthTransactions: async () => {
+    const { l1Address, viaAddress } = get();
+    
+    // If we have viaAddress but no l1Address, use viaAddress for both (same wallet, different networks)
+    const effectiveL1Address = l1Address || viaAddress;
+    const effectiveL2Address = viaAddress || l1Address;
+    
+    if (!effectiveL1Address || !effectiveL2Address) {
+      set({ ethTransactions: [] });
+      return;
+    }
+
+    try {
+      set({ isLoadingTransactions: true });
+      const apiTransactions = await fetchEthUserTransactions(effectiveL1Address, effectiveL2Address);
+      const formattedTransactions = mapEthApiTransactionsToAppFormat(apiTransactions);
+
+      const merged = get().mergeTransactions(formattedTransactions, 'ETH');
+      set({ ethTransactions: merged });
+
+      // Clean up confirmed local
+      const confirmedTxHashes = formattedTransactions.map(tx => tx.txHash);
+      if (confirmedTxHashes.length > 0) {
+        removeTransactionsFromStorage(confirmedTxHashes);
+        set(state => ({
+          localTransactions: state.localTransactions.filter(tx => !confirmedTxHashes.includes(tx.txHash))
+        }));
+      }
+    } catch (e) {
+      console.error("Error fetching ETH transactions", e);
     } finally {
       set({ isLoadingTransactions: false });
     }
@@ -380,7 +474,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   connectMetamask: async () => {
     try {
-      console.log("🔹 Connecting to wallet...");
+      console.log("🔹 Connecting to wallet and switching to VIA network...");
 
       const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) {
@@ -392,9 +486,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Ensure selection reflects the chosen provider and emits walletChanged if changed
       get().setSelectedWallet(bestProvider.rdns);
 
+      // Step 1: Request account connection
       const accounts = await bestProvider.provider.request({
         method: "eth_requestAccounts",
       }) as string[];
+
+      if (!accounts || accounts.length === 0) {
+        throw new Error("No accounts returned from wallet");
+      }
 
       const address = accounts[0];
       set({
@@ -402,13 +501,25 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         isMetamaskConnected: true
       });
 
-      // Check network after connection
-      await get().checkMetamaskNetwork();
+      // Step 2: Automatically switch to VIA network
+      console.log("🔄 Switching to VIA network...");
+      const networkResult = await switchToL2Network();
+      
+      if (networkResult.success) {
+        set({ isCorrectViaNetwork: true });
+        console.log("✅ Connected to wallet and switched to VIA network");
+        walletEvents.networkChanged.emit();
+      } else {
+        // If switch failed, still mark as connected but network is incorrect
+        // User will see a warning but can proceed
+        console.warn("⚠️ Connected but network switch failed:", networkResult.error);
+        await get().checkMetamaskNetwork();
+      }
 
       // Load local transactions after connecting
       get().loadLocalTransactions();
 
-      console.log("✅ MetaMask wallet connected, address:", address);
+      console.log("✅ Wallet connected, address:", address);
       walletEvents.metamaskConnected.emit();
       return true;
     } catch (error: any) {
@@ -454,83 +565,42 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       switch (layer) {
         case Layer.L1:
-          if (isXverseConnected) {
-            // Ask Xverse to switch to Bitcoin network via Sats connect
-            const { request } = await import("sats-connect");
-            const { BRIDGE_CONFIG } = await import("@/services/config");
-
-            // Map env() network to display the name used by sats-connect
-            const toXverseName = (net: string): string => {
-              switch (net.toLowerCase()) {
-                case "mainnet": return "Mainnet";
-                case "testnet4": return "Testnet4";
-                case "regtest": return "Regtest";
-                default: return net;
-              }
-            };
-
-            const targetName = toXverseName(BRIDGE_CONFIG.defaultNetwork);
-
-            // Switch network using Sats Connect documented shape — docs: https://docs.xverse.app/sats-connect/wallet-methods/wallet_changenetwork
-            const tryChangeNetwork = async (): Promise<boolean> => {
-              try {
-                const res: any = await request("wallet_changeNetwork", { name: targetName } as any);
-                return res?.status === "success";
-              } catch (e: any) {
-                console.error("wallet_changeNetwork failed", e);
-                return false;
-              }
-            };
-
-            const switched = await tryChangeNetwork();
-            if (switched) {
+          if (!isXverseConnected) {
+            console.warn("Cannot switch L1 network: Xverse wallet not connected");
+            return false;
+          }
+          const l1Result = await switchToL1Network();
+          if (l1Result.success) {
+            if (l1Result.switched) {
               await get().checkXverseConnection();
-              walletEvents.networkChanged.emit();
-              return true;
             }
+            walletEvents.networkChanged.emit();
+            return l1Result.success;
           }
-          break;
+          return false;
+
         case Layer.L2:
-          if (isMetamaskConnected) {
-            // For MetaMask, we can request a network switch
-            const bestProvider = await getPreferredWeb3ProviderAsync();
-            if (!bestProvider) {
-              throw new Error("Wallet not found or not accessible");
-            }
-            const provider = bestProvider.provider;
-
-            const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
-            const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-
-            try {
-              await provider.request({
-                method: 'wallet_switchEthereumChain',
-                params: [{ chainId: expectedChainId }],
-              });
-              set({ isCorrectViaNetwork: true });
-              walletEvents.networkChanged.emit();
-              return true;
-            } catch (switchError: any) {
-              // This error code indicates that the chain has not been added to the user wallet
-              if (switchError.code === 4902) {
-                await provider.request({
-                  method: 'wallet_addEthereumChain',
-                  params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
-                });
-                set({ isCorrectViaNetwork: true });
-                walletEvents.networkChanged.emit();
-                return true;
-              }
-              throw switchError;
-            }
+          if (!isMetamaskConnected) {
+            console.warn("Cannot switch L2 network: EVM wallet not connected");
+            return false;
           }
-          break;
+          const l2Result = await switchToL2Network();
+          if (l2Result.success) {
+            set({ isCorrectViaNetwork: true });
+            walletEvents.networkChanged.emit();
+            return true;
+          }
+          return false;
+
+        default:
+          console.warn(`Unknown layer: ${layer}`);
+          return false;
       }
     } catch (error) {
       console.error("Network switch error:", error);
+      walletEvents.networkChanged.emit();
+      return false;
     }
-
-    walletEvents.networkChanged.emit();
   },
 
   connectWallet: async (rdns: string) => {
@@ -651,8 +721,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
           // Load local transactions when the wallet is already connected
           get().loadLocalTransactions();
-
-          console.log("✅ Xverse wallet already connected");
         }
       }
     } catch (error) {
@@ -672,34 +740,92 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
       const expectedChainId = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork].chainId;
-      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' });
+      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' }) as string;
       const isCorrect = chainId === expectedChainId;
 
-      set({ isCorrectViaNetwork: isCorrect });
+      set({ isCorrectViaNetwork: isCorrect, chainId: chainId });
 
-      if (!isCorrect) {
-        try {
-          await bestProvider.provider.request({
-            method: 'wallet_switchEthereumChain',
-            params: [{ chainId: expectedChainId }],
-          });
-          set({ isCorrectViaNetwork: true });
-          return true;
-        } catch (switchError: any) {
-          // This error code indicates that the chain has not been added to the wallet
-          if (switchError.code === 4902) {
-            await bestProvider.provider.request({
-              method: 'wallet_addEthereumChain',
-              params: [VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork]],
-            });
-            set({ isCorrectViaNetwork: true });
-            return true;
-          }
-          throw switchError;
-        }
-      }
+      // AUTO-SWITCH REMOVED: Do not force switch here. Let the UI handle "Wrong Network" state.
     } catch (error) {
       console.error("Error checking wallet network:", error);
+    }
+  },
+
+  checkL1Network: async () => {
+    try {
+      const bestProvider = await getPreferredWeb3ProviderAsync();
+      if (!bestProvider) return;
+
+      // Sepolia Chain ID
+      const expectedChainId = "0xaa36a7"; // 11155111
+      const chainId = await bestProvider.provider.request({ method: 'eth_chainId' }) as string;
+      const isCorrect = chainId.toLowerCase() === expectedChainId.toLowerCase();
+
+      set({ isCorrectL1Network: isCorrect, chainId: chainId });
+    } catch (error) {
+      console.error("Error checking L1 network:", error);
+    }
+  },
+
+  connectL1Wallet: async () => {
+    try {
+      const { isMetamaskConnected, viaAddress } = get();
+      
+      // If already connected to MetaMask, use existing connection
+      if (isMetamaskConnected && viaAddress) {
+        console.log("🔹 Wallet already connected, switching to Sepolia...");
+        set({
+          l1Address: viaAddress,
+          isL1Connected: true
+        });
+      } else {
+        console.log("🔹 Connecting L1 wallet and switching to Sepolia...");
+        const bestProvider = await getPreferredWeb3ProviderAsync();
+        if (!bestProvider) throw new Error("No wallet found");
+
+        // Step 1: Request account connection
+        const accounts = await bestProvider.provider.request({
+          method: "eth_requestAccounts",
+        }) as string[];
+
+        if (!accounts || accounts.length === 0) {
+          throw new Error("No accounts returned from wallet");
+        }
+
+        const address = accounts[0];
+        set({
+          l1Address: address,
+          isL1Connected: true
+        });
+      }
+
+      // Step 2: Automatically switch to Sepolia network
+      console.log("🔄 Switching to Sepolia network...");
+      const networkResult = await switchToEthereumNetwork(EthereumNetwork.SEPOLIA);
+      
+      if (networkResult.success) {
+        set({ isCorrectL1Network: true });
+        console.log("✅ Connected to L1 wallet and switched to Sepolia");
+        walletEvents.networkChanged.emit();
+      } else {
+        // If switch failed, still mark as connected but network is incorrect
+        // User will see a warning but can proceed
+        console.warn("⚠️ Connected but network switch failed:", networkResult.error);
+        await get().checkL1Network();
+      }
+
+      // Load local transactions after connecting
+      get().loadLocalTransactions();
+
+      return true;
+    } catch (error: any) {
+      console.error("L1 Connect error:", error);
+      const USER_REJECTION_ERROR_CODE = 4001;
+      if (error.code === USER_REJECTION_ERROR_CODE) {
+        console.log("Connection rejected by user");
+        return false;
+      }
+      throw error;
     }
   }
 }));

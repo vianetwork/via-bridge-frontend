@@ -8,11 +8,10 @@ import WithdrawForm from "@/components/withdraw-form";
 import WalletConnectButton from "@/components/wallet-connect-button";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, ChevronDown, ChevronUp, Clock } from "lucide-react";
-import { Layer } from "@/services/config";
-import { walletEvents } from "@/store/wallet-store";
+import { AlertCircle, ChevronDown, ChevronUp, Clock, Loader2 } from "lucide-react";
+import { walletEvents, useWalletStore } from "@/store/wallet-store";
 import { TransactionHistory } from "@/components/transaction-history";
-import { useWalletStore } from "@/store/wallet-store";
+import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 
 export default function BridgeInterface() {
   const [activeTab, setActiveTab] = useState<string>("deposit");
@@ -20,9 +19,9 @@ export default function BridgeInterface() {
   const [showTransactions, setShowTransactions] = useState(false);
 
   const {
-    transactions,
+    btcTransactions,
     isLoadingTransactions,
-    fetchTransactions
+    fetchBtcTransactions
   } = useWalletStore();
 
   const {
@@ -37,8 +36,12 @@ export default function BridgeInterface() {
     connectMetamask,
     disconnectXverse,
     disconnectMetamask,
-    switchNetwork,
   } = useWalletState();
+
+  const { switchToL1, switchToL2, isSwitching: isSwitchingNetwork, status: networkStatus } = useNetworkSwitcher();
+  const { checkXverseConnection, checkMetamaskNetwork } = useWalletStore();
+  const [isAutoSwitching, setIsAutoSwitching] = useState(false);
+  const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
 
   // Check if any wallet is connected
   const isBothWalletConnected = isXverseConnected && isMetamaskConnected;
@@ -46,53 +49,120 @@ export default function BridgeInterface() {
   // Fetch transactions when wallets are connected
   useEffect(() => {
     if (isBothWalletConnected) {
-      fetchTransactions();
+      fetchBtcTransactions();
     }
-  }, [isXverseConnected, isMetamaskConnected, fetchTransactions]);
+  }, [isBothWalletConnected, fetchBtcTransactions]);
 
   // Set up a polling interval to refresh transactions
   useEffect(() => {
     if (!isBothWalletConnected) return;
 
     const interval = setInterval(() => {
-      fetchTransactions();
+      fetchBtcTransactions();
     }, 300000); // Refresh every 10 minutes
 
     return () => clearInterval(interval);
-  }, [isBothWalletConnected, fetchTransactions]);
+  }, [isBothWalletConnected, fetchBtcTransactions]);
 
   // Listen for wallet events to refresh the UI and transactions
   useEffect(() => {
     const unsubscribers = [
       walletEvents.metamaskConnected.on(() => {
         // setRefreshKey(prev => prev + 1);
-        fetchTransactions();
+        fetchBtcTransactions();
       }),
       walletEvents.xverseConnected.on(() => {
         // setRefreshKey(prev => prev + 1);
-        fetchTransactions();
+        fetchBtcTransactions();
       }),
       // walletEvents.metamaskDisconnected.on(() => setRefreshKey(prev => prev + 1)),
       // walletEvents.xverseDisconnected.on(() => setRefreshKey(prev => prev + 1)),
       walletEvents.networkChanged.on(() => {
         // setRefreshKey(prev => prev + 1);
-        fetchTransactions();
+        fetchBtcTransactions();
       }),
     ];
 
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe());
     };
-  }, [fetchTransactions]);
+  }, [fetchBtcTransactions]);
 
-  // Connect to appropriate wallet based on active tab
+  // Auto-switch network based on active tab
   useEffect(() => {
-    if (activeTab === "deposit" && !isXverseConnected) {
-      // Optional auto-connect logic
-    } else if (activeTab === "withdraw" && !isMetamaskConnected) {
-      // Option al auto-connect logic
-    }
-  }, [activeTab, isXverseConnected, isMetamaskConnected]);
+    const autoSwitchNetwork = async () => {
+      // For deposit tab: need Bitcoin network
+      if (activeTab === "deposit") {
+        if (!isXverseConnected) {
+          setAutoSwitchFailed(false);
+          return;
+        }
+        
+        // Check current network state first
+        await checkXverseConnection();
+        const store = useWalletStore.getState();
+        
+        // If not on correct network, try to switch
+        if (!store.isCorrectBitcoinNetwork) {
+          setIsAutoSwitching(true);
+          setAutoSwitchFailed(false);
+          try {
+            const result = await switchToL1();
+            if (result.success) {
+              // Refresh network state after switch
+              await checkXverseConnection();
+              setAutoSwitchFailed(false);
+            } else {
+              setAutoSwitchFailed(true);
+            }
+          } catch (error) {
+            console.error("Auto-switch to Bitcoin network failed:", error);
+            setAutoSwitchFailed(true);
+          } finally {
+            setIsAutoSwitching(false);
+          }
+        } else {
+          setAutoSwitchFailed(false);
+        }
+      }
+      // For withdraw tab: need VIA network
+      else if (activeTab === "withdraw") {
+        if (!isMetamaskConnected) {
+          setAutoSwitchFailed(false);
+          return;
+        }
+        
+        // Check current network state first
+        await checkMetamaskNetwork();
+        const store = useWalletStore.getState();
+        
+        // If not on correct network, try to switch
+        if (!store.isCorrectViaNetwork) {
+          setIsAutoSwitching(true);
+          setAutoSwitchFailed(false);
+          try {
+            const result = await switchToL2();
+            if (result.success) {
+              // Refresh network state after switch
+              await checkMetamaskNetwork();
+              setAutoSwitchFailed(false);
+            } else {
+              setAutoSwitchFailed(true);
+            }
+          } catch (error) {
+            console.error("Auto-switch to VIA network failed:", error);
+            setAutoSwitchFailed(true);
+          } finally {
+            setIsAutoSwitching(false);
+          }
+        } else {
+          setAutoSwitchFailed(false);
+        }
+      }
+    };
+
+    autoSwitchNetwork();
+  }, [activeTab, isXverseConnected, isMetamaskConnected, switchToL1, switchToL2, checkXverseConnection, checkMetamaskNetwork]);
 
   return (
     <div className="flex flex-col items-center pb-6">
@@ -123,16 +193,47 @@ export default function BridgeInterface() {
                     bitcoinAddress={bitcoinAddress}
                     bitcoinPublicKey={bitcoinPublicKey}
                     onDisconnect={disconnectXverse}
-                    onTransactionSubmitted={fetchTransactions}
+                    onTransactionSubmitted={fetchBtcTransactions}
                   />
                 ) : (
                   <div className="flex flex-col items-center space-y-4 py-6">
-                    <AlertCircle className="h-12 w-12 text-amber-500" />
-                    <h3 className="text-lg font-semibold">Wrong Network</h3>
-                    <p className="text-sm text-center text-muted-foreground max-w-[280px]">
-                      Please switch to the correct Bitcoin network to continue.
-                    </p>
-                    <Button onClick={() => switchNetwork(Layer.L1)}>Switch Network</Button>
+                    {isAutoSwitching || isSwitchingNetwork ? (
+                      <>
+                        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                        <h3 className="text-lg font-semibold">Switching Network</h3>
+                        <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                          {networkStatus || "Please confirm the network switch in your wallet..."}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-12 w-12 text-amber-500" />
+                        <h3 className="text-lg font-semibold">Wrong Network</h3>
+                        <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                          {autoSwitchFailed 
+                            ? "Auto-switch failed. Please switch to the correct Bitcoin network manually."
+                            : "Please switch to the correct Bitcoin network to continue."}
+                        </p>
+                        <Button 
+                          onClick={async () => {
+                            setIsAutoSwitching(true);
+                            try {
+                              const result = await switchToL1();
+                              if (result.success) {
+                                await checkXverseConnection();
+                              }
+                            } catch (error) {
+                              console.error("Network switch failed:", error);
+                            } finally {
+                              setIsAutoSwitching(false);
+                            }
+                          }}
+                          disabled={isAutoSwitching || isSwitchingNetwork}
+                        >
+                          {isAutoSwitching || isSwitchingNetwork ? "Switching..." : "Switch Network"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )
               ) : (
@@ -148,21 +249,53 @@ export default function BridgeInterface() {
             <TabsContent value="withdraw">
               {isMetamaskConnected ? (
                 isCorrectViaNetwork ? (
-                  <WithdrawForm viaAddress={viaAddress} onTransactionSubmitted={fetchTransactions} />
+                  <WithdrawForm viaAddress={viaAddress} onTransactionSubmitted={fetchBtcTransactions} />
                 ) : (
                   <div className="flex flex-col items-center space-y-4 py-6">
-                    <AlertCircle className="h-12 w-12 text-amber-500" />
-                    <h3 className="text-lg font-semibold">Wrong Network</h3>
-                    <p className="text-sm text-center text-muted-foreground max-w-[280px]">
-                      Please switch to the VIA network to continue.
-                    </p>
-                    <Button onClick={() => switchNetwork(Layer.L2)}>Switch Network</Button>
+                    {isAutoSwitching || isSwitchingNetwork ? (
+                      <>
+                        <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
+                        <h3 className="text-lg font-semibold">Switching Network</h3>
+                        <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                          {networkStatus || "Please confirm the network switch in your wallet..."}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-12 w-12 text-amber-500" />
+                        <h3 className="text-lg font-semibold">Wrong Network</h3>
+                        <p className="text-sm text-center text-muted-foreground max-w-[280px]">
+                          {autoSwitchFailed 
+                            ? "Auto-switch failed. Please switch to the VIA network manually."
+                            : "Please switch to the VIA network to continue."}
+                        </p>
+                        <Button 
+                          onClick={async () => {
+                            setIsAutoSwitching(true);
+                            try {
+                              const result = await switchToL2();
+                              if (result.success) {
+                                await checkMetamaskNetwork();
+                              }
+                            } catch (error) {
+                              console.error("Network switch failed:", error);
+                            } finally {
+                              setIsAutoSwitching(false);
+                            }
+                          }}
+                          disabled={isAutoSwitching || isSwitchingNetwork}
+                        >
+                          {isAutoSwitching || isSwitchingNetwork ? "Switching..." : "Switch Network"}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 )
               ) : (
                 <WalletConnectButton
                   walletType="metamask"
                   isConnected={isMetamaskConnected}
+                  helperText="EVM wallet connection is required to withdraw BTC from VIA to Bitcoin network"
                   onConnect={connectMetamask}
                   onDisconnect={disconnectMetamask}
                 />
@@ -181,9 +314,9 @@ export default function BridgeInterface() {
               <div className="flex items-center gap-2">
                 <Clock className="h-4 w-4" />
                 <span>Transaction History</span>
-                {transactions.length > 0 && (
+                {btcTransactions.length > 0 && (
                   <span className="bg-primary/10 text-primary text-xs rounded-full px-2 py-0.5">
-                    {transactions.length}
+                    {btcTransactions.length}
                   </span>
                 )}
               </div>
@@ -192,7 +325,7 @@ export default function BridgeInterface() {
 
             {showTransactions && (
               <div className="w-full mt-2">
-                <TransactionHistory isLoading={isLoadingTransactions} onRefresh={fetchTransactions} />
+                <TransactionHistory isLoading={isLoadingTransactions} onRefresh={fetchBtcTransactions} transactions={btcTransactions} />
               </div>
             )}
           </CardFooter>

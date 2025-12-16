@@ -1,23 +1,11 @@
 
 
+
 export enum EthereumNetwork {
-  MAINNET = "mainnet",
   SEPOLIA = "sepolia",
-  LOCALHOST = "localhost",
 }
 
 export const ETHEREUM_NETWORK_CONFIG = {
-  [EthereumNetwork.LOCALHOST]: {
-    chainId: "0x7A69", // 31337
-    chainName: 'Localhost',
-    nativeCurrency: {
-      name: 'ETH',
-      symbol: 'ETH',
-      decimals: 18
-    },
-    rpcUrls: ['http://127.0.0.1:8545'],
-    blockExplorerUrls: []
-  },
   [EthereumNetwork.SEPOLIA]: {
     chainId: "0xAA36A7", // 11155111
     chainName: 'Sepolia',
@@ -26,20 +14,24 @@ export const ETHEREUM_NETWORK_CONFIG = {
       symbol: 'SEP',
       decimals: 18
     },
-    rpcUrls: ['https://rpc.sepolia.org'],
+    rpcUrls: [process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/1uiSbDzdztbtMS63fthe6Hh_oYKUImtK'],
     blockExplorerUrls: ['https://sepolia.etherscan.io']
-  },
-  [EthereumNetwork.MAINNET]: {
-    chainId: "0x1", // 1
-    chainName: 'Ethereum Mainnet',
-    nativeCurrency: {
-      name: 'Ether',
-      symbol: 'ETH',
-      decimals: 18
-    },
-    rpcUrls: ['https://mainnet.infura.io/v3/'],
-    blockExplorerUrls: ['https://etherscan.io']
   }
+};
+
+// Aave V3 "Pool" Contract Addresses
+export const AAVE_POOL_ADDRESSES = {
+  [EthereumNetwork.SEPOLIA]: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+};
+
+// Bridge Contract Addresses (for claiming withdrawals on L1)
+export const BRIDGE_ADDRESSES = {
+  [EthereumNetwork.SEPOLIA]: process.env.NEXT_PUBLIC_BRIDGE_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000", // TODO: Add real bridge address
+};
+
+// Message Manager Contract Addresses (for checking withdrawal readiness)
+export const MESSAGE_MANAGER_ADDRESSES = {
+  [EthereumNetwork.SEPOLIA]: "0x51Df0d26818d3ee4Ff115defd96Eee88425A2Cd7",
 };
 
 export const SUPPORTED_ASSETS = [
@@ -48,16 +40,20 @@ export const SUPPORTED_ASSETS = [
     name: "USD Coin",
     icon: "/usdc-logo.png",
     decimals: 6,
-    apy: "5.2%",
+    active: true,
+    apy: "5.2%", // Default fallback
     tvl: "$12.5M",
+    addresses: {
+      [EthereumNetwork.SEPOLIA]: "0x94a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8", // Custom Sepolia USDC
+    },
     vaults: {
       l1: {
-        normal: "0x...", // TODO: Add real address
-        yield: "0x...", // TODO: Add real address
+        normal: "0xDfA2De059b80DD48c6f51E1ee791241f144a7F54", 
+        yield: "0x15Cc81D136277b5D38f75151dD5D0DB0571526Fc",
       },
       l2: {
-        normal: "0x...", // TODO: Add real address
-        yield: "0x...", // TODO: Add real address
+        normal: "0x59bc242EBB43e05707B05fBE04682C6E35EfB056", 
+        yield: "0x327d741E500E11Ab69F9D1A496A0ab4F934fA463",
       }
     }
   },
@@ -66,8 +62,12 @@ export const SUPPORTED_ASSETS = [
     name: "Tether USD",
     icon: "/usdt-logo.png",
     decimals: 6,
-    apy: "4.8%",
+    active: false,
+    apy: "4.8%", // Default fallback
     tvl: "$8.2M",
+    addresses: {
+      [EthereumNetwork.SEPOLIA]: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", // Standard Sepolia USDT
+    },
     vaults: {
       l1: {
         normal: "0x...", // TODO: Add real address
@@ -80,3 +80,4 @@ export const SUPPORTED_ASSETS = [
     }
   }
 ];
+

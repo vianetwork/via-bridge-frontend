@@ -111,7 +111,8 @@ export default function FaucetInterface() {
         startPollingForTransactionHash(faucetRequest.address);
         toast.success("Faucet Request Submitted", {
           description: `Request submitted for ${faucetRequest.address.slice(0, 6)}...${faucetRequest.address.slice(-4)}. Checking for transaction...`,
-          duration: 10000
+          duration: 10000,
+          dismissible: false,
         });
       } else {
         setFaucetRequest(prev => ({
@@ -212,6 +213,7 @@ export default function FaucetInterface() {
               </span>
             ),
             duration: 10000,
+            dismissible: false,
           });
 
           return;
@@ -273,10 +275,10 @@ export default function FaucetInterface() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Droplets className="h-5 w-5 text-blue-500" />
-            Request Test BTC
+            Request VIA Testnet BTC
           </CardTitle>
           <CardDescription>
-            Enter your VIA network wallet address to receive test BTC for development and testing.
+            Enter your EVM wallet address to receive VIA Testnet BTC for development and testing.
           </CardDescription>
         </CardHeader>
         {
@@ -284,6 +286,7 @@ export default function FaucetInterface() {
             <WalletConnectButton
               walletType="metamask"
               isConnected={isMetamaskConnected}
+              helperText={false}
               onConnect={connectMetamask}
               onDisconnect={disconnectMetamask}
             />
@@ -299,16 +302,6 @@ export default function FaucetInterface() {
                     onChange={(e) => handleAddressChange(e.target.value)}
                     className={!isValidAddress(faucetRequest.address) && faucetRequest.address ? 'border-red-500' : ''}
                   />
-                  {/* {viaAddress && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleUseConnectedWallet}
-                      className="whitespace-nowrap"
-                    >
-                      Use Wallet Address
-                    </Button>
-                  )} */}
                 </div>
                 {faucetRequest.address && !isValidAddress(faucetRequest.address) && (
                   <p className="text-sm text-red-500">Please enter a valid VIA address (0x...)</p>
@@ -380,7 +373,7 @@ export default function FaucetInterface() {
                     Requesting Funds...
                   </>
                 ) : (
-                  <>Request Test BTC</>
+                  <>Request VIA Testnet BTC</>
                 )}
               </Button>
 

@@ -9,7 +9,7 @@ import { maskAddress } from "@/utils";
 import { useMemo, useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 
-type Mode = "via" | "bitcoin";
+type Mode = "via" | "bitcoin" | "ethereum";
 
 interface AddressFieldWithWalletProps {
   mode: Mode;
@@ -27,7 +27,7 @@ interface AddressFieldWithWalletProps {
  *
  * Purpose:
  * - Single address field that can be autofilled from a connected wallet
- * - Supports both EVM (VIA) and Bitcoin modes
+ * - Supports EVM (VIA), Bitcoin, and Ethereum L1 modes
  * - Guides the user through states: disconnected, wrong network, using wallet, manual override
  *
  * - "usingWallet" means the input value equals the connected wallet address (on correct network)
@@ -46,12 +46,40 @@ export default function AddressFieldWithWallet({
 }: Pick<AddressFieldWithWalletProps, "mode" | "label" | "className" | "allowManualOverride" | "value" | "onChange" | "placeholder">) {
   // Mode helpers
   const isEvm = mode === "via";
+  const isEth = mode === "ethereum";
 
   // Wallet store wiring
   const store = useWalletStore();
-  const connected = isEvm ? store.isMetamaskConnected : store.isXverseConnected;
-  const correctNetwork = isEvm ? store.isCorrectViaNetwork : store.isCorrectBitcoinNetwork;
-  const walletAddress = (isEvm ? store.viaAddress : store.bitcoinAddress) ?? "";
+
+  let connected: boolean;
+  let correctNetwork: boolean;
+  let walletAddress: string;
+
+  if (isEvm) {
+    // For EVM L2 recipient, we use MetaMask.
+    // Since we might be on L1 (Deposit) or L2 (Withdraw), we can use the address from either connection
+    // as long as it is an EVM address.
+    const isMetamask = store.isMetamaskConnected;
+    const isL1 = store.isL1Connected;
+
+    connected = isMetamask || isL1;
+    // We consider "correct network" to be true if we are connected to *any* EVM network we support (Via or Sepolia),
+    // because for a recipient field we just want the address, and the address is the same.
+    // BUT `store.isCorrectViaNetwork` specifically checks for Via Chain ID.
+    // If we are on Sepolia (L1), `isCorrectViaNetwork` is false.
+    // We should relax this: if we have an address, we can use it.
+    correctNetwork = store.isCorrectViaNetwork || store.isCorrectL1Network;
+    walletAddress = store.viaAddress || store.l1Address || "";
+  } else if (isEth) {
+    connected = store.isL1Connected;
+    correctNetwork = store.isCorrectL1Network;
+    walletAddress = store.l1Address ?? "";
+  } else {
+    // Bitcoin
+    connected = store.isXverseConnected;
+    correctNetwork = store.isCorrectBitcoinNetwork;
+    walletAddress = store.bitcoinAddress ?? "";
+  }
 
   // Local UI state
   const [showManual, setShowManual] = useState(false); // Explicitly reveal manual entry UI
@@ -74,8 +102,8 @@ export default function AddressFieldWithWallet({
 
   // UX helpers
   const computedPlaceholder = useMemo(
-    () => placeholder ?? (isEvm ? "0x..." : "bc1..."),  // for testnet address start with tb1. For mainnet, start with bc1. // TODO - have the correct placeholder depending on our network configuration
-    [placeholder, isEvm]
+    () => placeholder ?? (isEvm || isEth ? "0x..." : "bc1..."),  // EVM/Eth share 0x prefix
+    [placeholder, isEvm, isEth]
   );
 
   // Derived state:
@@ -88,7 +116,7 @@ export default function AddressFieldWithWallet({
     connected && correctNetwork && !!walletAddress && !!value && value === walletAddress;
   const usingManual = !!value && !usingWallet;
 
-  const computedLabel = label ?? (isEvm ? "Recipient VIA Address" : "Recipient Bitcoin Address");
+  const computedLabel = label ?? (isEvm ? "Recipient VIA Address" : isEth ? "Recipient Ethereum Address" : "Recipient Bitcoin Address");
 
   return (
     <div className={className ? `space-y-2 ${className}` : "space-y-2"}>
@@ -110,9 +138,9 @@ export default function AddressFieldWithWallet({
         <div className="bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-xs text-amber-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5" />
-            <span>Wrong network. {isEvm ? "Switch to VIA network" : "Switch to the correct Bitcoin network"} to auto-fill</span>
+            <span>Wrong network. {isEvm ? "Switch to VIA network" : isEth ? "Switch to Sepolia" : "Switch to the correct Bitcoin network"} to auto-fill</span>
           </div>
-          <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-xs" onClick={() => store.switchNetwork(isEvm ? Layer.L2 : Layer.L1)}>Switch</Button>
+          <Button type="button" size="sm" variant="secondary" className="h-6 px-2 text-xs" onClick={() => store.switchNetwork(isEvm ? Layer.L2 : isEth ? Layer.L1 : Layer.L1)}>Switch</Button>
         </div>
       )}
 
@@ -126,15 +154,15 @@ export default function AddressFieldWithWallet({
             <span className="text-xs text-slate-700">Using your wallet address: <span className="font-mono">{maskAddress(walletAddress)}</span></span>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" size="sm" variant='ghost' className="h-7 px-2 text-xs" onClick={async() => {
+            <Button type="button" size="sm" variant='ghost' className="h-7 px-2 text-xs" onClick={async () => {
               try {
                 await navigator.clipboard.writeText(walletAddress);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 1500);
-              } catch {}
+              } catch { }
             }}
-                    aria-label="Copy address to clipboard">
-              {copied ? <Check className='h-3.5 w-3.5 text-green-600'/> : <Copy className="h-3.5 w-3.5" />}
+              aria-label="Copy address to clipboard">
+              {copied ? <Check className='h-3.5 w-3.5 text-green-600' /> : <Copy className="h-3.5 w-3.5" />}
             </Button>
             {/* Allows switching to manual entry, revealing the input */}
             <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => setShowManual(true)}>Enter a different address</Button>
@@ -152,13 +180,13 @@ export default function AddressFieldWithWallet({
             <span className="text-xs text-slate-600">Wallet detected: {maskAddress(walletAddress)}</span>
           </div>
           <Button type="button" size="sm" variant="secondary" className="h-7 px-2 text-xs" onClick={() => {
-              const shouldReplace =
-                !value ||
-                value.trim() === "" ||
-                value === walletAddress ||
-                window.confirm("Replace the entered address with your connected wallet address?");
-              if (shouldReplace) onChange(walletAddress);
-            }}
+            const shouldReplace =
+              !value ||
+              value.trim() === "" ||
+              value === walletAddress ||
+              window.confirm("Replace the entered address with your connected wallet address?");
+            if (shouldReplace) onChange(walletAddress);
+          }}
           >Replace with wallet</Button>
         </div>
       )}
@@ -171,11 +199,15 @@ export default function AddressFieldWithWallet({
               <Wallet className="w-4 h-4 text-blue-600" />
             </div>
             <div className="flex-1">
-              <div className="font-medium text-sm mb-1">{isEvm ? "Connect your EVM wallet for instant setup" : "Connect your Bitcoin wallet for instant setup"}</div>
+              <div className="font-medium text-sm mb-1">{isEvm ? "Connect your EVM wallet for instant setup" : isEth ? "Connect Ethereum Wallet" : "Connect your Bitcoin wallet for instant setup"}</div>
               <div className="text-xs text-slate-600 mb-3">Your address will be automatically filled in</div>
               <div className="flex gap-2">
-                {/* Connect wallet CTA (Metamask for EVM, Xverse for BTC) */}
-                <Button type="button" size="sm" onClick={() => (isEvm ? store.connectMetamask() : store.connectXverse())} className="bg-blue-600 hover:bg-blue-700">{isEvm ? "Connect Wallet" : "Connect Xverse"}</Button>
+                {/* Connect wallet CTA */}
+                <Button type="button" size="sm" onClick={() => {
+                  if (isEvm) store.connectMetamask();
+                  else if (isEth) store.connectL1Wallet();
+                  else store.connectXverse();
+                }} className="bg-blue-600 hover:bg-blue-700">{isEvm || isEth ? "Connect Wallet" : "Connect Xverse"}</Button>
                 {/* Allow user to enter manually even while disconnected */}
                 {allowManualOverride && (
                   <Button type="button" variant="ghost" size="sm" className="text-slate-600" onClick={() => setShowManual(true)}>Enter manually</Button>
@@ -214,15 +246,15 @@ export default function AddressFieldWithWallet({
           {/* Manual input field */}
           <div className="relative">
             <Input placeholder={computedPlaceholder} value={value} onChange={(e) => {
-                // The first keystroke disables the autofill behavior for this session
-                if (!userHasTyped && e.target.value.trim().length > 0) setUserHasTyped(true);
-                onChange(e.target.value);
-              }}
+              // The first keystroke disables the autofill behavior for this session
+              if (!userHasTyped && e.target.value.trim().length > 0) setUserHasTyped(true);
+              onChange(e.target.value);
+            }}
               className="peer font-mono border-2 border-dashed border-slate-300 bg-slate-50/50 focus:border-blue-500 focus:bg-white placeholder-shown:pr-28 pr-3"
               aria-label={label ?? (isEvm ? "Recipient VIA Address" : "Recipient Bitcoin Address")}
             />
             <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center transition-opacity duration-150 opacity-0 peer-placeholder-shown:opacity-100">
-              <span className="text-[10px] text-slate-400">Enter {isEvm ? "VIA" : "Bitcoin"} address manually</span>
+              <span className="text-[10px] text-slate-400">Enter {isEvm ? "VIA" : isEth ? "Ethereum" : "Bitcoin"} address manually</span>
             </div>
           </div>
 

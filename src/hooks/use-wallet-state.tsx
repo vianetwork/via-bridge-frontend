@@ -7,7 +7,7 @@ import { maskAddress, maskAddresses } from "@/utils";
 
 export function useWalletState() {
   const walletStore = useWalletStore();
-  
+
   // Check network and connection status on mount
   useEffect(() => {
     async function checkConnections() {
@@ -16,7 +16,7 @@ export function useWalletState() {
     }
 
     checkConnections();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Set up Xverse wallet event listeners
@@ -63,12 +63,12 @@ export function useWalletState() {
     };
 
     setupXverseListeners();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listen for metmask account and network changes
   useEffect(() => {
-    let mounted = true; 
+    let mounted = true;
 
     const setupProviderListener = async () => {
       if (typeof window == "undefined") return;
@@ -76,7 +76,7 @@ export function useWalletState() {
       const bestProvider = await getPreferredWeb3ProviderAsync();
 
       if (!mounted) return;
-      
+
       if (!bestProvider) {
         console.log('Wallet not available for account change monitoring');
         return;
@@ -86,18 +86,18 @@ export function useWalletState() {
 
       const handleAccountsChanged = (accounts: string[]) => {
         console.log('MetaMask accounts changed:', maskAddresses(accounts));
-      
+
         if (accounts.length === 0) {
           console.log('MetaMask disconnected or locked');
           walletStore.disconnectMetamask();
         } else {
           console.log('Active account:', maskAddress(accounts[0]));
-        
+
           walletStore.setViaAddress(accounts[0]);
           if (!walletStore.isMetamaskConnected) {
             walletStore.setIsMetamaskConnected(true);
           }
-          
+
           walletStore.checkMetamaskNetwork();
         }
       };
@@ -106,6 +106,7 @@ export function useWalletState() {
         console.log('MetaMask chain changed to:', chainId);
         // check if we're on the correct network
         await walletStore.checkMetamaskNetwork();
+        await walletStore.checkL1Network();
       };
 
       if (provider.on) {
@@ -133,12 +134,17 @@ export function useWalletState() {
     bitcoinAddress: walletStore.bitcoinAddress,
     bitcoinPublicKey: walletStore.bitcoinPublicKey,
     viaAddress: walletStore.viaAddress,
+    chainId: walletStore.chainId,
+    l1Address: walletStore.l1Address,
     isXverseConnected: walletStore.isXverseConnected,
     isMetamaskConnected: walletStore.isMetamaskConnected,
+    isL1Connected: walletStore.isL1Connected,
     isCorrectBitcoinNetwork: walletStore.isCorrectBitcoinNetwork,
     isCorrectViaNetwork: walletStore.isCorrectViaNetwork,
+    isCorrectL1Network: walletStore.isCorrectL1Network,
     connectXverse: walletStore.connectXverse,
     connectMetamask: walletStore.connectMetamask,
+    connectL1Wallet: walletStore.connectL1Wallet,
     disconnectXverse: walletStore.disconnectXverse,
     disconnectMetamask: walletStore.disconnectMetamask,
     switchNetwork: walletStore.switchNetwork,

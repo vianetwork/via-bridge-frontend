@@ -1,16 +1,18 @@
 
-import { useWalletStore } from "@/store/wallet-store";
 import { ExternalLink, Clock, CheckCircle, XCircle, RefreshCw, HelpCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Transaction } from "@/store/wallet-store"; // Import Transaction type
 
 interface TransactionHistoryProps {
   isLoading?: boolean;
   onRefresh?: () => void;
+  transactions: Transaction[]; // Pass directly
 }
 
-export function TransactionHistory({ isLoading = false, onRefresh }: TransactionHistoryProps) {
-  const { transactions } = useWalletStore();
+export function TransactionHistory({ isLoading = false, onRefresh, transactions }: TransactionHistoryProps) {
+  // Removed global store usage and filtering logic
+
 
   return (
     <div className="w-full">

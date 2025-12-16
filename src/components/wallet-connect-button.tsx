@@ -12,6 +12,7 @@ import { eip6963Store } from "@/utils/eip6963-provider";
 interface WalletConnectButtonProps {
   walletType: "xverse" | "metamask"
   isConnected: boolean
+  helperText?: boolean | string // Can be boolean or custom message string
   onConnect: () => Promise<boolean>
   onDisconnect: () => void
 }
@@ -21,6 +22,7 @@ export default function WalletConnectButton({
   isConnected,
   onConnect,
   onDisconnect,
+  helperText = true
 }: WalletConnectButtonProps) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [walletName, setWalletName] = useState(walletType === "xverse" ? "Xverse" : "MetaMask");
@@ -70,6 +72,7 @@ export default function WalletConnectButton({
           description: `Successfully connected to your ${walletName} wallet.`,
           duration: 4000,
           className: "text-base font-medium",
+          dismissible: false,
         });
       }
     } catch (error) {
@@ -89,7 +92,8 @@ export default function WalletConnectButton({
     toast.success(`${walletName} Disconnected`, {
       description: `Successfully disconnected from your ${walletName} wallet.`,
       duration: 4000,
-      className: "text-base font-medium"
+      className: "text-base font-medium",
+      dismissible: false,
     });
   };
 
@@ -138,14 +142,18 @@ export default function WalletConnectButton({
           )}
         </div>
       </div>
-      
+
       <div className="text-center space-y-2">
         <h3 className="text-xl font-semibold">Connect {walletName}</h3>
-        <p className="text-sm text-muted-foreground max-w-[280px]">
-          {walletType === "xverse"
-            ? "Xverse wallet connection is required to deposit BTC to VIA network"
-            : `${walletName} wallet connection is required to withdraw BTC from VIA to Bitcoin network`}
-        </p>
+        {helperText && (
+          <p className="text-sm text-muted-foreground max-w-[280px]">
+            {typeof helperText === "string" 
+              ? helperText
+              : walletType === "xverse"
+              ? "Xverse wallet connection is required to deposit BTC to VIA network"
+              : `${walletName} wallet connection is required to withdraw BTC from VIA to Bitcoin network`}
+          </p>
+        )}
       </div>
 
       <Button
