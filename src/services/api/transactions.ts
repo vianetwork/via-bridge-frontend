@@ -54,7 +54,7 @@ export async function fetchUserTransactions(
     }
 
     const response = await axios.get<TransactionsResponse>(
-      `${API_BASE_URL}/user/deposit_withdrawal`,
+      `${API_BASE_URL}/user/btc/deposit-withdrawal`,
       {
         params: {
           l1_account: bitcoinAddress,
