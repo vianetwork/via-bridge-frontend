@@ -31,8 +31,8 @@ export const SUPPORTED_ASSETS = [
     icon: "/usdc-logo.png",
     decimals: 6,
     active: true,
-    apy: "5.2%", // Default fallback
-    tvl: "$12.5M",
+    apy: "Not available",
+    tvl: "Not available",
     addresses: {
       [EthereumNetwork.SEPOLIA]: "0x94a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8", // Custom Sepolia USDC
     },

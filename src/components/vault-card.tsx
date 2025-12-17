@@ -2,6 +2,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { Check, ChevronDown } from "lucide-react";
 import Image from "next/image";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 interface VaultCardProps {
     symbol: string;
@@ -12,9 +14,23 @@ interface VaultCardProps {
     isSelected: boolean;
     selectionHint?: string;
     onClick: () => void;
+    // Optional yield toggle controls (for strategy selection)
+    yieldEnabled?: boolean;
+    onYieldToggle?: (enabled: boolean) => void;
 }
 
-export function VaultCard({ symbol, name, icon, apy, tvl, isSelected, selectionHint, onClick }: VaultCardProps) {
+export function VaultCard({
+    symbol,
+    name,
+    icon,
+    apy,
+    tvl,
+    isSelected,
+    selectionHint,
+    onClick,
+    yieldEnabled,
+    onYieldToggle,
+}: VaultCardProps) {
     return (
         <Card
             className={cn(
@@ -58,6 +74,34 @@ export function VaultCard({ symbol, name, icon, apy, tvl, isSelected, selectionH
                 {tvl && (
                     <div className="mt-2 text-xs text-muted-foreground">
                         TVL: <span className="font-medium text-foreground">{tvl}</span>
+                    </div>
+                )}
+                {typeof yieldEnabled === "boolean" && onYieldToggle && (
+                    <div
+                        className="mt-3 pt-2 border-t border-border/40"
+                        // Prevent checkbox clicks from triggering the card's onClick (token selector)
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id={`yield-mode-${symbol}`}
+                                checked={!yieldEnabled}
+                                onCheckedChange={(checked) => {
+                                    const isNormal = checked === true;
+                                    onYieldToggle(!isNormal);
+                                }}
+                                className="mt-0.5"
+                            />
+                            <Label
+                                htmlFor={`yield-mode-${symbol}`}
+                                className="text-xs font-medium leading-none cursor-pointer peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                                // Also prevent label clicks from bubbling to card
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                Normal bridging without yield
+                            </Label>
+                        </div>
                     </div>
                 )}
             </CardContent>

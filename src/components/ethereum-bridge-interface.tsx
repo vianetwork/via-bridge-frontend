@@ -10,8 +10,6 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
 import { VaultCard } from "@/components/vault-card";
 import { SUPPORTED_ASSETS, EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
 import EthereumDepositForm from "@/components/ethereum-deposit-form";
@@ -28,12 +26,12 @@ import { fetchAaveData } from "@/services/ethereum/aave";
 import { ethers } from "ethers";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
+import { ERC20_ABI } from "@/services/ethereum/abis";
 
 // A hook to fetch APY for assets
 // Note: Always fetches from Sepolia network, regardless of connected wallet network
 function useAaveData() {
     const [apys, setApys] = useState<Record<string, string>>({});
-    const [tvls, setTvls] = useState<Record<string, string>>({});
     const [loading, setLoading] = useState<boolean>(true);
 
     useEffect(() => {
@@ -57,25 +55,20 @@ function useAaveData() {
 
                     const address = asset.addresses?.[targetChainId as EthereumNetwork] || asset.addresses?.[EthereumNetwork.SEPOLIA];
                     if (address && address !== '0x0000000000000000000000000000000000000000') {
-                        const { apy, tvl } = await fetchAaveData(networkConfig.chainId, address, readProvider);
+                        const { apy } = await fetchAaveData(networkConfig.chainId, address, readProvider);
                         setApys(prev => ({ ...prev, [asset.symbol]: apy }));
-                        setTvls(prev => ({ ...prev, [asset.symbol]: tvl }));
                     } else {
                         setApys(prev => ({ ...prev, [asset.symbol]: asset.apy }));
-                        setTvls(prev => ({ ...prev, [asset.symbol]: asset.tvl }));
                     }
                 }));
             } catch (error) {
                 console.error("Error in useAaveData:", error);
                 // Fallback to defaults
                 const defaultApys: Record<string, string> = {};
-                const defaultTvls: Record<string, string> = {};
                 SUPPORTED_ASSETS.forEach(a => {
                     defaultApys[a.symbol] = a.apy;
-                    defaultTvls[a.symbol] = a.tvl;
                 });
                 setApys(defaultApys);
-                setTvls(defaultTvls);
             } finally {
                 setLoading(false);
             }
@@ -85,7 +78,29 @@ function useAaveData() {
         fetchData();
     }, []); // Empty dependency array - fetch only once
 
-    return { apys, tvls, loading };
+    return { apys, loading };
+}
+
+// Helper to format vault TVL as compact USD-like string
+function formatVaultTvl(num: number): string {
+    if (num < 1000) {
+        return `$${num.toFixed(2)}`;
+    }
+    const si = [
+        { value: 1, symbol: "" },
+        { value: 1E3, symbol: "K" },
+        { value: 1E6, symbol: "M" },
+        { value: 1E9, symbol: "B" },
+        { value: 1E12, symbol: "T" },
+    ];
+    const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
+    let i;
+    for (i = si.length - 1; i > 0; i--) {
+        if (num >= si[i].value) {
+            break;
+        }
+    }
+    return "$" + (num / si[i].value).toFixed(2).replace(rx, "$1") + si[i].symbol;
 }
 
 export default function EthereumBridgeInterface() {
@@ -97,6 +112,9 @@ export default function EthereumBridgeInterface() {
 
     const [isYieldEnabled, setIsYieldEnabled] = useState<boolean>(true);
     const [showTransactions, setShowTransactions] = useState(false);
+
+    const [vaultTvl, setVaultTvl] = useState<string | null>(null);
+    const [isLoadingVaultTvl, setIsLoadingVaultTvl] = useState(false);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isPendingWithdrawalsOpen, setIsPendingWithdrawalsOpen] = useState(false);
@@ -114,24 +132,71 @@ export default function EthereumBridgeInterface() {
     const [isAutoSwitching, setIsAutoSwitching] = useState(false);
     const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
 
-    const { apys, tvls, loading: loadingApy } = useAaveData();
+    const { apys, loading: loadingApy } = useAaveData();
 
     const selectedAsset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || defaultAsset;
+
+    // Fetch TVL from the currently selected L1 vault (normal or yield)
+    useEffect(() => {
+        async function fetchVaultTvl() {
+            try {
+                setIsLoadingVaultTvl(true);
+
+                const asset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || SUPPORTED_ASSETS[0];
+                const vaultAddress = isYieldEnabled ? asset.vaults.l1.yield : asset.vaults.l1.normal;
+
+                // Skip if vault address is not configured
+                if (
+                    !vaultAddress ||
+                    vaultAddress === "0x..." ||
+                    vaultAddress === "0x0000000000000000000000000000000000000000"
+                ) {
+                    setVaultTvl(null);
+                    return;
+                }
+
+                const networkConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
+                const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
+
+                const vaultToken = new ethers.Contract(vaultAddress, ERC20_ABI, provider);
+                const totalSupply = await vaultToken.totalSupply();
+
+                // Assume vault token shares use the same decimals as the underlying asset (e.g., USDC 6 decimals)
+                const amount = Number(ethers.formatUnits(totalSupply, asset.decimals));
+                const formatted = formatVaultTvl(amount);
+
+                setVaultTvl(formatted);
+            } catch (error) {
+                console.error("[EthereumBridgeInterface] Error fetching vault TVL:", error);
+                setVaultTvl(null);
+            } finally {
+                setIsLoadingVaultTvl(false);
+            }
+        }
+
+        fetchVaultTvl();
+    }, [selectedAssetSymbol, isYieldEnabled]);
 
     // Use the ready count from pending withdrawals component
     // This is updated when MessageManager checks are complete
     // Only show count after mount to prevent hydration mismatches
     const pendingWithdrawalsCount = isMounted ? readyWithdrawalsCount : 0;
 
-    // Merge dynamic APY and TVL into selected asset
+    // Merge dynamic APY into selected asset
     const currentApy = apys[selectedAsset.symbol] || selectedAsset.apy;
-    const currentTvl = tvls[selectedAsset.symbol] || selectedAsset.tvl;
+    const currentTvl = vaultTvl || selectedAsset.tvl;
 
-    // Create displayAsset but override apy/tvl with dynamic values
+    // Create displayAsset but override apy with dynamic values.
+    // When "Normal bridging without yield" is enabled, show 0% APY.
+    const displayApy = isYieldEnabled
+        ? (loadingApy ? "..." : currentApy)
+        : "0%";
+
+    // TVL represents value bridged through the selected vault (normal or yield)
     const displayAsset = {
         ...selectedAsset,
-        apy: loadingApy ? "..." : currentApy,
-        tvl: loadingApy ? "..." : currentTvl
+        apy: displayApy,
+        tvl: isLoadingVaultTvl ? "..." : currentTvl
     };
 
     // Auto-switch network when wallet is connected but on wrong network
@@ -345,6 +410,8 @@ export default function EthereumBridgeInterface() {
                     isSelected={true}
                     selectionHint="Change"
                     onClick={() => setIsDialogOpen(true)}
+                    yieldEnabled={isYieldEnabled}
+                    onYieldToggle={(enabled) => setIsYieldEnabled(enabled)}
                 />
             </div>
 
@@ -395,18 +462,6 @@ export default function EthereumBridgeInterface() {
                                 )}
                             </TabsTrigger>
                         </TabsList>
-
-                        {/* Yield Toggle */}
-                        <div className="flex items-center space-x-2 mb-6 justify-center">
-                            <Checkbox
-                                id="yield-mode"
-                                checked={!isYieldEnabled}
-                                onCheckedChange={(checked) => setIsYieldEnabled(!checked)}
-                            />
-                            <Label htmlFor="yield-mode" className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
-                                Normal bridging without yield
-                            </Label>
-                        </div>
 
                         <TabsContent value="deposit">
                             {isMetamaskConnected ? (
@@ -480,22 +535,30 @@ export default function EthereumBridgeInterface() {
                         <TabsContent value="withdraw">
                             {/* Pending Withdrawals Banner */}
                             {pendingWithdrawalsCount > 0 && (
-                                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div
+                                    className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors"
+                                    onClick={() => setIsPendingWithdrawalsOpen(true)}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter" || e.key === " ") {
+                                            e.preventDefault();
+                                            setIsPendingWithdrawalsOpen(true);
+                                        }
+                                    }}
+                                >
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Clock className="h-4 w-4 text-blue-600" />
                                             <p className="text-sm text-blue-900">
-                                                You have <span className="font-semibold">{pendingWithdrawalsCount}</span> pending withdrawal claim{pendingWithdrawalsCount > 1 ? 's' : ''}.
+                                                You have{" "}
+                                                <span className="font-semibold">{pendingWithdrawalsCount}</span>{" "}
+                                                pending withdrawal claim{pendingWithdrawalsCount > 1 ? "s" : ""}.
                                             </p>
                                         </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setIsPendingWithdrawalsOpen(true)}
-                                            className="text-blue-700 border-blue-300 hover:bg-blue-100"
-                                        >
-                                            View & Claim
-                                        </Button>
+                                        <span className="text-xs font-medium text-blue-800">
+                                            Click to view &amp; claim
+                                        </span>
                                     </div>
                                 </div>
                             )}
