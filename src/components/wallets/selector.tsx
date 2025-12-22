@@ -168,7 +168,7 @@ export default function WalletSelector({
             <div className="px-8 pb-8 pt-6 border-t border-slate-200">
               <div className="text-center space-y-2">
                 <p className="text-xs text-slate-600">New to EVM wallets?</p>
-                <a href="https://google.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline hover:text-blue-700">Learn more <ExternalLink className="w-3 h-3"/> </a>
+<a href="https://ethereum.org/en/wallets/" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline hover:text-blue-700">Learn more <ExternalLink className="w-3 h-3"/> </a>
               </div>
             </div>
 
