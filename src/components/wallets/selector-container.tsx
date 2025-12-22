@@ -7,6 +7,7 @@ import {eip6963Store} from "@/utils/eip6963-provider";
 import { connect, switchChain, getAccount } from '@wagmi/core';
 import { wagmiConfig} from "@/lib/wagmi/config";
 import { walletConnectForQR} from "@/lib/wagmi/walletconnect";
+import { isWalletConnectConnector } from "@/lib/wagmi/connector";
 
 export function buildDetectedWallets(availableWallets: Array<{ name: string, rdns: string, icon?: string}>): DetectedWallet[] {
   const out: DetectedWallet[] = [];
@@ -79,7 +80,7 @@ const onSelectWallet = async(rdns: string, detected: boolean) => {
       const connections = getConnections(wagmiConfig);
       // WalletConnect connector might have different ID variations
       const activeConnector = connections.find(c => 
-        c.connector.id.toLowerCase().includes('walletconnect')
+        isWalletConnectConnector(c.connector)
       )?.connector ?? connections[0]?.connector;
 
       if (!activeConnector) {

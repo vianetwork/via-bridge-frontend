@@ -2,6 +2,21 @@ import { injected } from 'wagmi/connectors';
 import { resolveDisplayName } from '@/utils/wallet-metadata';
 
 /**
+ * Checks if the connector is WalletConnect (case-insensitive match on id/name).
+ * @example
+ * const { connector } = getAccount(wagmiConfig);
+ * if (isWalletConnectConnector(connector)) { ... }
+ */
+export function isWalletConnectConnector(
+  connector: { id?: string; name?: string } | null | undefined
+): boolean {
+  if (!connector) return false;
+  const idMatch = connector.id?.toLowerCase().includes('walletconnect') ?? false;
+  const nameMatch = connector.name?.toLowerCase().includes('walletconnect') ?? false;
+  return idMatch || nameMatch;
+}
+
+/**
  * Create a Wagmi "injected" connector targeting a specific EIP-6963 provider.
  * We cast the provider to `any` to satisfy Wagmi's Target typing across wallets.
  */

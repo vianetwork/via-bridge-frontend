@@ -143,10 +143,9 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     try {
       const { getAccount } = await import("@wagmi/core");
       const { wagmiConfig } = await import("@/lib/wagmi/config");
+      const { isWalletConnectConnector } = await import("@/lib/wagmi/connector");
       const { connector: activeConnector } = getAccount(wagmiConfig) as any;
-      // Prefer connector id; fall back to name when id is unavailable
-      const isWalletConnect =
-        activeConnector?.id === "walletConnect" || activeConnector?.name === "WalletConnect";
+      const isWalletConnect = isWalletConnectConnector(activeConnector);
       // 120 seconds for WalletConnect due to mobile latency; keep default for injected wallets
       signTimeOutMs = isWalletConnect ? 120_000 : SIGN_TIMEOUT_MS;
       if (isWalletConnect) {
