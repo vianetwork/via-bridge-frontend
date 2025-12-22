@@ -13,12 +13,13 @@ import { Loader2, ExternalLink, CheckCircle2, Clock, AlertCircle } from "lucide-
 import { ethers } from "ethers";
 import { toast } from "sonner";
 import { BRIDGE_ABI } from "@/services/ethereum/abis";
-import { EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
+import { EthereumNetwork } from "@/services/ethereum/config";
 import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
 import { Transaction } from "@/store/wallet-store";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
+import { useWithdrawalReadinessStore } from "@/store/withdrawal-readiness-store";
 
 interface PendingWithdrawal {
   nonce: string; // nonce (withdrawalId)
@@ -44,12 +45,17 @@ interface PendingWithdrawalsProps {
 export default function PendingWithdrawals({ transactions, onClaimSuccess, open, onOpenChange, onReadyCountChange }: PendingWithdrawalsProps) {
   const [claimingIds, setClaimingIds] = useState<Set<string>>(new Set());
   const [isAutoSwitching, setIsAutoSwitching] = useState(false);
-  const [isCheckingReadiness, setIsCheckingReadiness] = useState(false);
-  const [readinessStatus, setReadinessStatus] = useState<Map<string, boolean>>(new Map());
   const [isMounted, setIsMounted] = useState(false);
   const { l1Address, isCorrectL1Network, isL1Connected, isMetamaskConnected, viaAddress } = useWalletState();
   const { fetchEthTransactions, checkL1Network, setIsL1Connected, setL1Address } = useWalletStore();
   const { switchToEthereum } = useNetworkSwitcher();
+  const { 
+    getReadiness, 
+    startPeriodicCheck, 
+    stopPeriodicCheck, 
+    isChecking,
+    markAsClaimed
+  } = useWithdrawalReadinessStore();
 
   // Track if component is mounted (client-side only)
   useEffect(() => {
@@ -138,8 +144,11 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     }))
     .filter(w => w.nonce && w.l1Receiver && w.l1Vault && w.payloadHash); // Only include withdrawals with all required fields
 
-  // Check withdrawal readiness when transactions change (even when modal is closed)
+  // Set up periodic checking for withdrawal readiness (every 30 seconds)
+  // This prevents spamming Alchemy API
   useEffect(() => {
+    if (!isMounted) return;
+
     // Get withdrawals to check - we check ALL withdrawals with required data,
     // not just those marked as pending, since we determine readiness from MessageManager
     const withdrawalsToCheck = transactions
@@ -158,86 +167,46 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
       .filter(w => w.payloadHash && w.l1Vault);
 
     if (withdrawalsToCheck.length === 0) {
-      // No withdrawals to check, report 0 (only on client-side after mount)
-      if (isMounted && onReadyCountChange) {
+      // Stop periodic checking if no withdrawals
+      stopPeriodicCheck();
+      if (onReadyCountChange) {
         onReadyCountChange(0);
       }
       return;
     }
 
-    const checkReadiness = async () => {
-      setIsCheckingReadiness(true);
-      try {
-        const sepoliaConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-        const provider = new ethers.JsonRpcProvider(sepoliaConfig.rpcUrls[0]);
+    // Start periodic checking (every 2 minute)
+    // The store will filter which withdrawals actually need checking based on cooldown
+    startPeriodicCheck(withdrawalsToCheck, 120000);
 
-        const statusMap = new Map<string, boolean>();
-
-        // Check each withdrawal's readiness by checking vault's withdrawalInfo
-        for (const withdrawal of withdrawalsToCheck) {
-          try {
-            const payloadHash = withdrawal.payloadHash.startsWith('0x') 
-              ? withdrawal.payloadHash 
-              : `0x${withdrawal.payloadHash}`;
-            
-            // Verify it's a valid 32-byte hash
-            const hexWithoutPrefix = payloadHash.slice(2);
-            if (hexWithoutPrefix.length !== 64) {
-              console.error(`Invalid payload hash length for withdrawal ${withdrawal.nonce}: expected 64 hex chars, got ${hexWithoutPrefix.length}`);
-              statusMap.set(payloadHash.toLowerCase(), false);
-              continue;
-            }
-            
-            // Check the vault contract to see if this withdrawal exists and is claimed
-            const vaultContract = new ethers.Contract(withdrawal.l1Vault, BRIDGE_ABI, provider);
-            const [isClaimed, batchNumber] = await vaultContract.withdrawalInfo(payloadHash);
-
-            // First check if the message exists (batchNumber > 0)
-            // If batchNumber is 0, the withdrawal doesn't exist yet
-            const messageExists = batchNumber > 0n;
-            
-            // Ready if withdrawal exists in mapping and is not claimed
-            const isReady = messageExists && !isClaimed;
-            statusMap.set(payloadHash.toLowerCase(), isReady);
-          } catch (error) {
-            console.error(`[PendingWithdrawals] Error checking withdrawal info for withdrawal ${withdrawal.nonce}:`, error);
-            // On error, assume not ready
-            // Normalize the hash for consistent storage
-            const errorPayloadHash = withdrawal.payloadHash.startsWith('0x') 
-              ? withdrawal.payloadHash.toLowerCase() 
-              : `0x${withdrawal.payloadHash.toLowerCase()}`;
-            statusMap.set(errorPayloadHash, false);
-          }
-        }
-
-        setReadinessStatus(statusMap);
-        
-        // Report ready count to parent (only on client-side after mount)
-        if (isMounted && onReadyCountChange) {
-          const readyCount = Array.from(statusMap.values()).filter(v => v === true).length;
-          onReadyCountChange(readyCount);
-        }
-      } catch (error) {
-        console.error("[PendingWithdrawals] Error checking withdrawal readiness:", error);
-        // On error, report 0 ready (only on client-side after mount)
-        if (isMounted && onReadyCountChange) {
-          onReadyCountChange(0);
-        }
-      } finally {
-        setIsCheckingReadiness(false);
-      }
+    // Cleanup on unmount or when dependencies change
+    return () => {
+      stopPeriodicCheck();
     };
+  }, [transactions, isMounted, startPeriodicCheck, stopPeriodicCheck, onReadyCountChange]);
 
-    checkReadiness();
-  }, [transactions, onReadyCountChange, isMounted]);
+  // Update ready count when readiness changes
+  useEffect(() => {
+    if (!isMounted || !onReadyCountChange) return;
 
-  // Map readiness status to withdrawals
-  // Normalize payload hash for lookup (ensure 0x prefix and lowercase)
+    const withdrawalsToCheck = transactions
+      .filter(tx => 
+        tx.type === 'withdraw' && 
+        tx.withdrawalId && 
+        tx.withdrawalPayloadHash
+      );
+
+    const readyCount = withdrawalsToCheck.filter(tx => {
+      const readiness = getReadiness(tx.withdrawalPayloadHash!);
+      return readiness === true;
+    }).length;
+
+    onReadyCountChange(readyCount);
+  }, [transactions, isMounted, getReadiness, onReadyCountChange]);
+
+  // Map readiness status to withdrawals from store
   const pendingWithdrawals: PendingWithdrawal[] = pendingWithdrawalsBase.map(w => {
-    const normalizedHash = w.payloadHash.startsWith('0x') 
-      ? w.payloadHash.toLowerCase() 
-      : `0x${w.payloadHash.toLowerCase()}`;
-    const isReady = readinessStatus.get(normalizedHash) ?? false;
+    const isReady = getReadiness(w.payloadHash) ?? false;
     return {
       ...w,
       isReady,
@@ -337,6 +306,9 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
       toast.success("Withdrawal claimed successfully!", {
         description: `Transaction: ${tx.hash}`,
       });
+
+      // Mark withdrawal as claimed so we stop checking it
+      markAsClaimed(withdrawal.payloadHash);
 
       // Refresh transactions
       if (onClaimSuccess) {
@@ -440,14 +412,14 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
           </div>
         )}
 
-        {isCheckingReadiness && (
+        {isChecking && (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
             <p className="text-sm text-muted-foreground">Checking withdrawal readiness...</p>
           </div>
         )}
 
-        {pendingWithdrawals.filter(w => w.isReady).length === 0 && !isCheckingReadiness ? (
+        {pendingWithdrawals.filter(w => w.isReady).length === 0 && !isChecking ? (
           <div className="text-center py-8 space-y-4">
             <div className="text-muted-foreground">
               <p>No withdrawals ready to claim.</p>
