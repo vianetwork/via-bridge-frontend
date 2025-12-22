@@ -1,4 +1,4 @@
-import { Layer, VIA_NETWORK_CONFIG, BRIDGE_CONFIG } from "@/services/config";
+import { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } from "@/services/config";
 import { ETHEREUM_NETWORK_CONFIG, EthereumNetwork } from "@/services/ethereum/config";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { eip6963Store } from "@/utils/eip6963-provider";
