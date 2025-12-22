@@ -1,5 +1,5 @@
 import { ethers, getAddress } from "ethers";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { FormAmountSlider } from "@/components/form-amount-slider";
 import { cn } from "@/lib/utils";
@@ -68,12 +68,17 @@ export default function EthereumDepositForm({ asset, isYield }: EthereumDepositF
 
     // Get the address to use for balance checking (prefer l1Address, fallback to viaAddress)
     const walletAddress = l1Address || viaAddress;
+    const isFetchingRef = useRef(false);
 
-    // Fetch Balance
+    // Fetch Balance - use stable dependencies to prevent spam
     useEffect(() => {
         async function fetchBalance() {
             // Need wallet address, correct network, and asset address
             if (!walletAddress || !isCorrectL1Network || !asset.addresses[EthereumNetwork.SEPOLIA]) return;
+
+            // Prevent multiple simultaneous fetches
+            if (isFetchingRef.current) return;
+            isFetchingRef.current = true;
 
             try {
                 setIsLoadingBalance(true);
@@ -87,12 +92,13 @@ export default function EthereumDepositForm({ asset, isYield }: EthereumDepositF
                 setBalance(null);
             } finally {
                 setIsLoadingBalance(false);
+                isFetchingRef.current = false;
             }
         }
 
         fetchBalance();
-        // Refresh on wallet address, network state, or asset change
-    }, [walletAddress, isCorrectL1Network, asset, isL1Connected, isMetamaskConnected]);
+        // Use stable dependencies: only wallet address, network state, asset symbol and address
+    }, [walletAddress, isCorrectL1Network, asset.symbol, asset.addresses?.[EthereumNetwork.SEPOLIA], asset.decimals]);
 
 
     async function onSubmit(values: z.infer<typeof depositFormSchema>) {

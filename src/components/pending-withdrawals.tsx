@@ -190,11 +190,14 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
             
             // Check the vault contract to see if this withdrawal exists and is claimed
             const vaultContract = new ethers.Contract(withdrawal.l1Vault, BRIDGE_ABI, provider);
-            const [isClaimed] = await vaultContract.withdrawalInfo(payloadHash);
+            const [isClaimed, batchNumber] = await vaultContract.withdrawalInfo(payloadHash);
 
+            // First check if the message exists (batchNumber > 0)
+            // If batchNumber is 0, the withdrawal doesn't exist yet
+            const messageExists = batchNumber > 0n;
+            
             // Ready if withdrawal exists in mapping and is not claimed
-            // If withdrawal doesn't exist in mapping, isClaimed will be false (default)
-            const isReady = !isClaimed;
+            const isReady = messageExists && !isClaimed;
             statusMap.set(payloadHash.toLowerCase(), isReady);
           } catch (error) {
             console.error(`[PendingWithdrawals] Error checking withdrawal info for withdrawal ${withdrawal.nonce}:`, error);

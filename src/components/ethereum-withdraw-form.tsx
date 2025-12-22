@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -67,23 +67,22 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
         }
     }, [balance, form]);
 
-    // Fetch Balance from L2
+    const isFetchingRef = useRef(false);
+    const targetContract = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
+
+    // Fetch Balance from L2 - use stable dependencies
     const fetchBalance = useCallback(async () => {
         // Need wallet address, correct network, and vault contract
-        if (!viaAddress || !isCorrectViaNetwork) return;
+        if (!viaAddress || !isCorrectViaNetwork || !targetContract) return;
+
+        // Prevent multiple simultaneous fetches
+        if (isFetchingRef.current) return;
+        isFetchingRef.current = true;
 
         try {
             setIsLoadingBalance(true);
             const networkConfig = getNetworkConfig();
             const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
-
-            // Check L2 balance
-            const targetContract = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
-
-            if (!targetContract) {
-                setBalance(null);
-                return;
-            }
 
             const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, provider);
             const bal = await tokenContract.balanceOf(viaAddress);
@@ -94,36 +93,26 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
             setBalance(null);
         } finally {
             setIsLoadingBalance(false);
+            isFetchingRef.current = false;
         }
-    }, [viaAddress, isCorrectViaNetwork, asset, isYield]);
+    }, [viaAddress, isCorrectViaNetwork, targetContract, asset.decimals]);
 
     // Initial fetch and refresh on dependencies change
     useEffect(() => {
         fetchBalance();
     }, [fetchBalance]);
 
-    // Periodic refresh every 10 seconds
-    useEffect(() => {
-        if (!viaAddress || !isCorrectViaNetwork) return;
-
-        const interval = setInterval(() => {
-            fetchBalance();
-        }, 10000); // Refresh every 10 seconds
-
-        return () => clearInterval(interval);
-    }, [viaAddress, isCorrectViaNetwork, fetchBalance]);
-
-    // Refresh when tab becomes visible
+    // Refresh when tab becomes visible - use stable dependencies
     useEffect(() => {
         const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && viaAddress && isCorrectViaNetwork) {
+            if (document.visibilityState === 'visible' && viaAddress && isCorrectViaNetwork && targetContract) {
                 fetchBalance();
             }
         };
 
         document.addEventListener('visibilitychange', handleVisibilityChange);
         return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [viaAddress, isCorrectViaNetwork, fetchBalance]);
+    }, [viaAddress, isCorrectViaNetwork, targetContract, fetchBalance]);
 
 
     async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {

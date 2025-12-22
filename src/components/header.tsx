@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
-import { LogOut, AlertCircle, Menu, Droplet } from "lucide-react";
+import { LogOut, AlertCircle, Menu, Droplet, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Layer } from "@/services/config";
@@ -241,18 +241,25 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Link
-            href="/"
-            className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5 rounded-md hover:bg-slate-100"
-          >
-            Bitcoin Bridge
-          </Link>
-          <Link
-            href="/ethereum-bridge"
-            className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5 rounded-md hover:bg-slate-100"
-          >
-            Ethereum Bridge
-          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5 rounded-md hover:bg-slate-100"
+              >
+                Bridge
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem asChild>
+                <Link href="/bitcoin-bridge">Bitcoin Bridge</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/ethereum-bridge">Ethereum Bridge</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {enableFaucet && (
             <Link
               href="/faucet"
@@ -275,7 +282,7 @@ export default function Header() {
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel>Navigation</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
-                    <Link href="/">Bitcoin Bridge</Link>
+                    <Link href="/bitcoin-bridge">Bitcoin Bridge</Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/ethereum-bridge">Ethereum Bridge</Link>
