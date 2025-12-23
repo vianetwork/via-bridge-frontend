@@ -50,7 +50,7 @@ export default function Home() {
                 <div className="flex flex-col items-center gap-6 mb-6">
                   <div className="p-6 bg-blue-100 rounded-2xl">
                     <Image
-                      src="/ethereum-bridge.png"
+                      src="/ethereum-logo.png"
                       alt="Ethereum"
                       width={64}
                       height={64}
