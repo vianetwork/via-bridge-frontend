@@ -5,8 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Loader2, Wallet, AlertCircle, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
@@ -14,15 +13,18 @@ import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { ensureViaNetwork } from "@/utils/ensure-network";
 import { ethers, getAddress, BrowserProvider } from "ethers";
-import { FormAmountSlider } from "@/components/form-amount-slider";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
-import { cn } from "@/lib/utils";
 import { ERC20_ABI, VAULT_ABI } from "@/services/ethereum/abis";
 import { getNetworkConfig } from "@/services/config";
+import ApprovalModal from "@/components/approval-modal";
+import { getWalletDisplayMetaByRdns } from "@/utils/wallet-metadata";
+import { NETWORKS } from "@/services/bridge/networks";
 
 interface EthereumWithdrawFormProps {
     asset: typeof SUPPORTED_ASSETS[0];
     isYield: boolean;
+    amount: string;
+    onAmountReset?: () => void;
 }
 
 const withdrawFormSchema = z.object({
@@ -39,26 +41,38 @@ const withdrawFormSchema = z.object({
     }, "Invalid Ethereum address"),
 });
 
-export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdrawFormProps) {
+export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountReset }: EthereumWithdrawFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<string>("");
     const [balance, setBalance] = useState<string | null>(null);
-    const [isLoadingBalance, setIsLoadingBalance] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [txHash, setTxHash] = useState<string | null>(null);
     const [explorerUrl, setExplorerUrl] = useState<string | null>(null);
+    const [approvalOpen, setApprovalOpen] = useState(false);
 
-    const { addLocalTransaction } = useWalletStore();
+    const { addLocalTransaction, selectedWallet } = useWalletStore();
     const { isMetamaskConnected, viaAddress, connectMetamask, isCorrectViaNetwork } = useWalletState();
+    
+    // Get wallet name from selected wallet
+    const walletMeta = selectedWallet ? getWalletDisplayMetaByRdns(selectedWallet) : null;
+    const walletName = walletMeta?.name || "Wallet";
 
     const form = useForm<z.infer<typeof withdrawFormSchema> & { _balance?: string }>({
         resolver: zodResolver(withdrawFormSchema),
+        mode: "onChange", // Validate on change to update isValid state
         defaultValues: {
-            amount: "",
+            amount: amount || "",
             recipientAddress: "",
         },
     });
+
+    // Update form amount when prop changes
+    useEffect(() => {
+        if (amount) {
+            form.setValue("amount", amount, { shouldValidate: true });
+        }
+    }, [amount, form]);
 
     // Update form balance when state changes
     useEffect(() => {
@@ -80,7 +94,6 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
         isFetchingRef.current = true;
 
         try {
-            setIsLoadingBalance(true);
             // Use browser wallet provider instead of RPC
             if (typeof window === "undefined" || !window.ethereum) {
                 setBalance(null);
@@ -94,10 +107,9 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
         } catch (err) {
             console.error("Error fetching L2 balance:", err);
             setBalance(null);
-        } finally {
-            setIsLoadingBalance(false);
-            isFetchingRef.current = false;
-        }
+            } finally {
+                isFetchingRef.current = false;
+            }
     }, [viaAddress, isCorrectViaNetwork, targetContract, asset.decimals]);
 
     // Initial fetch and refresh on dependencies change
@@ -121,6 +133,7 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
     async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
         try {
             setIsSubmitting(true);
+            setApprovalOpen(true);
             setStatus("Initializing...");
 
             // Ensure network is correct and get provider/signer
@@ -173,6 +186,11 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
                 description: `Withdrawing ${values.amount} ${asset.symbol}`,
             });
 
+            // Reset amount after successful withdrawal
+            if (onAmountReset) {
+                onAmountReset();
+            }
+
             // Refresh balance after successful withdrawal
             await fetchBalance();
         } catch (error: any) {
@@ -186,9 +204,16 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
             }
         } finally {
             setIsSubmitting(false);
+            setApprovalOpen(false);
             setStatus("");
         }
     }
+
+    const handleCancelTransfer = () => {
+        setApprovalOpen(false);
+        setIsSubmitting(false);
+        setStatus("");
+    };
 
     const handleConnect = async () => {
         try {
@@ -361,100 +386,92 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
     }
 
     return (
-        <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                    control={form.control}
-                    name="amount"
-                    render={({ field }) => (
-                        <FormItem>
-                            <div className="flex justify-between items-center">
-                                <FormLabel className="text-sm">Amount ({asset.symbol})</FormLabel>
-                            </div>
-                            <FormControl>
-                                <div className="relative">
-                                    <Input
-                                        placeholder="0.00"
-                                        step="any"
-                                        type="number"
-                                        className={cn(
-                                            "placeholder:text-muted-foreground/60 pr-16",
-                                            field.value && balance && parseFloat(field.value) > parseFloat(balance) && "border-red-500 focus-visible:ring-red-500"
-                                        )}
-                                        {...field}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (balance) {
-                                                form.setValue("amount", balance, { shouldValidate: true });
-                                            }
-                                        }}
-                                        disabled={isLoadingBalance || !balance || parseFloat(balance) <= 0}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-0.5 text-[10px] font-semibold rounded bg-blue-100 text-blue-600 hover:bg-blue-200 disabled:opacity-50 mr-2"
-                                    >
-                                        MAX
-                                    </button>
-                                </div>
-                            </FormControl>
-                            {balance && (
-                                <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-                                    Vault Balance:{" "}
-                                    {isLoadingBalance ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                        <span className={cn("font-medium", field.value && parseFloat(field.value) > parseFloat(balance) && "text-red-500")}>
-                                            {parseFloat(balance).toLocaleString(undefined, { maximumFractionDigits: 6 })} {asset.symbol}
-                                        </span>
-                                    )}
-                                </div>
-                            )}
+        <>
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    {/* Amount is now handled by parent component */}
+                    <FormField
+                        control={form.control}
+                        name="amount"
+                        render={() => <input type="hidden" />}
+                    />
 
-                            {balance && parseFloat(balance) > 0 && (
-                                <FormAmountSlider
-                                    form={form}
-                                    name="amount"
-                                    balance={parseFloat(balance)}
-                                    min={0}
-                                    feeReserve={0}
-                                    isLoading={isLoadingBalance}
-                                    unit={asset.symbol}
-                                    decimals={asset.decimals}
-                                    ariaLabel={`Withdraw ${asset.symbol} amount`}
+                    <FormField
+                        control={form.control}
+                        name="recipientAddress"
+                        render={({ field }) => (
+                            <FormItem>
+                                <AddressFieldWithWallet
+                                    mode="ethereum" // Use ethereum mode for L1 address
+                                    label="Recipient (L1 Ethereum Address)"
+                                    placeholder="0x..."
+                                    value={field.value || ""}
+                                    onChange={(value) => {
+                                        field.onChange(value);
+                                        // Trigger validation when address changes
+                                        form.trigger("recipientAddress");
+                                    }}
                                 />
-                            )}
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-
-                <FormField
-                    control={form.control}
-                    name="recipientAddress"
-                    render={({ field }) => (
-                        <FormItem>
-                            <AddressFieldWithWallet
-                                mode="via" // Changed to via to avoid L1 network enforcement
-                                label="Recipient (L1 Ethereum Address)"
-                                placeholder="0x..."
-                                value={field.value || ""}
-                                onChange={field.onChange}
-                            />
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-                <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? (
-                        <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            {status || "Processing..."}
-                        </>
-                    ) : (
-                        "Withdraw"
-                    )}
-                </Button>
-            </form>
-        </Form>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                    <Button 
+                        type="submit" 
+                        className="w-full" 
+                        disabled={
+                            isSubmitting || 
+                            !amount || 
+                            parseFloat(amount) <= 0 ||
+                            !form.watch("recipientAddress") ||
+                            !!form.formState.errors.recipientAddress ||
+                            !!form.formState.errors.amount
+                        }
+                    >
+                        {isSubmitting ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                {status || "Processing..."}
+                            </>
+                        ) : (
+                            "Withdraw"
+                        )}
+                    </Button>
+                </form>
+            </Form>
+            <ApprovalModal
+                open={approvalOpen}
+                onOpenChange={setApprovalOpen}
+                onCancel={handleCancelTransfer}
+                direction="withdraw"
+                title="Waiting for Approval"
+                walletName={walletName}
+                transactionData={{
+                    fromAmount: form.watch("amount") || "0",
+                    toAmount: form.watch("amount") || "0", // Same amount for now, could calculate fees if needed
+                    fromToken: {
+                        symbol: asset.symbol,
+                        name: asset.name,
+                        decimals: asset.decimals,
+                        icon: asset.icon,
+                    },
+                    toToken: {
+                        symbol: asset.symbol,
+                        name: asset.name,
+                        decimals: asset.decimals,
+                        icon: asset.icon,
+                    },
+                    fromNetwork: NETWORKS.VIA_TESTNET,
+                    toNetwork: {
+                        id: 'ethereum-sepolia',
+                        displayName: 'Ethereum Sepolia',
+                        chainId: 11155111,
+                        type: 'evm' as const,
+                        icon: '/ethereum-logo.png',
+                    },
+                    recipientAddress: form.watch("recipientAddress") || "",
+                }}
+            />
+        </>
     );
 }

@@ -34,12 +34,12 @@ export function VaultCard({
     return (
         <Card
             className={cn(
-                "cursor-pointer transition-all duration-200 hover:border-primary/50",
+                "cursor-pointer transition-all duration-200 hover:border-primary/50 py-3",
                 isSelected ? "border-primary bg-primary/5" : "border-border/50"
             )}
             onClick={onClick}
         >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
                 <div className="flex items-center gap-2">
                     <div className="relative h-6 w-6 rounded-full overflow-hidden">
                         <Image

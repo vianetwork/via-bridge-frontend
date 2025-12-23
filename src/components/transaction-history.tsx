@@ -8,10 +8,14 @@ interface TransactionHistoryProps {
   isLoading?: boolean;
   onRefresh?: () => void;
   transactions: Transaction[]; // Pass directly
+  excludeSymbol?: string; // Optional: exclude transactions with this symbol (e.g., 'BTC' to exclude Bitcoin transactions)
 }
 
-export function TransactionHistory({ isLoading = false, onRefresh, transactions }: TransactionHistoryProps) {
-  // Removed global store usage and filtering logic
+export function TransactionHistory({ isLoading = false, onRefresh, transactions, excludeSymbol }: TransactionHistoryProps) {
+  // Filter out transactions by symbol if specified (e.g., exclude BTC from ETH bridge)
+  const filteredTransactions = excludeSymbol
+    ? transactions.filter(tx => (tx.symbol || 'BTC') !== excludeSymbol)
+    : transactions;
 
 
   return (
@@ -81,11 +85,11 @@ export function TransactionHistory({ isLoading = false, onRefresh, transactions 
         </div>
       </div>
 
-      {isLoading && transactions.length === 0 ? (
+      {isLoading && filteredTransactions.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
           Loading transactions...
         </div>
-      ) : transactions.length === 0 ? (
+      ) : filteredTransactions.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
           No transactions yet
         </div>
@@ -93,7 +97,7 @@ export function TransactionHistory({ isLoading = false, onRefresh, transactions 
         <div className="border rounded-md">
           <div className="h-[150px] overflow-y-auto pr-1">
             <div className="space-y-2 p-2">
-              {transactions.map((tx) => (
+              {filteredTransactions.map((tx) => (
                 <div key={tx.id} className="flex items-start justify-between rounded-md border p-3 text-sm">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
