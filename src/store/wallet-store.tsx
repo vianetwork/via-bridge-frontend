@@ -8,6 +8,8 @@ import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
 import {getConnections} from "@wagmi/core";
+import { switchToL1Network, switchToEthereumNetwork } from "@/utils/network-switcher";
+import { EthereumNetwork } from "@/services/ethereum/config";
 
 // Create events for wallet state changes
 export const walletEvents = {
