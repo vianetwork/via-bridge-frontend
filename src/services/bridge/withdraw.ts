@@ -1,12 +1,12 @@
 import { toast } from "sonner";
 import { BrowserProvider, Provider, Signer } from "via-ethers";
-import { ethers } from "ethers";
+import { ethers, isError } from "ethers";
 import { L2_BTC_DECIMALS } from "../constants";
 import { getNetworkConfig } from "../config";
 import {getPreferredWeb3ProviderAsync} from "@/utils/ethereum-provider";
 import { useWalletStore } from "@/store/wallet-store";
 import {eip6963Store} from "@/utils/eip6963-provider";
-import { withTimeout } from "@/utils/promise";
+import { withTimeout, abortablePromise, isAbortError } from "@/utils/promise";
 
 const CONNECT_TIMEOUT_MS = 10000; // 10-second timeout
 const BALANCE_TIMEOUT_MS = 5000; // 5-second timeout
@@ -15,6 +15,7 @@ const SIGN_TIMEOUT_MS = 20000;  // 20-second timeout
 export interface WithdrawParams {
   amount: string;
   recipientBitcoinAddress: string;
+  signal?: AbortSignal;
 }
 
 export interface WithdrawResult {
@@ -22,29 +23,62 @@ export interface WithdrawResult {
   explorerUrl: string;
 }
 
+/**
+ * Executes a withdrawal transaction to a specified recipient Bitcoin address using the configured wallet.
+ * This function ensures the wallet is connected, verifies balances, checks the network, and signs the transaction.
+ *
+ *  1) Resolve an EIP-1193 provider from wagmi's active connector (WalletConnect or injected)
+ *  2) Handshake & select account. Bind signer to that account (getSigner(signerAddr))
+ *  3) Verify chain (VIA) via eth_chainId and expected config. Optionally switch
+ *  4) Check balance; sign & submit via-ethers Signer (wallet signs, RPC reads use on-chain Provider)
+ *  5) Return txHash and explorer URL derived from config
+ *
+ * @param {WithdrawParams} params - The parameters required to execute the withdrawal.
+ * @param {string} params.amount - The amount to withdraw in BTC (as a string for precision purposes).
+ * @param {string} params.recipientBitcoinAddress - The recipient's Bitcoin address for the withdrawal.
+ * @return {Promise<WithdrawResult>} A promise that resolves to the withdrawal result, including the transaction hash and an explorer URL.
+ * @throws {Error} Throws an error if the wallet connection fails, the network is incorrect, or the signing process is rejected or fails.
+ */
 export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawResult> {
   try {
+    // check if already abborted
+    (params.signal as any)?.throwIfAborted();
+
     const { selectedWallet, viaAddress } = useWalletStore.getState();
-    let chosen: { provider: EIP1193Provider; name: string; rdns: string} | null = null;
-    if (selectedWallet) {
-      const detail = eip6963Store.getProviderByRdns(selectedWallet);
-      if (detail) chosen = { provider: detail.provider, name: detail.info.name, rdns: detail.info.rdns };
+    // Prefer active wagmi connector and fallback to EIP-6963 provider
+    let providerApi: EIP1193Provider | null = null;
+    try {
+      const { getAccount, getConnections } = await import("@wagmi/core");
+      const { wagmiConfig } = await import("@/lib/wagmi/config");
+      const { connector } = getAccount(wagmiConfig) as any;
+      const connections = getConnections(wagmiConfig);
+      const activeConnector = connector ?? connections[0]?.connector;
+      if (activeConnector?.getProvider) {
+        providerApi = await activeConnector.getProvider();
+      }
+    } catch {}
+    if (!providerApi) {
+      let injected: { provider: EIP1193Provider; name: string; rdns: string} | null = null;
+      if (selectedWallet) {
+        const detail = eip6963Store.getProviderByRdns(selectedWallet);
+        if (detail) injected = { provider: detail.provider, name: detail.info.name, rdns: detail.info.rdns };
+      }
+      if (!injected) injected = await getPreferredWeb3ProviderAsync(CONNECT_TIMEOUT_MS);
+      if (injected) providerApi = injected.provider;
+
+      if (!providerApi) {
+        const msg = "No EVM wallet found. Please install a compatible wallet or connect via WalletConnect.";
+        toast.error(msg, {description: msg,});
+        throw new Error(msg);
+      }
     }
 
-    if (!chosen) chosen = await getPreferredWeb3ProviderAsync(CONNECT_TIMEOUT_MS);
-
-    if (!chosen) {
-      const msg = "No EVM wallet found. Please install Metamask, Rabby or Coinbase Wallet to continue.";
-      toast.error(msg, {description: msg,});
-      throw new Error(msg);
-    }
-
-    const providerApi = chosen.provider; // injected provider from the selected wallet (MetaMask/Rabby/Coinbase)
-    const browserProvider = new BrowserProvider((providerApi));
+    const browserProvider = new BrowserProvider(providerApi as any);
     const provider = new Provider(getNetworkConfig().rpcUrls[0]);
 
-    // Wallet handshake: first probe existing accounts (eth_accounts, no popup).
-    // If none, prompt connect (eth_requestAccounts) with a timeout to avoid freezing UI.
+    // Handshake:
+    // 1) Probe existing accounts (eth_accounts, no popup).
+    // 2) If none, prompt user (eth_requestAccounts) with a timeout to avoid freezing the UI.
     let accounts = (await providerApi.request({ method: "eth_accounts" }).catch(() => [])) as string[];
     if (!accounts || accounts.length === 0) {
       accounts = await withTimeout(
@@ -61,8 +95,11 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       throw new Error(msg);
     }
 
-    // Get network info
-    const browserSigner = await browserProvider.getSigner();
+    // Wake the session without prompting the account UI again
+    await providerApi.request({ method: "eth_chainId" }).catch(() => undefined);
+
+    // Bind signer to the active account to ensure correct source address on all providers
+    const browserSigner = await browserProvider.getSigner(signerAddr);
     const network = await browserProvider.getNetwork();
 
     if (viaAddress && viaAddress.toLowerCase() !== signerAddr.toLowerCase()) {
@@ -71,8 +108,8 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       throw new Error(msg);
     }
 
-    // Check if the correct chain is selected
-    const expectedChainId = Number((await import("@/services/config")).VIA_NETWORK_CONFIG[(await import("@/services/config")).BRIDGE_CONFIG.defaultNetwork].chainId);
+    // Validate chain is VIA. Consider issuing wallet_switchEthereumChain here before throwing.
+    const expectedChainId = Number(getNetworkConfig().chainId);
     if (Number(network.chainId) !== expectedChainId) {
       const msg  = `Wrong network. Expected chain ID: ${expectedChainId}, but got: ${network.chainId}`;
       toast.error("Wrong network", {description: msg,});
@@ -99,14 +136,36 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
       provider
     );
 
-    const tx = await withTimeout(
-      signer.withdraw({to: params.recipientBitcoinAddress,  amount: l2SatsAmount,}),
-      SIGN_TIMEOUT_MS, // 10-second timeout
-      "No signing request detected. Your wallet may be locked or the popup was blocked. Unlock your wallet and approve the transaction. If no prompt appears, open the wallet extension manually and try again."
-    );
+    // Choose timeout and message based on the connector type (WalletConnect vs. injected)
+    let signTimeOutMs = SIGN_TIMEOUT_MS;
+    let timeOutMsg =
+      "No signing request detected. Your wallet may be locked or a popup was blocked. Open your wallet extension (MetaMask/Rabby/Coinbase), unlock it, and approve the transaction.";
+    try {
+      const { getAccount } = await import("@wagmi/core");
+      const { wagmiConfig } = await import("@/lib/wagmi/config");
+      const { isWalletConnectConnector } = await import("@/lib/wagmi/connector");
+      const { connector: activeConnector } = getAccount(wagmiConfig) as any;
+      const isWalletConnect = isWalletConnectConnector(activeConnector);
+      // 120 seconds for WalletConnect due to mobile latency; keep default for injected wallets
+      signTimeOutMs = isWalletConnect ? 120_000 : SIGN_TIMEOUT_MS;
+      if (isWalletConnect) {
+        timeOutMsg =
+          "No response from mobile wallet (WalletConnect). Open the wallet app on your phone, ensure the WalletConnect session is active, and approve. If nothing appears, disconnect the session and re-scan the QR code, then retry.";
+      }
+    } catch {}
+
+    const withdrawPromise = signer.withdraw({
+      to: params.recipientBitcoinAddress,
+      amount: l2SatsAmount,
+    });
+
+    const abortableWithdraw = abortablePromise(withdrawPromise, params.signal);
+    const tx = await withTimeout(abortableWithdraw, signTimeOutMs, timeOutMsg);
+    // Note: if abort happens after tx is obtained, proceed and surface tx to user
 
     const txHash = tx.hash;
-    const explorerUrl = `https://testnet.blockscout.onvia.org/tx/${txHash}`;
+    const explorerBase = getNetworkConfig().blockExplorerUrls?.[0] ?? "https://testnet.blockscout.onvia.org";
+    const explorerUrl = `${explorerBase.replace(/\/+$/, "")}/tx/${txHash}`;
 
     return {
       txHash,
@@ -114,7 +173,9 @@ export async function executeWithdraw(params: WithdrawParams): Promise<WithdrawR
     };
   } catch (error: any) {
     console.error("Withdrawal error:", error);
-    if (error?.code === 4001) {
+    if (isAbortError(error)) {
+      toast.info("Withdrawal cancelled", {description: "You cancelled the withdrawal request in your wallet.",});
+    } else if (isError(error, "ACTION_REJECTED")) {
       toast.error("Request rejected", {description: "You rejected the request in your wallet.",});
     } else {
       toast.error("Withdrawal failed", {description: (error as Error)?.message || "There was an error processing your withdrawal. Please try again.",});

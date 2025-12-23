@@ -1,13 +1,14 @@
 // Display metadata for unknown wallets
 // This avoids per-wallet string matching and normalizes display
 
-export type WalletBrand = 'MetaMask' | 'Rabby' | 'Coinbase' | 'Unknown';
+export type WalletBrand = 'MetaMask' | 'Rabby' | 'Coinbase' |'Rainbow'| 'WalletConnect'| 'Unknown';
 
 export interface WalletDisplayMeta {
   rdns: string;
   name: string;
   brand: WalletBrand;
   iconPath?: string;
+  installUrl?: string;
 }
 
 /**
@@ -21,20 +22,37 @@ export const WALLET_METADATA_BY_RDNS: Record<string,
       rdns: 'io.metamask',
       name: 'MetaMask',
       brand: 'MetaMask',
-      iconPath: '/metamask-logo.svg'
+      iconPath: '/metamask-logo.svg',
+      installUrl: 'https://metamask.io/download',
     },
     'io.rabby': {
       rdns: 'io.rabby',
       name: 'Rabby',
       brand: 'Rabby',
-      // iconPath omitted; use provider.info.icon
+      iconPath: '/rabbywallet-logo.svg',
+      installUrl: 'https://rabby.io/',
     },
-    'io.coinbase': {
-      rdns: 'io.coinbase',
-      name: 'Coinbase',
+    'com.coinbase.wallet': {
+      rdns: 'com.coinbase.wallet',
+      name: 'Coinbase Wallet',
       brand: 'Coinbase',
-      // iconPath omitted; use provider.info.icon
-    }
+      iconPath: '/coinbase-logo.svg',
+      installUrl: 'https://www.coinbase.com/wallet/downloads',
+    },
+    'me.rainbow': {
+      rdns: 'me.rainbow',
+      name: 'Rainbow',
+      brand: 'Rainbow',
+      iconPath: '/rainbow-logo.svg',
+      installUrl: 'https://rainbow.me/download',
+    },
+    'com.walletconnect': {
+      rdns: 'com.walletconnect',
+      name: 'WalletConnect',
+      brand: 'WalletConnect',
+      iconPath: '/walletconnect-logo.svg',
+      // No installUrl, QR connect will be handled by Wagmi connector
+  },
 };
 
 /**
@@ -71,12 +89,12 @@ export function resolveDisplayName(provider: EIP6963ProviderDetail): string {
 
 /**
  * Resolve an icon path/URL for a provider
- * - Prefer our bundled iconPath for known wallets
- * - Otherwise use provider.info.icon
+ * - Prefer provider.info.icon
+ * - Otherwise bundled iconPath for known wallets
  */
 export function resolveIcon(provider: EIP6963ProviderDetail): string | undefined {
   const meta = getWalletDisplayMetaByRdns(provider.info.rdns);
-  return meta?.iconPath ?? provider.info.icon;
+  return provider.info.icon ?? meta?.iconPath; 
 }
 
 /**

@@ -8,6 +8,7 @@ const schema = z.object({
         z.boolean(),
     ),
     NEXT_PUBLIC_API_URL: z.string().url(),
+    NEXT_PUBLIC_WALLETCONNECT_ID: z.string().min(1, "Missing WalletConnect Project ID"),
 });
 
 export const env = () => {
@@ -15,6 +16,7 @@ export const env = () => {
         NEXT_PUBLIC_NETWORK: process.env.NEXT_PUBLIC_NETWORK,
         NEXT_PUBLIC_ENABLE_FAUCET: process.env.NEXT_PUBLIC_ENABLE_FAUCET,
         NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+        NEXT_PUBLIC_WALLETCONNECT_ID: process.env.NEXT_PUBLIC_WALLETCONNECT_ID,
     });
 
     if (!parsed.success) {

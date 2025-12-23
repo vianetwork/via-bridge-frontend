@@ -10,6 +10,7 @@ import { useState } from "react";
 import { Layer } from "@/services/config";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { useMobile } from "@/hooks/use-mobile";
+import { WalletConnectButton as EVMSelectorButton } from "@/components/wallets/connect-button";
 import { env } from "@/lib/env";
 import {
   DropdownMenu,
@@ -22,7 +23,7 @@ import {
 
 
 export default function Header() {
-  const { isMobile } = useMobile();
+  const { isMobile, mounted } = useMobile();
   const enableFaucet = env().NEXT_PUBLIC_ENABLE_FAUCET;
   const {
     isXverseConnected,
@@ -188,11 +189,8 @@ export default function Header() {
           )}
         </>
       ) : (
-        <DropdownMenuItem
-          onClick={handleConnectMetamask}
-          disabled={isConnectingMetaMask}
-        >
-          {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
+        <DropdownMenuItem asChild>
+          <EVMSelectorButton />
         </DropdownMenuItem>
       )}
     </>
@@ -229,7 +227,45 @@ export default function Header() {
             </Link>
           )}
 
-          {isMobile ? (
+          {!mounted ? (
+            // Show desktop layout during SSR/hydration to prevent mismatch
+            <div className="flex items-center gap-2">
+              {isXverseConnected ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-2"
+                  onClick={handleDisconnectXverse}
+                >
+                  <div className={`w-2 h-2 ${isCorrectBitcoinNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                  <span>BTC: {bitcoinAddress?.slice(0, 6)}...{bitcoinAddress?.slice(-4)}</span>
+                </Button>
+              ) : (
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleConnectXverse}
+                  disabled={isConnectingXverse}
+                >
+                  {isConnectingXverse ? "Connecting..." : "Connect Xverse"}
+                </Button>
+              )}
+              
+              {isMetamaskConnected ? (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="flex items-center gap-2"
+                  onClick={handleDisconnectMetamask}
+                >
+                  <div className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                  <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
+                </Button>
+              ) : (
+                <EVMSelectorButton />
+              )}
+            </div>
+          ) : isMobile ? (
             <div className="flex items-center gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -287,14 +323,7 @@ export default function Header() {
                   <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
                 </Button>
               ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectMetamask}
-                  disabled={isConnectingMetaMask}
-                >
-                  {isConnectingMetaMask ? "Connecting..." : "Connect EVM Wallet"}
-                </Button>
+                <EVMSelectorButton />
               )}
             </div>
           )}

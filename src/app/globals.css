@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 210 20% 95%;
+    --background: 220 14% 96%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -36,10 +36,12 @@
   }
 }
 
-/* Add this to your globals.css file */
+/* Allow natural page scrolling */
 @layer base {
-  html, body {
+  html {
     height: 100%;
-    overflow: hidden;
+  }
+  body {
+    min-height: 100%;
   }
 }
