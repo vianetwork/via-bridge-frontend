@@ -186,7 +186,7 @@ export default function BridgeInterface() {
 
             {showTransactions && (
               <div className="w-full mt-2">
-                <TransactionHistory isLoading={isLoadingTransactions} onRefresh={fetchTransactions} />
+                <TransactionHistory isLoading={isLoadingTransactions} onRefresh={fetchTransactions} transactions={transactions} />
               </div>
             )}
           </CardFooter>

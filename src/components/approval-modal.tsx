@@ -4,6 +4,7 @@ import React, { useMemo, useId, useRef } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {NetworkInfo, TokenInfo} from "@/services/bridge/types";
 import { TransactionSummaryCard } from "@/components/bridge/transaction-summary-card";
+import Image from "next/image";
 
 export type ApprovalTransactionData = {
   fromAmount: string;
@@ -54,6 +55,28 @@ export default function ApprovalModal({
     const v = parseFloat(transactionData?.toAmount || "0");
     return Number.isFinite(v) && btcPriceUsd ? (v * btcPriceUsd).toFixed(2) : undefined;
   }, [transactionData?.toAmount, btcPriceUsd]);
+
+  // Determine if this is a Bitcoin transaction
+  const isBitcoin = useMemo(() => {
+    return transactionData?.fromToken.symbol === "BTC" || transactionData?.toToken.symbol === "BTC";
+  }, [transactionData]);
+
+
+  // Format fee display - show "sats" for BTC, otherwise show token symbol or "ETH" for gas
+  const formatFee = (fee: string | undefined) => {
+    if (!fee) return isBitcoin ? "0 sats" : "0";
+    // If fee already contains units, return as is
+    if (fee.toLowerCase().includes("sat") || fee.toLowerCase().includes("eth") || fee.toLowerCase().includes("usdc") || fee.toLowerCase().includes("usdt")) {
+      return fee;
+    }
+    // For Bitcoin, default to sats
+    if (isBitcoin) {
+      return `${fee} sats`;
+    }
+    // For Ethereum tokens, show as token amount
+    const tokenSymbol = transactionData?.fromToken.symbol || "ETH";
+    return `${fee} ${tokenSymbol}`;
+  };
 
   // Overlay: dim (80% opacity) or transparent
   const overlayClass = overlay === "dim" ? "bg-black/80" : "bg-transparent";
@@ -107,8 +130,20 @@ export default function ApprovalModal({
                 <div className="grid grid-cols-3 gap-4">
                   {/* From */}
                   <div className="text-center">
-                    <div className="w-12 h-12 mx-auto rounded-full bg-slate-900 text-white flex items-center justify-center text-lg font-bold mb-2 shadow-sm" aria-hidden>
-                      ₿
+                    <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-2 shadow-sm overflow-hidden" aria-hidden>
+                      {isBitcoin ? (
+                        <span className="text-lg font-bold text-slate-900">₿</span>
+                      ) : transactionData?.fromToken.icon && transactionData.fromToken.icon.startsWith('/') ? (
+                        <Image 
+                          src={transactionData.fromToken.icon} 
+                          alt={transactionData.fromToken.symbol} 
+                          width={48} 
+                          height={48} 
+                          className="w-full h-full object-contain" 
+                        />
+                      ) : (
+                        <span className="text-lg font-bold text-slate-900">{transactionData?.fromToken.symbol?.charAt(0) || "?"}</span>
+                      )}
                     </div>
                     <div className="text-base font-bold text-slate-900">
                       {transactionData?.fromAmount} {transactionData?.fromToken.symbol}
@@ -129,8 +164,20 @@ export default function ApprovalModal({
 
                   {/*To*/}
                   <div className="text-center">
-                    <div className="w-12 h-12 mx-auto rounded-full bg-slate-800 text-white flex items-center justify-center text-base font-bold mb-2 shadow-sm" aria-hidden>
-                      ₿
+                    <div className="w-12 h-12 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-2 shadow-sm overflow-hidden" aria-hidden>
+                      {isBitcoin ? (
+                        <span className="text-base font-bold text-slate-900">₿</span>
+                      ) : transactionData?.toToken.icon && transactionData.toToken.icon.startsWith('/') ? (
+                        <Image 
+                          src={transactionData.toToken.icon} 
+                          alt={transactionData.toToken.symbol} 
+                          width={48} 
+                          height={48} 
+                          className="w-full h-full object-contain" 
+                        />
+                      ) : (
+                        <span className="text-base font-bold text-slate-900">{transactionData?.toToken.symbol?.charAt(0) || "?"}</span>
+                      )}
                     </div>
                     <div className="text-base font-bold text-slate-900">
                       {(transactionData?.toAmount ?? transactionData?.fromAmount) ?? ""} {transactionData?.toToken.symbol}
@@ -144,9 +191,9 @@ export default function ApprovalModal({
                 {/*Summary*/}
                 <TransactionSummaryCard
                   amount={transactionData?.fromAmount || "0"}
-                  fee={transactionData?.networkFee || "0 sats"}
+                  fee={formatFee(transactionData?.networkFee) || (isBitcoin ? "0 sats" : "0")}
                   netReceive={transactionData?.toAmount || "0"}
-                  unit={transactionData?.fromToken.symbol || "BTC"}
+                  unit={transactionData?.fromToken.symbol || (isBitcoin ? "BTC" : "ETH")}
                 />
               </div>
 
