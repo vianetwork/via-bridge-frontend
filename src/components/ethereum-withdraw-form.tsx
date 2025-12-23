@@ -13,7 +13,7 @@ import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
 import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { ensureViaNetwork } from "@/utils/ensure-network";
-import { ethers, getAddress } from "ethers";
+import { ethers, getAddress, BrowserProvider } from "ethers";
 import { FormAmountSlider } from "@/components/form-amount-slider";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { cn } from "@/lib/utils";
@@ -81,10 +81,13 @@ export default function EthereumWithdrawForm({ asset, isYield }: EthereumWithdra
 
         try {
             setIsLoadingBalance(true);
-            const networkConfig = getNetworkConfig();
-            const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
-
-            const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, provider);
+            // Use browser wallet provider instead of RPC
+            if (typeof window === "undefined" || !window.ethereum) {
+                setBalance(null);
+                return;
+            }
+            const browserProvider = new BrowserProvider(window.ethereum);
+            const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, browserProvider);
             const bal = await tokenContract.balanceOf(viaAddress);
             const balFormatted = ethers.formatUnits(bal, asset.decimals);
             setBalance(balFormatted);

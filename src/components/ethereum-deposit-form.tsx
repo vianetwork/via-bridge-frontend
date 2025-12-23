@@ -1,4 +1,4 @@
-import { ethers, getAddress } from "ethers";
+import { ethers, getAddress, BrowserProvider } from "ethers";
 import { useState, useEffect, useRef } from "react";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { FormAmountSlider } from "@/components/form-amount-slider";
@@ -82,8 +82,13 @@ export default function EthereumDepositForm({ asset, isYield }: EthereumDepositF
 
             try {
                 setIsLoadingBalance(true);
-                const provider = new ethers.JsonRpcProvider(ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA].rpcUrls[0]);
-                const tokenContract = new ethers.Contract(asset.addresses[EthereumNetwork.SEPOLIA], ERC20_ABI, provider);
+                // Use browser wallet provider instead of RPC
+                if (typeof window === "undefined" || !window.ethereum) {
+                    setBalance(null);
+                    return;
+                }
+                const browserProvider = new BrowserProvider(window.ethereum);
+                const tokenContract = new ethers.Contract(asset.addresses[EthereumNetwork.SEPOLIA], ERC20_ABI, browserProvider);
                 const bal = await tokenContract.balanceOf(walletAddress);
                 const balFormatted = ethers.formatUnits(bal, asset.decimals);
                 setBalance(balFormatted);

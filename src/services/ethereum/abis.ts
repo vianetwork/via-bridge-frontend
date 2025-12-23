@@ -23,3 +23,7 @@ export const BRIDGE_ABI = [
 export const MESSAGE_MANAGER_ABI = [
   "function getMessageInfo(bytes32 payloadHash) view returns (bool status, address vault)"
 ];
+
+export const MULTICALL_ABI = [
+  "function multicall(tuple(address target, uint256 gasLimit, bytes callData)[] calls) returns (uint256 blockNumber, tuple(bool success, uint256 gasUsed, bytes returnData)[] returnData)"
+];

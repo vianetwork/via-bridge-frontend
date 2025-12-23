@@ -19,6 +19,11 @@ export const ETHEREUM_NETWORK_CONFIG = {
   }
 };
 
+// Multicall contract addresses
+export const MULTICALL_ADDRESSES = {
+  [EthereumNetwork.SEPOLIA]: "0xD7F33bCdb21b359c8ee6F0251d30E94832baAd07"
+};
+
 // Aave V3 "Pool" Contract Addresses
 export const AAVE_POOL_ADDRESSES = {
   [EthereumNetwork.SEPOLIA]: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
