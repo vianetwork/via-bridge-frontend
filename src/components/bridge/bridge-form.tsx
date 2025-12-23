@@ -225,7 +225,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           {/*Amount section conditionally shown if a balance is available*/}
           { balance && parseFloat(balance) > 0 && (
             <div className="space-y-6 mb-8">
-              <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} maxDisabled={!balance || parseFloat(balance) <= 0}/>
+              <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} placeHolder="0.0" maxDisabled={!balance || parseFloat(balance) <= 0}/>
             </div>
           )}
 
