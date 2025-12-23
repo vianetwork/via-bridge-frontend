@@ -1,5 +1,5 @@
 // src/components/bridge/available-balance-display.tsx
-"use client"
+"use client";
 import { cn } from "@/lib/utils";
 
 interface AvailableBalanceDisplayProps {

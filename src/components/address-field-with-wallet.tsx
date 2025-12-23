@@ -1,7 +1,6 @@
 // src/components/address-field-with-wallet.tsx
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { AlertTriangle, Wallet, Copy, CheckCircle2 } from "lucide-react";
 import { useWalletStore } from "@/store/wallet-store";
 import { Layer } from "@/services/config";

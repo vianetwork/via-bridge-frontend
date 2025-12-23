@@ -33,14 +33,13 @@ export default function Header() {
     disconnectXverse,
     disconnectMetamask,
     connectXverse,
-    connectMetamask,
     isCorrectBitcoinNetwork,
     isCorrectViaNetwork,
     switchNetwork
   } = useWalletState();
 
   const [isConnectingXverse, setIsConnectingXverse] = useState(false);
-  const [isConnectingMetaMask, setIsConnectingMetaMask] = useState(false);
+  // const [isConnectingMetaMask, setIsConnectingMetaMask] = useState(false);
 
   const handleConnectXverse = async () => {
     try {
@@ -64,31 +63,31 @@ export default function Header() {
     }
   };
 
-  const handleConnectMetamask = async () => {
-    try {
-      setIsConnectingMetaMask(true);
-      const connected = await connectMetamask();
-      if (connected) {
-        const best = await getPreferredWeb3ProviderAsync();
-        const displayName = best?.name ?? "Web3 Wallet";
-        toast.success(`${displayName} Connected`, {
-          description: `Successfully connected to your ${displayName} wallet.`,
-          duration: 4000,
-          dismissible: false,
-        });
-      }
-    } catch (error) {
-      console.error("Web3 wallet connection error:", error);
-      const best = await getPreferredWeb3ProviderAsync();
-      const displayName = best?.name ?? "Web3 Wallet";
-      toast.error("Connection Failed", {
-        description: `Unable to connect to ${displayName}. Please try again.`,
-        duration: 4000
-      });
-    } finally {
-      setIsConnectingMetaMask(false);
-    }
-  };
+  // const handleConnectMetamask = async () => {
+  //   try {
+  //     setIsConnectingMetaMask(true);
+  //     const connected = await connectMetamask();
+  //     if (connected) {
+  //       const best = await getPreferredWeb3ProviderAsync();
+  //       const displayName = best?.name ?? "Web3 Wallet";
+  //       toast.success(`${displayName} Connected`, {
+  //         description: `Successfully connected to your ${displayName} wallet.`,
+  //         duration: 4000,
+  //         dismissible: false,
+  //       });
+  //     }
+  //   } catch (error) {
+  //     console.error("Web3 wallet connection error:", error);
+  //     const best = await getPreferredWeb3ProviderAsync();
+  //     const displayName = best?.name ?? "Web3 Wallet";
+  //     toast.error("Connection Failed", {
+  //       description: `Unable to connect to ${displayName}. Please try again.`,
+  //       duration: 4000
+  //     });
+  //   } finally {
+  //     setIsConnectingMetaMask(false);
+  //   }
+  // };
 
   const handleDisconnectXverse = () => {
     disconnectXverse();

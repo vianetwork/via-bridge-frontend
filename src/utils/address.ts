@@ -54,7 +54,7 @@ export function verifyEvmAddress(address: string): boolean {
     if (!isAddress(address)) return false;
 
     // Normalize to checksummed address
-    const normalizedAddress = getAddress(address)
+    const normalizedAddress = getAddress(address);
 
     // Check if the address is not a system contract address
     // System contracts are below the treshold defined in constants
