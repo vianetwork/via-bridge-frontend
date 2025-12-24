@@ -7,7 +7,7 @@ import { useBridgeSubmit } from "@/hooks/useBridgeSubmit";
 import { useBalance} from "@/hooks/useBalance";
 import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
-import { BRIDGE_CONFIG } from "@/services/config";
+import { BRIDGE_CONFIG, Layer } from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
 
 import {
@@ -71,7 +71,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
   const { isSubmitting, successResult, submit, reset: resetSubmit, cancel } = useBridgeSubmit();
 
   // Get wallet data and connection states from store
-  const { bitcoinAddress, bitcoinPublicKey, viaAddress, isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, connectXverse } = useWalletStore();
+  const { bitcoinAddress, bitcoinPublicKey, viaAddress, isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, connectXverse, switchNetwork } = useWalletStore();
 
   const {
     //isLoadingFeeEstimation,
@@ -222,6 +222,14 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     }
   };
 
+  // Handler for switching source wallet network
+  const handleSwitchSourceNetwork = () => {
+    // Bitcoin wallet -> switch to Bitcoin network (L1)
+    // EVM wallet -> switch to VIA network (L2)
+    const targetLayer = sourceWalletStatus.walletType === "bitcoin" ? Layer.L1 : Layer.L2;
+    switchNetwork(targetLayer);
+  };
+
 // Handle reset after a successful transaction
   const handleReset = () => {
     resetSubmit();
@@ -270,7 +278,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           <NetworkLaneSelector route={route} onSwap={handleSwap} />
 
           {/*Source Wallet Banner - prompt user to connect the wallet they are sending FROM*/}
-          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} onConnect={handleConnectSourceWallet}/>
+          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
 
           {/*Amount section conditionally shown if a balance is available*/}
           { balance && parseFloat(balance) > 0 && (

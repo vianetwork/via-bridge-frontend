@@ -12,6 +12,8 @@ interface SourceWalletBannerProps {
   isCorrectNetwork: boolean;
   /** Callback to connect the source wallet */
   onConnect: () => void;
+  /** Callback to switch to the correct network */
+  onSwitchNetwork: () => void;
 }
 
 /**
@@ -20,8 +22,8 @@ interface SourceWalletBannerProps {
  * Displays a prompt to connect or switch the network of the source wallet
  *
  * States:
- * - Not connected: Orange banner with connected button
- * - Connected but wrong network: Amber banner with switch network button/message
+ * - Not connected: Blue banner with dashed border and connect button
+ * - Connected but wrong network: Amber banner with switch network button
  * - Connected and correct network: returns null (no banner shown)
  *
  * @example
@@ -31,10 +33,11 @@ interface SourceWalletBannerProps {
  *   isConnected={false}
  *   isCorrectNetwork={false}
  *   onConnect={handleConnect}
+ *   onSwitchNetwork={handleSwitchNetwork}
  * />
  * ```
  */
-export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, onConnect,}: SourceWalletBannerProps) {
+export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, onConnect, onSwitchNetwork}: SourceWalletBannerProps) {
   // Don't render if the wallet is ready
   if (isConnected && isCorrectNetwork) return null;
 
@@ -44,24 +47,24 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, o
   // Not connected state
   if (!isConnected) {
     return (
-      <div className="bg-gradient-to-r from-orange-50 to-amber-50 border-2 border-orange-300 rounded-xl px-4 py-3.5 shadow-md mb-6">
+      <div className="border-2 border-dashed border-blue-400 bg-gradient-to-br from-blue-50 to-white rounded-xl px-4 py-3.5 shadow-md mb-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-orange-200 rounded-full flex items-center justify-center flex-shrink-0">
-              <Wallet className="w-5 h-5 text-orange-700" strokeWidth={2} />
+            <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
+              <Wallet className="w-5 h-5 text-white" strokeWidth={2} />
             </div>
             <div>
-              <div className="font-semibold text-sm text-orange-900 mb-0.5">
+              <div className="font-semibold text-sm text-slate-900 mb-0.5">
                 {walletLabel} Wallet Required
               </div>
-              <div className="text-xs text-orange-700">
+              <div className="text-xs text-slate-600">
                 Connect your {walletLabel} wallet to sign and send the transaction
               </div>
             </div>
           </div>
           <button
             type="button"
-            className="px-4 py-2.5 text-sm font-semibold rounded-lg bg-orange-600 text-white hover:bg-orange-700 shadow-sm transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-xs font-semibold shadow-md hover:shadow-lg transition-all"
             onClick={onConnect}
           >
             {connectButtonLabel}
@@ -72,20 +75,32 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, o
   }
 
   // Connected but wrong network state
+  // Bitcoin wallet -> needs Bitcoin network, EVM wallet -> needs VIA network
+  const targetNetwork = walletType === "bitcoin" ? "Bitcoin network" : "VIA network";
+  
   return (
-    <div className="bg-gradient-to-r from-amber-50 to-yellow-50 border-2 border-amber-300 rounded-xl px-4 py-3.5 shadow-md mb-6">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0">
-          <AlertTriangle className="w-5 h-5 text-amber-700" strokeWidth={2} />
-        </div>
-        <div>
-          <div className="font-semibold text-sm text-amber-900 mb-0.5">
-            Wrong Network Detected
+    <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300 rounded-xl px-4 py-3.5 shadow-md mb-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-amber-200 rounded-full flex items-center justify-center flex-shrink-0">
+            <AlertTriangle className="w-4 h-4 text-amber-700" strokeWidth={2.5} />
           </div>
-          <div className="text-xs text-amber-700">
-            Switch your {walletLabel} wallet to the correct network to continue
+          <div>
+            <div className="font-semibold text-sm text-amber-900 mb-0.5">
+              Wrong Network Detected
+            </div>
+            <div className="text-xs text-amber-700">
+              Switch to {targetNetwork} to continue
+            </div>
           </div>
         </div>
+        <button
+          type="button"
+          className="px-4 py-2 text-xs font-semibold rounded-lg bg-white border-2 border-amber-400 text-amber-900 hover:bg-amber-50 shadow-sm"
+          onClick={onSwitchNetwork}
+        >
+          Switch Network
+        </button>
       </div>
     </div>
   );
