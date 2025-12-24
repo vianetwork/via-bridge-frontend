@@ -201,7 +201,7 @@ export default function Header() {
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/icon.png"
+              src="/via-logo.svg"
               alt="VIA Bridge"
               width={28}
               height={28}
