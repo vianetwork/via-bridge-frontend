@@ -179,19 +179,28 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
   const canSubmit = isAmountValid && isRecipientValid && sourceWalletStatus.isReady && !isSubmitting;
 
   // validation message for the button
-  const validationMessage = !sourceWalletStatus.isConnected
-    ? `Connect your ${sourceWalletStatus.walletType === "bitcoin" ? "Bitcoin" : "EVM"} wallet to ${mode}`
-    : !sourceWalletStatus.isCorrectNetwork
-      ? `Switch to the correct ${sourceWalletStatus.walletType === "bitcoin" ? "Bitcoin" : "EVM"} network`
-      : !hasRecipientAddress
-        ? "Connect wallet or enter address manually"
-        : !isRecipientValid
-          ? `Enter a valid ${route.toNetwork.displayName} address`
-          : !hasAmount
-            ? "Enter transfer amount"
-            : isAmountBelowMin
-              ? `Minimum amount is ${minAmount} BTC (${minAmountSats.toLocaleString()} sats)`
-              : "";
+  const validationMessage = (() => {
+    const walletLabel = sourceWalletStatus.walletType === "bitcoin" ? "Bitcoin" : "EVM";
+    if (!sourceWalletStatus.isConnected) {
+      return `Connect your ${walletLabel} wallet to ${mode}`;
+    }
+    if (!sourceWalletStatus.isCorrectNetwork) {
+      return `Switch to the correct ${walletLabel} network`;
+    }
+    if (!hasRecipientAddress) {
+      return "Connect wallet or enter address manually";
+    }
+    if (!isRecipientValid) {
+      return `Enter a valid ${route.toNetwork.displayName} address`;
+    }
+    if (!hasAmount) {
+      return "Enter transfer amount";
+    }
+    if (isAmountBelowMin) {
+      return `Minimum amount is ${minAmount} BTC (${minAmountSats.toLocaleString()} sats)`;
+    }
+    return "";
+  })();
 
   const handleChangeMode = (newMode: BridgeMode) => {
     setMode(newMode);
