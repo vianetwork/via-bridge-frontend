@@ -7,7 +7,6 @@ import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchFeeEstimatio
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
-import {getConnections} from "@wagmi/core";
 import { requestWalletAccountSelection, setupAccountsChangedListener, cleanupAccountsChangedListener } from "@/utils/evm-account-selection";
 
 // Create events for wallet state changes
@@ -381,104 +380,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   connectMetamask: async () => {
-    try {
-      console.log("Connecting to wallet...");
-      const state = useWalletStore.getState();
-      const rdns = state.selectedWallet;
-      if (!rdns)  {
-        throw new Error("No wallet selected. Open the wallet selector to pick a wallet");
-      }
-      console.log(`Using selected wallet ${rdns}`);
-      // Prefer wagmi connect via targeted injected connector when EIP-6963 details are available
-
-      try {
-        const { eip6963Store } = await import("@/utils/eip6963-provider");
-        const detail =  eip6963Store.getProviderByRdns(rdns) as EIP6963ProviderDetail | undefined;
-        if (detail) {
-          const { wagmiConfig } = await import("@/lib/wagmi/config");
-          const { connect, switchChain, getAccount } = await import('@wagmi/core');
-          const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
-
-          // Request account selection for all wallets
-          console.log('Requesting account selection...');
-          const selectedAccount = await requestWalletAccountSelection(detail.provider);
-          if (selectedAccount === null) {
-            console.log('User cancelled account selection');
-            return false;
-          }
-          if (selectedAccount) {
-            console.log('User selected account:', maskAddress(selectedAccount));
-          }
-
-          const connectorFn = injectedForProvider(detail);
-          const targetedChainId = wagmiConfig.chains[0]?.id;
-          if (!targetedChainId) throw new Error("No chains configured in wagmiConfig");
-
-        await connect(wagmiConfig, { connector: connectorFn });
-
-        // Get the actual connector instance from the connection
-          const connections = getConnections(wagmiConfig);
-          const acct = getAccount(wagmiConfig);
-          const activeConnector = acct?.connector ?? connections[0]?.connector;
-          if (!activeConnector) {
-            console.error("No active connector found");
-            return false;
-          }
-
-        // Add+switch using EIP-3085 params so wallets without VIA configured will prompt to add it
-          const addParams = VIA_NETWORK_CONFIG[BRIDGE_CONFIG.defaultNetwork];
-          let switchedOk = true;
-          try {
-            await switchChain(wagmiConfig, {
-              chainId: targetedChainId,
-              connector: activeConnector,
-              addEthereumChainParameter: {
-                chainName: wagmiConfig.chains[0]?.name ?? addParams.chainName,
-                nativeCurrency: addParams.nativeCurrency,
-                rpcUrls: addParams.rpcUrls,
-                blockExplorerUrls: addParams.blockExplorerUrls,
-              },
-            });
-          } catch (err) {
-            console.error("switchChain failed, trying direct EIP-1193 fallback:", err);
-            // Fallback for wallets that don't support wagmi's switchChain such as Rabbywallet
-            const { addAndSwitchToViaChain } = await import('@/lib/wagmi/addAndSwitchToViaChain');
-            switchedOk = await addAndSwitchToViaChain(activeConnector);
-          }
-
-          // Sync address & connection state
-          const accountAfter = getAccount(wagmiConfig);
-          const address = accountAfter?.address as string | undefined;
-          set({ viaAddress: address ?? null, isMetamaskConnected: !!address, isCorrectViaNetwork: switchedOk });
-
-          // Set up accountsChanged listener for all wallets
-          setupAccountsChangedListener(detail.provider, detail.info.name, (newAddress) => {
-            const state = useWalletStore.getState();
-            state.setViaAddress(newAddress);
-            if (!newAddress) {
-              state.setIsMetamaskConnected(false);
-              walletEvents.metamaskDisconnected.emit();
-            } else {
-              state.setIsMetamaskConnected(true);
-            }
-          });
-          get().loadLocalTransactions();
-          walletEvents.metamaskConnected.emit();
-          console.log("wallet connected via wagmi", address);
-          return !!address;
-        }
-      } catch {}
-      // No fallback for now
-      return false;
-    } catch (error: any) {
-      const USER_REJECTION_ERROR_CODE = 4001;
-      if (error?.code === USER_REJECTION_ERROR_CODE) {
-        console.log("Connection rejected by user");
-        return false;
-      }
-      console.error("Wallet connection error:", error);
-      throw error;
+    const rdns = get().selectedWallet;
+    if (!rdns) {
+      throw new Error("No wallet selected. Open the wallet selector to pick a wallet");
     }
+    return get().connectWallet(rdns);
   },
 
   disconnectXverse: async () => {
@@ -616,18 +522,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (!providerDetail) throw new WalletNotFoundError(rdns);
 
     // Request account selection to let a user pick their account
-      // This fixes Metamask always connecting to the first account
-      console.log("Requesting account selection...");
-      const selectedAccount = await requestWalletAccountSelection(providerDetail.provider);
-      if (selectedAccount === null) {
-        console.log('User cancelled account selection');
-        return false;
-      }
+    // This fixes Metamask always connecting to the first account
+    console.log("Requesting account selection...");
+    const selectedAccount = await requestWalletAccountSelection(providerDetail.provider);
+    if (selectedAccount === null) {
+      console.log('User cancelled account selection');
+      return false;
+    }
 
-      // If the selected account is undefined, the wallet doesn't support it and we continue normally
-      if (selectedAccount) {
-        console.log('User selected account', maskAddress(selectedAccount));
-      }
+    // If the selected account is undefined, the wallet doesn't support it and we continue normally
+    if (selectedAccount) {
+      console.log('User selected account', maskAddress(selectedAccount));
+    }
 
     // Build a targeted wagmi injected connector for this provider (uses top-level import)
      const connector = injectedForProvider(providerDetail);
