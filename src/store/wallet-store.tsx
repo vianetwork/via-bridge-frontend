@@ -459,7 +459,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
               state.setIsMetamaskConnected(false);
               walletEvents.metamaskDisconnected.emit();
             } else {
-              walletEvents.walletChanged.emit(rdns);
+              state.setIsMetamaskConnected(true);
             }
           });
           get().loadLocalTransactions();
