@@ -16,7 +16,7 @@ import { maskAddress } from "@/utils/address";
  * @param provider - The EIP-1193 provider instance
  * @returns The selected account address, or null if user cancelled, or undefined to skip (fallback)
  */
-export async function requestWalletAccountSelection(provider: any): Promise<string | null | undefined> {
+export async function requestWalletAccountSelection(provider: EIP1193Provider): Promise<string | null | undefined> {
   try {
     // wallet_requestPermissions forces wallets to show account selection
     await provider.request({
@@ -48,7 +48,7 @@ export async function requestWalletAccountSelection(provider: any): Promise<stri
  * Listener state for cleanup
  */
 let currentListener: ((accounts: string[]) => void) | null = null;
-let currentProvider: any = null;
+let currentProvider: EIP1193Provider | null = null;
 
 /**
  * Set up accountsChanged listener on the provider
@@ -59,7 +59,7 @@ let currentProvider: any = null;
  * @param onAccountChange - Callback when account changes
  */
 export function setupAccountsChangedListener(
-  provider: any,
+  provider: EIP1193Provider,
   walletName: string,
   onAccountChange: (address: string | null) => void
 ): void {
@@ -73,7 +73,7 @@ export function setupAccountsChangedListener(
   };
   
   currentProvider = provider;
-  provider.on('accountsChanged', currentListener);
+  provider.on?.('accountsChanged', currentListener);
   console.log(`Set up accountsChanged listener for ${walletName}`);
 }
 
@@ -84,7 +84,7 @@ export function setupAccountsChangedListener(
 export function cleanupAccountsChangedListener(): void {
   if (currentListener && currentProvider) {
     try {
-      currentProvider.removeListener('accountsChanged', currentListener);
+      currentProvider.removeListener?.('accountsChanged', currentListener);
       console.log('Cleaned up accountsChanged listener');
     } catch {
       // Ignore errors during cleanup
