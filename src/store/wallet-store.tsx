@@ -8,6 +8,7 @@ import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
 import {getConnections} from "@wagmi/core";
+import { requestWalletAccountSelection, setupAccountsChangedListener, cleanupAccountsChangedListener } from "@/utils/evm-account-selection";
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -398,6 +399,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           const { connect, switchChain, getAccount } = await import('@wagmi/core');
           const { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } = await import("@/services/config");
 
+          // Request account selection for all wallets
+          console.log('Requesting account selection...');
+          const selectedAccount = await requestWalletAccountSelection(detail.provider);
+          if (selectedAccount === null) {
+            console.log('User cancelled account selection');
+            return false;
+          }
+          if (selectedAccount) {
+            console.log('User selected account:', maskAddress(selectedAccount));
+          }
+
           const connectorFn = injectedForProvider(detail);
           const targetedChainId = wagmiConfig.chains[0]?.id;
           if (!targetedChainId) throw new Error("No chains configured in wagmiConfig");
@@ -438,6 +450,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           const accountAfter = getAccount(wagmiConfig);
           const address = accountAfter?.address as string | undefined;
           set({ viaAddress: address ?? null, isMetamaskConnected: !!address, isCorrectViaNetwork: switchedOk });
+
+          // Set up accountsChanged listener for all wallets
+          setupAccountsChangedListener(detail.provider, detail.info.name, (newAddress) => {
+            const state = useWalletStore.getState();
+            state.setViaAddress(newAddress);
+            if (!newAddress) {
+              state.setIsMetamaskConnected(false);
+              walletEvents.metamaskDisconnected.emit();
+            } else {
+              walletEvents.walletChanged.emit(rdns);
+            }
+          });
           get().loadLocalTransactions();
           walletEvents.metamaskConnected.emit();
           console.log("wallet connected via wagmi", address);
@@ -475,6 +499,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   disconnectMetamask: () => {
+    // Clean up the accountsChanged listener
+    cleanupAccountsChangedListener();
+
     set({
       viaAddress: null,
       isMetamaskConnected: false,
@@ -588,6 +615,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const providerDetail = eip6963Store.getProviderByRdns(rdns);
     if (!providerDetail) throw new WalletNotFoundError(rdns);
 
+    // Request account selection to let a user pick their account
+      // This fixes Metamask always connecting to the first account
+      console.log("Requesting account selection...");
+      const selectedAccount = await requestWalletAccountSelection(providerDetail.provider);
+      if (selectedAccount === null) {
+        console.log('User cancelled account selection');
+        return false;
+      }
+
+      // If the selected account is undefined, the wallet doesn't support it and we continue normally
+      if (selectedAccount) {
+        console.log('User selected account', maskAddress(selectedAccount));
+      }
+
     // Build a targeted wagmi injected connector for this provider (uses top-level import)
      const connector = injectedForProvider(providerDetail);
  
@@ -636,6 +677,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // Already switched chain via wagmi, mark as correct
     set({isCorrectViaNetwork: switchOk});
+
+    // Set up accountsChanged listener to keep the app in sync when a user switches accounts
+    setupAccountsChangedListener(providerDetail.provider, providerDetail.info.name, (newAddress) => {
+      const state = useWalletStore.getState();
+      state.setViaAddress(newAddress);
+      if (!newAddress) {
+        // user disconnected all accounts
+        state.setIsMetamaskConnected(false);
+        walletEvents.metamaskDisconnected.emit();
+      } else {
+        state.setIsMetamaskConnected(true);
+      }
+    });
+
     console.log(`Wallet ${providerDetail.info.name} connected address`, maskAddress(address || ''));
     walletEvents.metamaskConnected.emit();
     return !!address;
