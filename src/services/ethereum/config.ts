@@ -33,8 +33,10 @@ export const SUPPORTED_ASSETS = [
   {
     symbol: "USDC",
     name: "USD Coin",
+    l2ValueSymbol: "vUSDC", // L2 yield token symbol
     icon: "/usdc-logo.png",
     decimals: 6,
+    minAmount: "0.000001", // Minimum amount to deposit/withdraw (0.000001 USDC)
     active: true,
     apy: "Not available",
     tvl: "Not available",
@@ -55,8 +57,10 @@ export const SUPPORTED_ASSETS = [
   {
     symbol: "USDT",
     name: "Tether USD",
+    l2ValueSymbol: "vUSDT", // L2 yield token symbol
     icon: "/usdt-logo.png",
     decimals: 6,
+    minAmount: "0.000001", // Minimum amount to deposit/withdraw (0.000001 USDT)
     active: false,
     apy: "4.8%", // Default fallback
     tvl: "$8.2M",

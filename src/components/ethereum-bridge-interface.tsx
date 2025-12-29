@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { BridgeModeTabs, type BridgeMode } from "@/components/bridge/bridge-mode-tabs";
 import { NetworkLaneSelector, TransferAmountInput, AvailableBalanceDisplay, AmountSlider } from "@/components/bridge";
@@ -29,6 +29,7 @@ import { ethers } from "ethers";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
 import { ERC20_ABI } from "@/services/ethereum/abis";
+import { fetchVaultMetrics } from "@/services/api/vault-metrics";
 
 // A hook to fetch APY for assets
 // Note: Always fetches from Sepolia network, regardless of connected wallet network
@@ -83,27 +84,6 @@ function useAaveData() {
     return { apys, loading };
 }
 
-// Helper to format vault TVL as compact USD-like string
-function formatVaultTvl(num: number): string {
-    if (num < 1000) {
-        return `$${num.toFixed(2)}`;
-    }
-    const si = [
-        { value: 1, symbol: "" },
-        { value: 1E3, symbol: "K" },
-        { value: 1E6, symbol: "M" },
-        { value: 1E9, symbol: "B" },
-        { value: 1E12, symbol: "T" },
-    ];
-    const rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
-    let i;
-    for (i = si.length - 1; i > 0; i--) {
-        if (num >= si[i].value) {
-            break;
-        }
-    }
-    return "$" + (num / si[i].value).toFixed(2).replace(rx, "$1") + si[i].symbol;
-}
 
 // Helper function to create Ethereum bridge route
 function getEthereumRoute(mode: BridgeMode, tokenSymbol: string): BridgeRoute {
@@ -146,6 +126,10 @@ export default function EthereumBridgeInterface() {
 
     const [vaultTvl, setVaultTvl] = useState<string | null>(null);
     const [isLoadingVaultTvl, setIsLoadingVaultTvl] = useState(false);
+    const [exchangeRate, setExchangeRate] = useState<string | null>(null); // Raw rate value for calculations
+    const [exchangeRateDisplay, setExchangeRateDisplay] = useState<string | null>(null); // Formatted string for display
+    const [isLoadingExchangeRate, setIsLoadingExchangeRate] = useState(false);
+    const [apys, setApys] = useState<Record<string, string>>({});
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isPendingWithdrawalsOpen, setIsPendingWithdrawalsOpen] = useState(false);
@@ -166,82 +150,113 @@ export default function EthereumBridgeInterface() {
     const [isAutoSwitching, setIsAutoSwitching] = useState(false);
     const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
 
-    const { apys, loading: loadingApy } = useAaveData();
+    // Use Aave data as fallback, but API will override for yield vaults
+    const { apys: aaveApys, loading: loadingApy } = useAaveData();
+    
+    // Initialize apys from Aave data
+    useEffect(() => {
+        setApys(aaveApys);
+    }, [aaveApys]);
 
     const selectedAsset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || defaultAsset;
     const route = getEthereumRoute(activeTab, selectedAsset.symbol);
 
     // Fetch balance based on active tab
-    useEffect(() => {
-        async function fetchBalance() {
-            if (!isMetamaskConnected) {
-                setBalance(null);
-                return;
-            }
+    const fetchBalance = useCallback(async () => {
+        if (!isMetamaskConnected) {
+            setBalance(null);
+            return;
+        }
 
-            // For deposit: use l1Address or viaAddress (same wallet, different networks)
-            // For withdraw: use viaAddress
-            const address = activeTab === "deposit" ? (l1Address || viaAddress) : viaAddress;
-            const isCorrectNetwork = activeTab === "deposit" ? isCorrectL1Network : isCorrectViaNetwork;
-            const tokenAddress = activeTab === "deposit" 
-                ? selectedAsset.addresses?.[EthereumNetwork.SEPOLIA]
-                : (isYieldEnabled ? selectedAsset.vaults.l2.yield : selectedAsset.vaults.l2.normal);
+        // For deposit: use l1Address or viaAddress (same wallet, different networks)
+        // For withdraw: use viaAddress
+        const address = activeTab === "deposit" ? (l1Address || viaAddress) : viaAddress;
+        const isCorrectNetwork = activeTab === "deposit" ? isCorrectL1Network : isCorrectViaNetwork;
+        const tokenAddress = activeTab === "deposit" 
+            ? selectedAsset.addresses?.[EthereumNetwork.SEPOLIA]
+            : (isYieldEnabled ? selectedAsset.vaults.l2.yield : selectedAsset.vaults.l2.normal);
 
-            // If no address, try to get it from the wallet provider directly
-            let walletAddress = address;
-            if (!walletAddress && typeof window !== "undefined" && window.ethereum) {
-                try {
-                    const { BrowserProvider } = await import("ethers");
-                    const browserProvider = new BrowserProvider(window.ethereum);
-                    const signer = await browserProvider.getSigner();
-                    walletAddress = await signer.getAddress();
-                } catch (err) {
-                    console.error("Error getting wallet address:", err);
-                }
-            }
-
-            if (!walletAddress || !tokenAddress) {
-                setBalance(null);
-                return;
-            }
-
-            // For deposit, we still need to be on the correct network
-            // For withdraw, we need to be on VIA network
-            if (activeTab === "deposit" && !isCorrectNetwork) {
-                setBalance(null);
-                return;
-            }
-            if (activeTab === "withdraw" && !isCorrectViaNetwork) {
-                setBalance(null);
-                return;
-            }
-
+        // If no address, try to get it from the wallet provider directly
+        let walletAddress = address;
+        if (!walletAddress && typeof window !== "undefined" && window.ethereum) {
             try {
-                setIsLoadingBalance(true);
-                if (typeof window === "undefined" || !window.ethereum) {
-                    setBalance(null);
-                    return;
-                }
-                const { BrowserProvider, Contract, formatUnits } = await import("ethers");
+                const { BrowserProvider } = await import("ethers");
                 const browserProvider = new BrowserProvider(window.ethereum);
-                const tokenContract = new Contract(tokenAddress, ERC20_ABI, browserProvider);
-                const bal = await tokenContract.balanceOf(walletAddress);
-                const balFormatted = formatUnits(bal, selectedAsset.decimals);
-                setBalance(balFormatted);
+                const signer = await browserProvider.getSigner();
+                walletAddress = await signer.getAddress();
             } catch (err) {
-                console.error("Error fetching balance:", err);
-                setBalance(null);
-            } finally {
-                setIsLoadingBalance(false);
+                console.error("Error getting wallet address:", err);
             }
         }
 
-        fetchBalance();
+        if (!walletAddress || !tokenAddress) {
+            setBalance(null);
+            return;
+        }
+
+        // For deposit, we still need to be on the correct network
+        // For withdraw, we need to be on VIA network
+        if (activeTab === "deposit" && !isCorrectNetwork) {
+            setBalance(null);
+            return;
+        }
+        if (activeTab === "withdraw" && !isCorrectViaNetwork) {
+            setBalance(null);
+            return;
+        }
+
+        try {
+            setIsLoadingBalance(true);
+            if (typeof window === "undefined" || !window.ethereum) {
+                setBalance(null);
+                return;
+            }
+            const { BrowserProvider, Contract, formatUnits } = await import("ethers");
+            const browserProvider = new BrowserProvider(window.ethereum);
+            const tokenContract = new Contract(tokenAddress, ERC20_ABI, browserProvider);
+            const bal = await tokenContract.balanceOf(walletAddress);
+            const balFormatted = formatUnits(bal, selectedAsset.decimals);
+            setBalance(balFormatted);
+        } catch (err) {
+            console.error("Error fetching balance:", err);
+            setBalance(null);
+        } finally {
+            setIsLoadingBalance(false);
+        }
     }, [activeTab, isMetamaskConnected, l1Address, viaAddress, isCorrectL1Network, isCorrectViaNetwork, selectedAsset, isYieldEnabled]);
+
+    // Fetch balance when dependencies change
+    useEffect(() => {
+        fetchBalance();
+    }, [fetchBalance]);
 
     // Calculate amount values
     const amountNumber = parseFloat(amount) || 0;
     const maxAmount = balance ? parseFloat(balance) : 0;
+
+    // Calculate expected amount to receive for withdrawal (l2ValueSymbol -> base symbol)
+    const expectedAmountData = useMemo(() => {
+        if (activeTab !== "withdraw" || !isYieldEnabled || !amountNumber || !exchangeRate) {
+            return null;
+        }
+
+        try {
+            const rate = parseFloat(exchangeRate);
+            if (isNaN(rate) || rate === 0) return null;
+            
+            // For withdrawal: vUSDC -> USDC, so we use 1/rate
+            const inverseRate = 1 / rate;
+            const expected = amountNumber * inverseRate;
+            return {
+                expected: expected.toFixed(selectedAsset.decimals),
+                rate: inverseRate.toFixed(6),
+                inputAmount: amountNumber.toFixed(selectedAsset.decimals)
+            };
+        } catch (error) {
+            console.error("Error calculating expected amount:", error);
+            return null;
+        }
+    }, [activeTab, isYieldEnabled, amountNumber, exchangeRate, selectedAsset.decimals]);
 
     const handleSwap = () => {
         setActiveTab(activeTab === "deposit" ? "withdraw" : "deposit");
@@ -250,54 +265,129 @@ export default function EthereumBridgeInterface() {
 
     const handleMaxAmount = () => {
         if (balance) {
-            setAmount(maxAmount.toFixed(selectedAsset.decimals));
+            // Limit to asset decimals to prevent underflow
+            const max = Math.min(maxAmount, parseFloat(balance));
+            setAmount(max.toFixed(selectedAsset.decimals));
         }
     };
 
     const handleSliderChange = (value: number) => {
-        setAmount(value.toFixed(selectedAsset.decimals));
+        // Limit to asset decimals to prevent underflow
+        const limitedValue = Math.min(value, maxAmount);
+        setAmount(limitedValue.toFixed(selectedAsset.decimals));
     };
 
-    // Fetch TVL from the currently selected L1 vault (normal or yield)
+    // Sanitize amount input to prevent invalid values
+    const handleAmountChange = (value: string) => {
+        // Remove any non-numeric characters except decimal point
+        const sanitized = value.replace(/[^0-9.]/g, '');
+        // Ensure only one decimal point
+        const parts = sanitized.split('.');
+        const cleaned = parts.length > 2 
+            ? parts[0] + '.' + parts.slice(1).join('')
+            : sanitized;
+        // Limit decimal places
+        if (cleaned.includes('.')) {
+            const [intPart, decPart] = cleaned.split('.');
+            if (decPart && decPart.length > selectedAsset.decimals) {
+                setAmount(intPart + '.' + decPart.substring(0, selectedAsset.decimals));
+                return;
+            }
+        }
+        setAmount(cleaned);
+    };
+
+    // Fetch TVL, APY, and exchange rate from API
+    // Deposit tab: L1 TVL, Withdraw tab: L2 TVL
     useEffect(() => {
-        async function fetchVaultTvl() {
+        async function fetchMetrics() {
             try {
                 setIsLoadingVaultTvl(true);
 
                 const asset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || SUPPORTED_ASSETS[0];
-                const vaultAddress = isYieldEnabled ? asset.vaults.l1.yield : asset.vaults.l1.normal;
+                const vaultType = isYieldEnabled ? "yield" : "normal";
 
-                // Skip if vault address is not configured
-                if (
-                    !vaultAddress ||
-                    vaultAddress === "0x..." ||
-                    vaultAddress === "0x0000000000000000000000000000000000000000"
-                ) {
-                    setVaultTvl(null);
-                    return;
+                // Fetch metrics from API
+                const metrics = await fetchVaultMetrics(
+                    asset.symbol,
+                    vaultType,
+                    "sepolia",
+                    asset.decimals
+                );
+
+                // Use TVL from API (same for both tabs)
+                setVaultTvl(metrics.tvl);
+                
+                // Update APY from API if available (will override Aave data for yield vaults)
+                if (metrics.apy && isYieldEnabled) {
+                    setApys(prev => ({ ...prev, [asset.symbol]: metrics.apy || prev[asset.symbol] }));
                 }
-
-                const networkConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-                const provider = new ethers.JsonRpcProvider(networkConfig.rpcUrls[0]);
-
-                const vaultToken = new ethers.Contract(vaultAddress, ERC20_ABI, provider);
-                const totalSupply = await vaultToken.totalSupply();
-
-                // Assume vault token shares use the same decimals as the underlying asset (e.g., USDC 6 decimals)
-                const amount = Number(ethers.formatUnits(totalSupply, asset.decimals));
-                const formatted = formatVaultTvl(amount);
-
-                setVaultTvl(formatted);
             } catch (error) {
-                console.error("[EthereumBridgeInterface] Error fetching vault TVL:", error);
+                console.error("[EthereumBridgeInterface] Error fetching vault metrics:", error);
                 setVaultTvl(null);
             } finally {
                 setIsLoadingVaultTvl(false);
             }
         }
 
-        fetchVaultTvl();
-    }, [selectedAssetSymbol, isYieldEnabled]);
+        fetchMetrics();
+    }, [selectedAssetSymbol, isYieldEnabled, activeTab]);
+
+    // Fetch exchange rate from API (only for yield vaults)
+    // Deposit: USDC -> vUSDC (1 USDC = X vUSDC)
+    // Withdraw: vUSDC -> USDC (1 vUSDC = X USDC)
+    useEffect(() => {
+        async function fetchExchangeRate() {
+            if (!isYieldEnabled) {
+                setExchangeRate(null);
+                setExchangeRateDisplay(null);
+                return;
+            }
+
+            try {
+                setIsLoadingExchangeRate(true);
+
+                const asset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || SUPPORTED_ASSETS[0];
+                const vaultType = "yield";
+
+                // Fetch metrics from API
+                const metrics = await fetchVaultMetrics(
+                    asset.symbol,
+                    vaultType,
+                    "sepolia",
+                    asset.decimals
+                );
+
+                if (metrics.exchangeRate) {
+                    const rate = parseFloat(metrics.exchangeRate);
+                    // Store raw rate for calculations
+                    setExchangeRate(rate.toString());
+                    // Store formatted string for display
+                    if (activeTab === "deposit") {
+                        // Deposit: 1 USDC = X vUSDC (exchange rate)
+                        const l2Symbol = asset.l2ValueSymbol || `v${asset.symbol}`;
+                        setExchangeRateDisplay(`1 ${asset.symbol} = ${rate.toFixed(4)} ${l2Symbol}`);
+                    } else {
+                        // Withdraw: 1 vUSDC = X USDC (1/exchange rate)
+                        const inverseRate = (1 / rate).toFixed(4);
+                        const l2Symbol = asset.l2ValueSymbol || `v${asset.symbol}`;
+                        setExchangeRateDisplay(`1 ${l2Symbol} = ${inverseRate} ${asset.symbol}`);
+                    }
+                } else {
+                    setExchangeRate(null);
+                    setExchangeRateDisplay(null);
+                }
+            } catch (error) {
+                console.error("[EthereumBridgeInterface] Error fetching exchange rate:", error);
+                setExchangeRate(null);
+                setExchangeRateDisplay(null);
+            } finally {
+                setIsLoadingExchangeRate(false);
+            }
+        }
+
+        fetchExchangeRate();
+    }, [selectedAssetSymbol, isYieldEnabled, activeTab]);
 
     // Use the ready count from pending withdrawals component
     // This is updated when MessageManager checks are complete
@@ -305,18 +395,31 @@ export default function EthereumBridgeInterface() {
     const pendingWithdrawalsCount = isMounted ? readyWithdrawalsCount : 0;
 
     // Merge dynamic APY into selected asset
-    const currentApy = apys[selectedAsset.symbol] || selectedAsset.apy;
+    // Don't use hardcoded asset.apy - only use fetched data or show "..."
+    const currentApy = apys[selectedAsset.symbol];
     const currentTvl = vaultTvl || selectedAsset.tvl;
 
     // Create displayAsset but override apy with dynamic values.
     // When "Normal bridging without yield" is enabled, show 0% APY.
+    // Show "..." when loading, otherwise show fetched APY or nothing
     const displayApy = isYieldEnabled
-        ? (loadingApy ? "..." : currentApy)
+        ? (loadingApy || isLoadingVaultTvl ? "..." : (currentApy || "..."))
         : "0%";
 
     // TVL represents value bridged through the selected vault (normal or yield)
+    // For yield vaults on L2 (withdraw tab), show l2ValueSymbol instead of base symbol
+    const displaySymbol = (isYieldEnabled && activeTab === "withdraw") 
+        ? (selectedAsset.l2ValueSymbol || `v${selectedAsset.symbol}`)
+        : selectedAsset.symbol;
+    
+    // Unit for amount input - use l2ValueSymbol for withdrawal with yield
+    const amountUnit = (isYieldEnabled && activeTab === "withdraw")
+        ? (selectedAsset.l2ValueSymbol || `v${selectedAsset.symbol}`)
+        : selectedAsset.symbol;
+    
     const displayAsset = {
         ...selectedAsset,
+        symbol: displaySymbol,
         apy: displayApy,
         tvl: isLoadingVaultTvl ? "..." : currentTvl
     };
@@ -416,6 +519,11 @@ export default function EthereumBridgeInterface() {
         autoSwitchNetwork();
     }, [activeTab, isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, switchToEthereum, switchToL2, checkL1Network, checkMetamaskNetwork, isPendingWithdrawalsOpen, fetchEthTransactions]);
 
+    // Reset amount when switching tabs
+    useEffect(() => {
+        setAmount("");
+    }, [activeTab]);
+
     // Fetch transaction history when addresses are available
     useEffect(() => {
         if (!isMetamaskConnected) {
@@ -484,8 +592,8 @@ export default function EthereumBridgeInterface() {
                 <div className="bg-white border border-slate-200 rounded-2xl shadow-sm">
                     {/* Title */}
                     <div className="text-center mb-4 pt-8 px-8">
-                        <h1 className="text-2xl font-bold text-slate-900 mb-2">Ethereum Bridge</h1>
-                        <p className="text-sm text-slate-600">Bridge assets securely between Ethereum and VIA network</p>
+                        <h1 className="text-2xl font-bold text-slate-900 mb-2">Via Ethereum Network Bridge</h1>
+                        <p className="text-sm text-slate-600">Bridge assets securely</p>
                     </div>
 
                     {/* Asset Selection */}
@@ -545,6 +653,7 @@ export default function EthereumBridgeInterface() {
                             icon={displayAsset.icon}
                             apy={displayAsset.apy}
                             tvl={displayAsset.tvl}
+                            exchangeRate={isLoadingExchangeRate ? "..." : exchangeRateDisplay || undefined}
                             isSelected={true}
                             selectionHint="Change"
                             onClick={() => setIsDialogOpen(true)}
@@ -610,9 +719,9 @@ export default function EthereumBridgeInterface() {
                             <div className="space-y-6 mb-8">
                                 <TransferAmountInput 
                                     value={amount} 
-                                    onChange={setAmount} 
+                                    onChange={handleAmountChange} 
                                     onMax={handleMaxAmount} 
-                                    unit={selectedAsset.symbol} 
+                                    unit={amountUnit} 
                                     maxDisabled={!balance || parseFloat(balance) <= 0}
                                 />
                             </div>
@@ -622,7 +731,7 @@ export default function EthereumBridgeInterface() {
                         <div className="mb-6">
                             <AvailableBalanceDisplay 
                                 balance={balance} 
-                                unit={selectedAsset.symbol} 
+                                unit={amountUnit} 
                                 isLoading={isLoadingBalance} 
                             />
                         </div>
@@ -634,9 +743,32 @@ export default function EthereumBridgeInterface() {
                                     value={amountNumber} 
                                     max={maxAmount} 
                                     onChange={handleSliderChange} 
-                                    unit={selectedAsset.symbol}
+                                    unit={amountUnit}
                                     decimals={selectedAsset.decimals}
                                 />
+                            </div>
+                        )}
+
+                        {/* Expected amount to receive (for withdrawal with yield) */}
+                        {activeTab === "withdraw" && isYieldEnabled && expectedAmountData && amountNumber > 0 && (
+                            <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                                <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                        <span className="text-muted-foreground">Expected to receive:</span>
+                                        <span className="font-semibold text-blue-700">
+                                            {expectedAmountData.expected} {selectedAsset.symbol}
+                                        </span>
+                                    </div>
+                                    <div className="text-xs text-muted-foreground pt-1 border-t border-blue-200">
+                                        <div className="flex items-center gap-1">
+                                            <span>{expectedAmountData.inputAmount} {selectedAsset.l2ValueSymbol || `v${selectedAsset.symbol}`}</span>
+                                            <span>×</span>
+                                            <span>{expectedAmountData.rate}</span>
+                                            <span>=</span>
+                                            <span className="font-medium">{expectedAmountData.expected} {selectedAsset.symbol}</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
 
@@ -699,6 +831,8 @@ export default function EthereumBridgeInterface() {
                                         isYield={isYieldEnabled}
                                         amount={amount}
                                         onAmountReset={() => setAmount("")}
+                                        exchangeRate={exchangeRate}
+                                        onBalanceRefresh={fetchBalance}
                                     />
                                 )
                             ) : (
@@ -706,7 +840,7 @@ export default function EthereumBridgeInterface() {
                                     <div className="text-center space-y-2">
                                         <h3 className="text-xl font-semibold">Connect EVM Wallet</h3>
                                         <p className="text-sm text-muted-foreground max-w-[280px]">
-                                            EVM wallet connection is required to deposit from Ethereum to VIA network
+                                            EVM wallet connection is required to deposit from Ethereum to Via network
                                         </p>
                                     </div>
                                     <WalletConnectButton />
@@ -719,7 +853,7 @@ export default function EthereumBridgeInterface() {
                                         <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
                                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                             <p className="text-sm text-muted-foreground">
-                                                {networkStatus || "Switching to VIA network..."}
+                                                {networkStatus || "Switching to Via network..."}
                                             </p>
                                         </div>
                                     ) : (!isCorrectViaNetwork || autoSwitchFailed) ? (
@@ -728,11 +862,11 @@ export default function EthereumBridgeInterface() {
                                                 <AlertCircle className="h-8 w-8 text-amber-600" />
                                             </div>
                                             <div className="space-y-2">
-                                                <h3 className="font-semibold">Switch to VIA Network</h3>
+                                                <h3 className="font-semibold">Switch to Via Network</h3>
                                                 <p className="text-sm text-muted-foreground max-w-[250px]">
                                                     {autoSwitchFailed 
                                                         ? "Automatic network switch failed. Please switch manually."
-                                                        : "Your wallet is connected. Please switch to VIA network to continue."}
+                                                        : "Your wallet is connected. Please switch to Via network to continue."}
                                                 </p>
                                             </div>
                                             <Button 
@@ -761,16 +895,18 @@ export default function EthereumBridgeInterface() {
                                                         Switching...
                                                     </>
                                                 ) : (
-                                                    "Switch to VIA Network"
+                                                    "Switch to Via Network"
                                                 )}
                                             </Button>
                                         </div>
                                     ) : (
                                         <EthereumWithdrawForm
-                                            asset={displayAsset}
+                                            asset={selectedAsset}
                                             isYield={isYieldEnabled}
                                             amount={amount}
                                             onAmountReset={() => setAmount("")}
+                                            exchangeRate={exchangeRate}
+                                            onBalanceRefresh={fetchBalance}
                                         />
                                     )
                                 ) : (
@@ -778,7 +914,7 @@ export default function EthereumBridgeInterface() {
                                         <div className="text-center space-y-2">
                                             <h3 className="text-xl font-semibold">Connect EVM Wallet</h3>
                                             <p className="text-sm text-muted-foreground max-w-[280px]">
-                                                EVM wallet connection is required to withdraw from VIA to Ethereum network
+                                                EVM wallet connection is required to withdraw from Via to Ethereum network
                                             </p>
                                         </div>
                                         <WalletConnectButton />
@@ -789,7 +925,7 @@ export default function EthereumBridgeInterface() {
 
                         {/* Transaction History */}
                         {isMetamaskConnected && (
-                            <div className="mt-8 pt-6 border-t border-slate-200">
+                            <div className="mt-8">
                                 <Button
                                     variant="ghost"
                                     className="flex items-center justify-between w-full py-2 text-sm font-medium"
@@ -808,11 +944,12 @@ export default function EthereumBridgeInterface() {
                                 </Button>
 
                                 {showTransactions && (
-                                    <div className="w-full mt-4">
+                                    <div className="w-full mt-2">
                                         <TransactionHistory 
                                             isLoading={isLoadingTransactions} 
                                             onRefresh={fetchEthTransactions} 
                                             transactions={ethTransactions}
+                                            excludeSymbol="BTC"
                                         />
                                     </div>
                                 )}

@@ -1,5 +1,5 @@
 import { ethers, getAddress, BrowserProvider } from "ethers";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { ERC20_ABI, VAULT_ABI } from "@/services/ethereum/abis";
 import { useForm } from "react-hook-form";
@@ -7,7 +7,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Loader2, Wallet, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, Wallet, AlertCircle, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { SUPPORTED_ASSETS, EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
 import { useWalletStore } from "@/store/wallet-store";
@@ -24,13 +24,40 @@ interface EthereumDepositFormProps {
     isYield: boolean;
     amount: string;
     onAmountReset?: () => void;
+    exchangeRate?: string | null; // Raw exchange rate for calculating toAmount
+    onBalanceRefresh?: () => void; // Callback to refresh parent balance
 }
 
-const depositFormSchema = z.object({
-    amount: z.string().refine((val) => {
-        const n = parseFloat(val);
-        return !isNaN(n) && n > 0;
-    }, "Amount must be greater than 0"),
+const createDepositFormSchema = (balance: string | null, minAmount: string = "0.000001", decimals: number = 6) => z.object({
+    amount: z.string()
+        .refine((val) => {
+            // Check if it's a valid number (not empty, not just dots, etc.)
+            if (!val || val.trim() === '' || val === '.' || val === '..') return false;
+            const n = parseFloat(val);
+            if (isNaN(n) || n <= 0) return false;
+            // Limit decimal places to prevent underflow
+            const decimalParts = val.split('.');
+            if (decimalParts.length > 1 && decimalParts[1].length > decimals) {
+                return false; // Too many decimals
+            }
+            return true;
+        }, `Amount must be a valid number with at most ${decimals} decimal places`)
+        .refine((val) => {
+            const n = parseFloat(val);
+            const min = parseFloat(minAmount);
+            return !isNaN(n) && !isNaN(min) && n >= min;
+        }, () => {
+            return { message: `Minimum amount is ${minAmount}` };
+        })
+        .refine((val) => {
+            if (!balance) return true; // If balance not loaded yet, allow validation to pass
+            const n = parseFloat(val);
+            const maxAmount = parseFloat(balance);
+            return !isNaN(n) && !isNaN(maxAmount) && n <= maxAmount;
+        }, () => {
+            const maxAmount = parseFloat(balance || "0");
+            return { message: `Amount exceeds balance. Maximum: ${maxAmount.toFixed(decimals)}` };
+        }),
     recipientAddress: z.string().refine((val) => {
         try {
             return !!getAddress(val);
@@ -40,7 +67,7 @@ const depositFormSchema = z.object({
     }, "Invalid Ethereum/Via address"),
 });
 
-export default function EthereumDepositForm({ asset, isYield, amount, onAmountReset }: EthereumDepositFormProps) {
+export default function EthereumDepositForm({ asset, isYield, amount, onAmountReset, exchangeRate, onBalanceRefresh }: EthereumDepositFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<string>(""); // For displaying "Approving..." or "Depositing..."
     const [balance, setBalance] = useState<string | null>(null);
@@ -57,14 +84,23 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
     const walletMeta = selectedWallet ? getWalletDisplayMetaByRdns(selectedWallet) : null;
     const walletName = walletMeta?.name || "Wallet";
 
-    const form = useForm<z.infer<typeof depositFormSchema> & { _balance?: string }>({
-        resolver: zodResolver(depositFormSchema),
+    const form = useForm<z.infer<ReturnType<typeof createDepositFormSchema>> & { _balance?: string }>({
+        resolver: zodResolver(createDepositFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
         mode: "onChange", // Validate on change to update isValid state
         defaultValues: {
             amount: amount || "",
             recipientAddress: "", // Will be autofilled
         },
     });
+
+    // Update schema when balance changes
+    useEffect(() => {
+        form.clearErrors("amount");
+        // Re-validate amount when balance changes
+        if (amount) {
+            form.trigger("amount");
+        }
+    }, [balance, form, amount]);
 
     // Update form amount when prop changes
     useEffect(() => {
@@ -80,14 +116,43 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
         }
     }, [balance, form]);
 
+    // Calculate expected amount to receive for deposit (base symbol -> l2ValueSymbol)
+    const expectedAmountData = useMemo(() => {
+        if (!isYield || !amount || !exchangeRate) {
+            return null;
+        }
+
+        try {
+            const rate = parseFloat(exchangeRate);
+            if (isNaN(rate) || rate === 0) return null;
+            
+            const amountNumber = parseFloat(amount);
+            if (isNaN(amountNumber) || amountNumber <= 0) return null;
+            
+            // For deposit: USDC -> vUSDC, so we use the exchange rate directly
+            const expected = amountNumber * rate;
+            return {
+                expected: expected.toFixed(asset.decimals),
+                rate: rate.toFixed(6),
+                inputAmount: amountNumber.toFixed(asset.decimals)
+            };
+        } catch (error) {
+            console.error("Error calculating expected amount:", error);
+            return null;
+        }
+    }, [isYield, amount, exchangeRate, asset.decimals]);
+
     // Get the address to use for balance checking (prefer l1Address, fallback to viaAddress)
     const walletAddress = l1Address || viaAddress;
     const isFetchingRef = useRef(false);
+    
+    // Extract token address to a stable reference for useCallback dependency
+    const tokenAddress = asset.addresses[EthereumNetwork.SEPOLIA];
 
     // Fetch Balance function - extracted to be reusable
     const fetchBalance = useCallback(async () => {
         // Need wallet address, correct network, and asset address
-        if (!walletAddress || !isCorrectL1Network || !asset.addresses[EthereumNetwork.SEPOLIA]) return;
+        if (!walletAddress || !isCorrectL1Network || !tokenAddress) return;
 
         // Prevent multiple simultaneous fetches
         if (isFetchingRef.current) return;
@@ -100,7 +165,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                 return;
             }
             const browserProvider = new BrowserProvider(window.ethereum);
-            const tokenContract = new ethers.Contract(asset.addresses[EthereumNetwork.SEPOLIA], ERC20_ABI, browserProvider);
+            const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, browserProvider);
             const bal = await tokenContract.balanceOf(walletAddress);
             const balFormatted = ethers.formatUnits(bal, asset.decimals);
             setBalance(balFormatted);
@@ -110,7 +175,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             } finally {
                 isFetchingRef.current = false;
             }
-    }, [walletAddress, isCorrectL1Network, asset.addresses, asset.decimals]);
+    }, [walletAddress, isCorrectL1Network, tokenAddress, asset.decimals]);
 
     // Fetch Balance - use stable dependencies to prevent spam
     useEffect(() => {
@@ -119,7 +184,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
     }, [fetchBalance]);
 
 
-    async function onSubmit(values: z.infer<typeof depositFormSchema>) {
+    async function onSubmit(values: z.infer<ReturnType<typeof createDepositFormSchema>>) {
         try {
             setIsSubmitting(true);
             setApprovalOpen(true);
@@ -154,7 +219,9 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
 
             // 4. Parse amount & Check Allowance (READ ONLY - Robust)
             const decimals = asset.decimals;
-            const amountBN = ethers.parseUnits(values.amount, decimals);
+            // Limit decimal places to prevent underflow
+            const amountStr = parseFloat(values.amount).toFixed(decimals);
+            const amountBN = ethers.parseUnits(amountStr, decimals);
 
             setStatus("Checking allowance...");
             const allowance = await tokenContractRead.allowance(userAddress, vaultAddress);
@@ -201,8 +268,11 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                 onAmountReset();
             }
 
-            // Refresh balance after successful deposit
+            // Refresh balance after successful deposit (both form and parent)
             await fetchBalance();
+            if (onBalanceRefresh) {
+                await onBalanceRefresh();
+            }
         } catch (error: any) {
             console.error("Deposit error:", error);
 
@@ -251,9 +321,31 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
 
     if (isSuccess && txHash && explorerUrl) {
         return (
-            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div 
+                className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        setIsSuccess(false);
+                        setTxHash(null);
+                        setExplorerUrl(null);
+                        form.reset();
+                    }
+                }}
+            >
                 <div className="w-full max-w-md p-4">
-                    <div className="bg-background border border-border/50 rounded-lg shadow-lg p-6">
+                    <div className="bg-background border border-border/50 rounded-lg shadow-lg p-6 relative">
+                        <button
+                            onClick={() => {
+                                setIsSuccess(false);
+                                setTxHash(null);
+                                setExplorerUrl(null);
+                                form.reset();
+                            }}
+                            className="absolute top-4 right-4 p-1 rounded-md hover:bg-slate-100 transition-colors"
+                            aria-label="Close"
+                        >
+                            <X className="h-5 w-5 text-slate-500" />
+                        </button>
                         <div className="space-y-8">
                             <div className="text-center space-y-4">
                                 <div className="h-16 w-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto ring-1 ring-green-500/30">
@@ -342,7 +434,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                     <p className="text-sm text-muted-foreground max-w-[250px]">
                         {isConnecting 
                             ? "Connecting and switching to Sepolia..." 
-                            : "EVM wallet connection is required to deposit from Ethereum to VIA network. We'll automatically switch to Sepolia network."}
+                            : "EVM wallet connection is required to deposit from Ethereum to Via network. We'll automatically switch to Sepolia network."}
                     </p>
                 </div>
                 <Button 
@@ -405,6 +497,29 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                         render={() => <input type="hidden" />}
                     />
 
+                    {/* Expected amount to receive (for deposit with yield) */}
+                    {isYield && expectedAmountData && parseFloat(amount || "0") > 0 && (
+                        <div className="mb-6 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <div className="space-y-2">
+                                <div className="flex items-center justify-between text-sm">
+                                    <span className="text-muted-foreground">Expected to receive:</span>
+                                    <span className="font-semibold text-blue-700">
+                                        {expectedAmountData.expected} {asset.l2ValueSymbol || `v${asset.symbol}`}
+                                    </span>
+                                </div>
+                                <div className="text-xs text-muted-foreground pt-1 border-t border-blue-200">
+                                    <div className="flex items-center gap-1">
+                                        <span>{expectedAmountData.inputAmount} {asset.symbol}</span>
+                                        <span>×</span>
+                                        <span>{expectedAmountData.rate}</span>
+                                        <span>=</span>
+                                        <span className="font-medium">{expectedAmountData.expected} {asset.l2ValueSymbol || `v${asset.symbol}`}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <FormField
                         control={form.control}
                         name="recipientAddress"
@@ -412,7 +527,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                             <FormItem>
                                 <AddressFieldWithWallet
                                     mode="via"
-                                    label="Recipient VIA Address"
+                                    label="Recipient Via Address"
                                     placeholder="0x..."
                                     value={field.value || ""}
                                     onChange={(value) => {
@@ -433,9 +548,11 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                             isSubmitting || 
                             !amount || 
                             parseFloat(amount) <= 0 ||
+                            (balance && parseFloat(amount) > parseFloat(balance)) ||
                             !form.watch("recipientAddress") ||
                             !!form.formState.errors.recipientAddress ||
-                            !!form.formState.errors.amount
+                            !!form.formState.errors.amount ||
+                            !form.formState.isValid
                         }
                     >
                         {isSubmitting ? (
@@ -458,16 +575,33 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                 walletName={walletName}
                 transactionData={{
                     fromAmount: form.watch("amount") || "0",
-                    toAmount: form.watch("amount") || "0", // Same amount for now, could calculate fees if needed
+                    toAmount: (() => {
+                        // Calculate toAmount using exchange rate for yield deposits
+                        if (isYield && exchangeRate) {
+                            try {
+                                const rate = parseFloat(exchangeRate);
+                                if (!isNaN(rate) && rate > 0) {
+                                    const fromAmount = parseFloat(form.watch("amount") || "0");
+                                    // For deposit: base symbol -> l2ValueSymbol, so we use the exchange rate directly
+                                    const toAmount = fromAmount * rate;
+                                    return toAmount.toFixed(asset.decimals);
+                                }
+                            } catch (error) {
+                                console.error("Error calculating toAmount:", error);
+                            }
+                        }
+                        // For normal deposits or if exchange rate not available, use same amount
+                        return form.watch("amount") || "0";
+                    })(),
                     fromToken: {
-                        symbol: asset.symbol,
+                        symbol: asset.symbol, // Always USDC (the actual token being deposited)
                         name: asset.name,
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },
                     toToken: {
-                        symbol: asset.symbol,
-                        name: asset.name,
+                        symbol: isYield ? (asset.l2ValueSymbol || `v${asset.symbol}`) : asset.symbol, // l2ValueSymbol for yield, base symbol for normal
+                        name: isYield ? `v${asset.name}` : asset.name,
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },

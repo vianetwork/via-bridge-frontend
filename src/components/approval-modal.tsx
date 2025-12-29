@@ -34,6 +34,7 @@ type Props = {
 export default function ApprovalModal({
                                         open,
                                         onOpenChange,
+                                        direction, // eslint-disable-line @typescript-eslint/no-unused-vars
                                         title = "Waiting for confirmation",
                                         walletName = "Wallet",
                                         onCancel,
@@ -59,6 +60,20 @@ export default function ApprovalModal({
   // Determine if this is a Bitcoin transaction
   const isBitcoin = useMemo(() => {
     return transactionData?.fromToken.symbol === "BTC" || transactionData?.toToken.symbol === "BTC";
+  }, [transactionData]);
+
+  // Check if this is a yield conversion (USDC <-> vUSDC)
+  const isYieldConversion = useMemo(() => {
+    if (!transactionData) return false;
+    const fromSymbol = transactionData.fromToken?.symbol || "";
+    const toSymbol = transactionData.toToken?.symbol || "";
+    // Check if one token has 'v' prefix and the other doesn't (e.g., USDC <-> vUSDC)
+    const fromHasV = fromSymbol.startsWith('v');
+    const toHasV = toSymbol.startsWith('v');
+    const fromBase = fromHasV ? fromSymbol.substring(1) : fromSymbol;
+    const toBase = toHasV ? toSymbol.substring(1) : toSymbol;
+    // Both should have the same base symbol and one should have 'v' prefix
+    return fromBase.toUpperCase() === toBase.toUpperCase() && fromHasV !== toHasV;
   }, [transactionData]);
 
 
@@ -194,6 +209,8 @@ export default function ApprovalModal({
                   fee={formatFee(transactionData?.networkFee) || (isBitcoin ? "0 sats" : "0")}
                   netReceive={transactionData?.toAmount || "0"}
                   unit={transactionData?.fromToken.symbol || (isBitcoin ? "BTC" : "ETH")}
+                  netReceiveUnit={transactionData?.toToken.symbol || (isBitcoin ? "BTC" : "ETH")}
+                  showConversion={isYieldConversion}
                 />
               </div>
 

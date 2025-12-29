@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Loader2, Wallet, AlertCircle, ExternalLink } from "lucide-react";
+import { Loader2, Wallet, AlertCircle, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
 import { useWalletStore } from "@/store/wallet-store";
@@ -25,13 +25,40 @@ interface EthereumWithdrawFormProps {
     isYield: boolean;
     amount: string;
     onAmountReset?: () => void;
+    exchangeRate?: string | null; // Raw exchange rate for calculating toAmount
+    onBalanceRefresh?: () => void; // Callback to refresh parent balance
 }
 
-const withdrawFormSchema = z.object({
-    amount: z.string().refine((val) => {
-        const n = parseFloat(val);
-        return !isNaN(n) && n > 0;
-    }, "Amount must be greater than 0"),
+const createWithdrawFormSchema = (balance: string | null, minAmount: string = "0.000001", decimals: number = 6) => z.object({
+    amount: z.string()
+        .refine((val) => {
+            // Check if it's a valid number (not empty, not just dots, etc.)
+            if (!val || val.trim() === '' || val === '.' || val === '..') return false;
+            const n = parseFloat(val);
+            if (isNaN(n) || n <= 0) return false;
+            // Limit decimal places to prevent underflow
+            const decimalParts = val.split('.');
+            if (decimalParts.length > 1 && decimalParts[1].length > decimals) {
+                return false; // Too many decimals
+            }
+            return true;
+        }, `Amount must be a valid number with at most ${decimals} decimal places`)
+        .refine((val) => {
+            const n = parseFloat(val);
+            const min = parseFloat(minAmount);
+            return !isNaN(n) && !isNaN(min) && n >= min;
+        }, () => {
+            return { message: `Minimum amount is ${minAmount}` };
+        })
+        .refine((val) => {
+            if (!balance) return true; // If balance not loaded yet, allow validation to pass
+            const n = parseFloat(val);
+            const maxAmount = parseFloat(balance);
+            return !isNaN(n) && !isNaN(maxAmount) && n <= maxAmount;
+        }, () => {
+            const maxAmount = parseFloat(balance || "0");
+            return { message: `Amount exceeds balance. Maximum: ${maxAmount.toFixed(decimals)}` };
+        }),
     recipientAddress: z.string().refine((val) => {
         try {
             return !!getAddress(val);
@@ -41,7 +68,7 @@ const withdrawFormSchema = z.object({
     }, "Invalid Ethereum address"),
 });
 
-export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountReset }: EthereumWithdrawFormProps) {
+export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountReset, exchangeRate, onBalanceRefresh }: EthereumWithdrawFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<string>("");
     const [balance, setBalance] = useState<string | null>(null);
@@ -58,14 +85,23 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     const walletMeta = selectedWallet ? getWalletDisplayMetaByRdns(selectedWallet) : null;
     const walletName = walletMeta?.name || "Wallet";
 
-    const form = useForm<z.infer<typeof withdrawFormSchema> & { _balance?: string }>({
-        resolver: zodResolver(withdrawFormSchema),
+    const form = useForm<z.infer<ReturnType<typeof createWithdrawFormSchema>> & { _balance?: string }>({
+        resolver: zodResolver(createWithdrawFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
         mode: "onChange", // Validate on change to update isValid state
         defaultValues: {
             amount: amount || "",
             recipientAddress: "",
         },
     });
+
+    // Update schema when balance changes
+    useEffect(() => {
+        form.clearErrors("amount");
+        // Re-validate amount when balance changes
+        if (amount) {
+            form.trigger("amount");
+        }
+    }, [balance, form, amount]);
 
     // Update form amount when prop changes
     useEffect(() => {
@@ -82,10 +118,16 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     }, [balance, form]);
 
     const isFetchingRef = useRef(false);
-    const targetContract = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
+    
+    // Extract contract addresses to stable references for useCallback dependency
+    const yieldVaultAddress = asset.vaults.l2.yield;
+    const normalVaultAddress = asset.vaults.l2.normal;
+    const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
 
     // Fetch Balance from L2 - use stable dependencies
     const fetchBalance = useCallback(async () => {
+        // Compute target contract from stable addresses
+        const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
         // Need wallet address, correct network, and vault contract
         if (!viaAddress || !isCorrectViaNetwork || !targetContract) return;
 
@@ -110,7 +152,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
             } finally {
                 isFetchingRef.current = false;
             }
-    }, [viaAddress, isCorrectViaNetwork, targetContract, asset.decimals]);
+    }, [viaAddress, isCorrectViaNetwork, isYield, yieldVaultAddress, normalVaultAddress, asset.decimals]);
 
     // Initial fetch and refresh on dependencies change
     useEffect(() => {
@@ -130,7 +172,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     }, [viaAddress, isCorrectViaNetwork, targetContract, fetchBalance]);
 
 
-    async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
+    async function onSubmit(values: z.infer<ReturnType<typeof createWithdrawFormSchema>>) {
         try {
             setIsSubmitting(true);
             setApprovalOpen(true);
@@ -157,7 +199,9 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
 
             setStatus("Withdrawing...");
             const decimals = asset.decimals;
-            const amountBN = ethers.parseUnits(values.amount, decimals);
+            // Limit decimal places to prevent underflow
+            const amountStr = parseFloat(values.amount).toFixed(decimals);
+            const amountBN = ethers.parseUnits(amountStr, decimals);
 
             // Call withdraw(shares, receiver)
             // Note: We use "shares" which maps to the token amount for 1:1 assets,
@@ -191,8 +235,11 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                 onAmountReset();
             }
 
-            // Refresh balance after successful withdrawal
+            // Refresh balance after successful withdrawal (both form and parent)
             await fetchBalance();
+            if (onBalanceRefresh) {
+                await onBalanceRefresh();
+            }
         } catch (error: any) {
             console.error("Withdrawal error:", error);
             if (error?.code === 'ACTION_REJECTED' || error?.message?.includes('user rejected')) {
@@ -228,9 +275,31 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
 
     if (isSuccess && txHash && explorerUrl) {
         return (
-            <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div 
+                className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                        setIsSuccess(false);
+                        setTxHash(null);
+                        setExplorerUrl(null);
+                        form.reset();
+                    }
+                }}
+            >
                 <div className="w-full max-w-md p-4">
-                    <div className="bg-background border border-border/50 rounded-lg shadow-lg p-6">
+                    <div className="bg-background border border-border/50 rounded-lg shadow-lg p-6 relative">
+                        <button
+                            onClick={() => {
+                                setIsSuccess(false);
+                                setTxHash(null);
+                                setExplorerUrl(null);
+                                form.reset();
+                            }}
+                            className="absolute top-4 right-4 p-1 rounded-md hover:bg-slate-100 transition-colors"
+                            aria-label="Close"
+                        >
+                            <X className="h-5 w-5 text-slate-500" />
+                        </button>
                         <div className="space-y-8">
                             <div className="text-center space-y-4">
                                 <div className="h-16 w-16 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto ring-1 ring-green-500/30">
@@ -251,7 +320,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-semibold tracking-tight">Withdrawal Transaction Submitted</h3>
                                     <p className="text-muted-foreground text-sm">
-                                        Your withdrawal transaction has been submitted to the VIA network and it is being processed.
+                                        Your withdrawal transaction has been submitted to the Via network and it is being processed.
                                     </p>
                                 </div>
                             </div>
@@ -332,8 +401,8 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                     <h3 className="font-semibold">Connect EVM Wallet</h3>
                     <p className="text-sm text-muted-foreground max-w-[250px]">
                         {isConnecting 
-                            ? "Connecting and switching to VIA network..." 
-                            : "EVM wallet connection is required to withdraw from VIA to Ethereum network. We'll automatically switch to VIA network."}
+                            ? "Connecting and switching to Via network..." 
+                            : "EVM wallet connection is required to withdraw from Via to Ethereum network. We'll automatically switch to Via network."}
                     </p>
                 </div>
                 <Button 
@@ -364,7 +433,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                 <div className="space-y-2">
                     <h3 className="font-semibold">Wrong Network</h3>
                     <p className="text-sm text-muted-foreground max-w-[250px]">
-                        Please switch to VIA network to continue.
+                        Please switch to Via network to continue.
                     </p>
                 </div>
                 <Button 
@@ -378,7 +447,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                             Switching...
                         </>
                     ) : (
-                        "Switch to VIA Network"
+                        "Switch to Via Network"
                     )}
                 </Button>
             </div>
@@ -423,9 +492,11 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                             isSubmitting || 
                             !amount || 
                             parseFloat(amount) <= 0 ||
+                            (balance && parseFloat(amount) > parseFloat(balance)) ||
                             !form.watch("recipientAddress") ||
                             !!form.formState.errors.recipientAddress ||
-                            !!form.formState.errors.amount
+                            !!form.formState.errors.amount ||
+                            !form.formState.isValid
                         }
                     >
                         {isSubmitting ? (
@@ -448,16 +519,40 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                 walletName={walletName}
                 transactionData={{
                     fromAmount: form.watch("amount") || "0",
-                    toAmount: form.watch("amount") || "0", // Same amount for now, could calculate fees if needed
+                    toAmount: (() => {
+                        // Calculate toAmount using exchange rate for yield withdrawals
+                        if (isYield && exchangeRate) {
+                            try {
+                                const rate = parseFloat(exchangeRate);
+                                if (!isNaN(rate) && rate > 0) {
+                                    const fromAmount = parseFloat(form.watch("amount") || "0");
+                                    const inverseRate = 1 / rate;
+                                    const toAmount = fromAmount * inverseRate;
+                                    return toAmount.toFixed(asset.decimals);
+                                }
+                            } catch (error) {
+                                console.error("Error calculating toAmount:", error);
+                            }
+                        }
+                        // For normal withdrawals or if exchange rate not available, use same amount
+                        return form.watch("amount") || "0";
+                    })(),
                     fromToken: {
-                        symbol: asset.symbol,
-                        name: asset.name,
+                        // For yield: use l2ValueSymbol (asset.symbol might already be l2ValueSymbol from displaySymbol, so check first)
+                        // For normal: ensure base symbol (remove v prefix if present)
+                        symbol: isYield 
+                            ? (asset.l2ValueSymbol || (asset.symbol.startsWith('v') ? asset.symbol : `v${asset.symbol}`))
+                            : asset.symbol.replace(/^v/, ''), // l2ValueSymbol for yield, base symbol for normal
+                        name: isYield 
+                            ? (asset.l2ValueSymbol ? `v${asset.name}` : (asset.name.startsWith('v') ? asset.name : `v${asset.name}`))
+                            : asset.name.replace(/^v/, ''),
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },
                     toToken: {
-                        symbol: asset.symbol,
-                        name: asset.name,
+                        // Always USDC (the actual token being received) - remove any v prefix
+                        symbol: asset.symbol.replace(/^v/, ''),
+                        name: asset.name.replace(/^v/, ''),
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },

@@ -117,7 +117,7 @@ export default function AddressFieldWithWallet({
     connected && correctNetwork && !!walletAddress && !!value && value === walletAddress;
   const usingManual = !!value && !usingWallet;
 
-  const computedLabel = label ?? (isEvm ? "Recipient VIA Address" : isEth ? "Recipient Ethereum Address" : "Recipient Bitcoin Address");
+  const computedLabel = label ?? (isEvm ? "Recipient Via Address" : isEth ? "Recipient Ethereum Address" : "Recipient Bitcoin Address");
 
   // Copy address handler
   const handleCopyAddress = async () => {
@@ -306,7 +306,7 @@ export default function AddressFieldWithWallet({
               aria-label={label ?? (isEvm ? "Recipient VIA Address" : "Recipient Bitcoin Address")}
             />
             <div className="pointer-events-none absolute inset-y-0 right-3 flex items-center transition-opacity duration-150 opacity-0 peer-placeholder-shown:opacity-100">
-              <span className="text-[10px] text-slate-400">Enter {isEvm ? "VIA" : isEth ? "Ethereum" : "Bitcoin"} address manually</span>
+              <span className="text-[10px] text-slate-400">Enter {isEvm ? "Via" : isEth ? "Ethereum" : "Bitcoin"} address manually</span>
             </div>
             <input
               type="text"

@@ -9,10 +9,10 @@ export default function Home() {
       <div className="container max-w-7xl mx-auto px-4 flex flex-col items-center justify-center flex-1 w-full">
         <div className="text-center mb-12 w-full">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">
-            VIA Bridge
+            Via Bridge
           </h1>
           <p className="text-base md:text-lg text-slate-500 max-w-2xl mx-auto">
-            Bridge assets securely between Bitcoin, Ethereum, and VIA network
+            Bridge assets securely between Bitcoin, Ethereum, and Via network
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-6xl mx-auto w-full items-center justify-center">
@@ -32,7 +32,7 @@ export default function Home() {
                   <CardTitle className="text-3xl md:text-4xl">Bitcoin Bridge</CardTitle>
                 </div>
                 <CardDescription className="text-lg md:text-xl">
-                  Bridge BTC between Bitcoin and VIA network
+                  Bridge BTC between Bitcoin and Via network
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
@@ -60,7 +60,7 @@ export default function Home() {
                   <CardTitle className="text-3xl md:text-4xl">Ethereum Bridge</CardTitle>
                 </div>
                 <CardDescription className="text-lg md:text-xl">
-                  Bridge USDC and other assets between Ethereum and VIA network
+                  Bridge USDC and other assets between Ethereum and Via network
                 </CardDescription>
               </CardHeader>
               <CardContent className="pt-0">

@@ -12,7 +12,9 @@ export const VAULT_ABI = [
   "function deposit(uint256 amount) external",
   "function depositWithBridge(uint256 amount, address recipient) external",
   "function withdraw(uint256 shares, address receiver) payable external",
-  "function withdrawWithBridge(uint256 amount, address recipient) external"
+  "function withdrawWithBridge(uint256 amount, address recipient) external",
+  "function totalAssets() view returns (uint256)",
+  "function convertToAssets(uint256 shares) view returns (uint256)"
 ];
 
 export const BRIDGE_ABI = [

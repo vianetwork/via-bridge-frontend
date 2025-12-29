@@ -61,7 +61,7 @@ export const VIA_EVM_CHAIN_PARAMS: Record<ViaNetwork, AddEthereumChainParameters
   // REGTEST remains custom for local development
   [ViaNetwork.REGTEST]: {
     chainId: "0x6287",
-    chainName: "VIA Network",
+    chainName: "Via Network",
     nativeCurrency: { name: "BTC", symbol: "BTC", decimals: 18 },
     rpcUrls: ["http://0.0.0.0:3050"],
     blockExplorerUrls: ["http://0.0.0.0:4000"],

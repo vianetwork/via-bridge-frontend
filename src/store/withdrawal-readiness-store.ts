@@ -1,7 +1,6 @@
 import { create } from 'zustand';
-import { ethers } from 'ethers';
-import { BRIDGE_ABI, MULTICALL_ABI } from "@/services/ethereum/abis";
-import { EthereumNetwork, ETHEREUM_NETWORK_CONFIG, MULTICALL_ADDRESSES } from "@/services/ethereum/config";
+import axios from 'axios';
+import { API_BASE_URL } from '@/services/config';
 
 interface WithdrawalCheck {
   payloadHash: string;
@@ -78,9 +77,6 @@ export const useWithdrawalReadinessStore = create<WithdrawalReadinessState>((set
     set({ isChecking: true });
 
     try {
-      const sepoliaConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-      const provider = new ethers.JsonRpcProvider(sepoliaConfig.rpcUrls[0]);
-
       const statusMap = new Map<string, boolean>();
       const timestamp = Date.now();
       const { lastCheckMap, claimedMap, readinessMap } = get();
@@ -127,8 +123,7 @@ export const useWithdrawalReadinessStore = create<WithdrawalReadinessState>((set
         return;
       }
 
-
-      // Prepare withdrawals with normalized hashes
+      // Prepare withdrawals with normalized hashes for API request
       const withdrawalsWithHashes = withdrawalsToCheck.map(withdrawal => {
         try {
           return {
@@ -145,87 +140,72 @@ export const useWithdrawalReadinessStore = create<WithdrawalReadinessState>((set
         return;
       }
 
-      // Create vault contract interface for encoding calls
-      const vaultInterface = new ethers.Interface(BRIDGE_ABI);
-      
-      // Build multicall array: each call is (target: vault address, gasLimit: gas limit, callData: encoded withdrawalInfo call)
-      // Using a reasonable gas limit for each call (100k should be enough for a view function)
-      const GAS_LIMIT_PER_CALL = 100000n;
-      const calls = withdrawalsWithHashes.map(withdrawal => ({
-        target: withdrawal.l1Vault,
-        gasLimit: GAS_LIMIT_PER_CALL,
-        callData: vaultInterface.encodeFunctionData("withdrawalInfo", [withdrawal.normalizedHash])
-      }));
+      // Prepare request body for backend API
+      const requestBody = {
+        withdrawals: withdrawalsWithHashes.map(withdrawal => ({
+          payload_hash: withdrawal.normalizedHash,
+          l1_vault: withdrawal.l1Vault,
+          nonce: withdrawal.nonce
+        }))
+      };
 
-      // Execute multicall using staticCall since it's a read-only operation
-      let results: Array<{ success: boolean; gasUsed: bigint; returnData: string }> = [];
-      
-      try {
-        const multicallAddress = MULTICALL_ADDRESSES[EthereumNetwork.SEPOLIA];
-        // First verify the contract exists by checking code
-        const code = await provider.getCode(multicallAddress);
-        if (code === "0x" || code === "0x0") {
-          throw new Error(`Multicall contract not found at address ${multicallAddress} on Sepolia`);
+      // Call backend API endpoint
+      const response = await axios.post(
+        `${API_BASE_URL}/eth/withdrawals/readiness`,
+        requestBody,
+        {
+          params: {
+            network: 'sepolia'
+          },
+          headers: {
+            'Content-Type': 'application/json'
+          }
         }
+      );
 
-        const multicallContract = new ethers.Contract(multicallAddress, MULTICALL_ABI, provider);
-        // Use staticCall for read-only operations
-        const [, multicallResults] = await multicallContract.multicall.staticCall(calls);
-        results = multicallResults;
-      } catch {
-        // If multicall fails completely, skip this check cycle
-        // This could happen if the contract doesn't exist or RPC is having issues
-        set({ isChecking: false });
-        return; // Skip processing and wait for next interval
-      }
-
-      // Validate results array length matches withdrawals
-      if (!results || results.length !== withdrawalsWithHashes.length) {
+      if (!response.data?.success || !Array.isArray(response.data.data)) {
+        console.error('Invalid response from withdrawal readiness endpoint:', response.data);
         set({ isChecking: false });
         return;
       }
 
-      // Process multicall results
+      // Process API results
+      const results = response.data.data;
+      
       for (let i = 0; i < withdrawalsWithHashes.length; i++) {
         const withdrawal = withdrawalsWithHashes[i];
         const result = results[i];
 
-        if (!result || !result.success) {
+        if (!result || result.payload_hash !== withdrawal.normalizedHash) {
+          // Result doesn't match, skip this withdrawal
           statusMap.set(withdrawal.normalizedHash, false);
           continue;
         }
 
-        try {
-          // Decode the result: (bool isClaimed, uint256 batchNumber)
-          const decoded = vaultInterface.decodeFunctionResult("withdrawalInfo", result.returnData);
-          const [isClaimed, batchNumber] = decoded;
+        // If claimed, mark it and stop checking it in the future
+        if (result.is_claimed) {
+          set(state => {
+            const newClaimedMap = new Map(state.claimedMap);
+            newClaimedMap.set(withdrawal.normalizedHash, true);
+            // Remove from readiness map since it's claimed
+            const newReadinessMap = new Map(state.readinessMap);
+            newReadinessMap.delete(withdrawal.normalizedHash);
+            return { 
+              claimedMap: newClaimedMap,
+              readinessMap: newReadinessMap
+            };
+          });
+          // Skip further processing for this withdrawal - don't check claimed withdrawals
+          continue;
+        }
 
-          // If claimed, mark it and stop checking it in the future
-          if (isClaimed) {
-            set(state => {
-              const newClaimedMap = new Map(state.claimedMap);
-              newClaimedMap.set(withdrawal.normalizedHash, true);
-              // Remove from readiness map since it's claimed
-              const newReadinessMap = new Map(state.readinessMap);
-              newReadinessMap.delete(withdrawal.normalizedHash);
-              return { 
-                claimedMap: newClaimedMap,
-                readinessMap: newReadinessMap
-              };
-            });
-            // Skip further processing for this withdrawal - don't check claimed withdrawals
-            continue;
-          }
+        // Use is_ready from API response
+        const isReady = result.is_ready === true;
+        statusMap.set(withdrawal.normalizedHash, isReady);
 
-          // Only process withdrawals where batchNumber is 0 (message doesn't exist yet) OR isClaimed is false
-          // - If batchNumber is 0: withdrawal doesn't exist yet (not ready, keep checking)
-          // - If batchNumber > 0 and isClaimed is false: withdrawal is ready to claim
-          const messageExists = batchNumber > 0n;
-          const isReady = messageExists && !isClaimed;
-          
-          statusMap.set(withdrawal.normalizedHash, isReady);
-        } catch {
-          statusMap.set(withdrawal.normalizedHash, false);
+        // Log any errors from the API
+        if (result.error) {
+          console.warn(`Withdrawal readiness check error for ${withdrawal.normalizedHash}:`, result.error);
         }
       }
 
@@ -246,8 +226,9 @@ export const useWithdrawalReadinessStore = create<WithdrawalReadinessState>((set
         });
         return { readinessMap: newMap };
       });
-    } catch {
+    } catch (error) {
       // Error checking withdrawal readiness
+      console.error('Error checking withdrawal readiness via API:', error);
     } finally {
       set({ isChecking: false });
     }

@@ -453,7 +453,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       const response = await request("wallet_connect", {
         addresses: [AddressPurpose.Payment, AddressPurpose.Ordinals],
-        message: "Connect to VIA Bridge app",
+        message: "Connect to Via Bridge app",
       });
 
       if (response.status !== "success") {

@@ -9,7 +9,7 @@ export default function BitcoinBridgePage() {
             Bitcoin Bridge
           </h1>
           <p className="text-sm text-slate-500 max-w-2xl mx-auto">
-            Bridge assets securely between Bitcoin and VIA network
+            Bridge assets securely between Bitcoin and Via network
           </p>
         </div>
         <div className="flex items-start justify-center">

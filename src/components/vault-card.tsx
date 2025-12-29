@@ -11,6 +11,7 @@ interface VaultCardProps {
     icon: string;
     apy?: string;
     tvl?: string;
+    exchangeRate?: string;
     isSelected: boolean;
     selectionHint?: string;
     onClick: () => void;
@@ -25,6 +26,7 @@ export function VaultCard({
     icon,
     apy,
     tvl,
+    exchangeRate,
     isSelected,
     selectionHint,
     onClick,
@@ -39,35 +41,51 @@ export function VaultCard({
             )}
             onClick={onClick}
         >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
-                <div className="flex items-center gap-2">
-                    <div className="relative h-6 w-6 rounded-full overflow-hidden">
-                        <Image
-                            src={icon}
-                            alt={symbol}
-                            fill
-                            className="object-cover"
-                        />
+            <CardHeader className="pb-1">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <div className="relative h-6 w-6 rounded-full overflow-hidden flex-shrink-0">
+                            <Image
+                                src={icon}
+                                alt={symbol}
+                                fill
+                                className="object-cover"
+                            />
+                        </div>
+                        <CardTitle className="text-sm font-medium truncate">
+                            {name}
+                        </CardTitle>
                     </div>
-                    <CardTitle className="text-sm font-medium">
-                        {name}
-                    </CardTitle>
+                    <div className="flex-shrink-0 ml-2">
+                        {selectionHint ? (
+                            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                                {selectionHint} <ChevronDown className="h-3 w-3" />
+                            </span>
+                        ) : (
+                            isSelected && <Check className="h-4 w-4 text-primary" />
+                        )}
+                    </div>
                 </div>
-                {selectionHint ? (
-                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                        {selectionHint} <ChevronDown className="h-3 w-3" />
-                    </span>
-                ) : (
-                    isSelected && <Check className="h-4 w-4 text-primary" />
-                )}
             </CardHeader>
             <CardContent>
-                <div className="flex justify-between items-end">
-                    <div className="text-2xl font-bold">{symbol}</div>
-                    {apy && (
-                        <div className="text-right">
-                            <div className="text-xs text-muted-foreground">APY</div>
-                            <div className="text-sm font-semibold text-green-600">{apy}</div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col">
+                        <div className="text-2xl font-bold">{symbol}</div>
+                    </div>
+                    {(apy || apy === "..." || exchangeRate) && (
+                        <div className="text-right space-y-1">
+                            {(apy || apy === "...") && (
+                                <div>
+                                    <div className="text-xs text-muted-foreground">APY</div>
+                                    <div className="text-sm font-semibold text-green-600">{apy || "..."}</div>
+                                </div>
+                            )}
+                            {exchangeRate && (
+                                <div>
+                                    <div className="text-xs text-muted-foreground">Rate</div>
+                                    <div className="text-sm font-semibold text-foreground">{exchangeRate}</div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>

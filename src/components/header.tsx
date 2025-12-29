@@ -194,18 +194,11 @@ export default function Header() {
           </DropdownMenuItem>
           {!isCorrectViaNetwork && !isCorrectL1Network && (
             <DropdownMenuItem
-              onClick={() => {
-                // Switch to the network that's not currently active
-                if (isCorrectL1Network) {
-                  handleSwitchNetwork(Layer.L2);
-                } else {
-                  handleSwitchNetwork(Layer.L1);
-                }
-              }}
+              onClick={() => handleSwitchNetwork(Layer.L2)}
               className="text-amber-600"
             >
               <AlertCircle className="h-4 w-4 mr-2" />
-              Switch network
+              Switch to Via Network
             </DropdownMenuItem>
           )}
         </>
@@ -223,14 +216,14 @@ export default function Header() {
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/icon.png"
-              alt="VIA Bridge"
+              src="/via-logo-new.svg"
+              alt="Via Bridge"
               width={28}
               height={28}
               priority
               className="md:w-8 md:h-8"
             />
-            <span className="text-lg md:text-l font-bold">VIA Bridge</span>
+            <span className="text-lg md:text-l font-bold">Via Bridge</span>
           </Link>
           <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-0.5 bg-orange-100 text-orange-800 rounded-md border border-orange-200">
             Alpha Testnet

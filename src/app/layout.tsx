@@ -11,8 +11,8 @@ import Footer from "@/components/footer";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "VIA Bridge",
-  description: "Transfer BTC between Bitcoin and VIA network",
+  title: "Via Bridge",
+  description: "Transfer BTC between Bitcoin and Via network",
 };
 
 export default function RootLayout({
