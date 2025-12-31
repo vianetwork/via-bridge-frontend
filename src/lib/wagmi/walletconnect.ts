@@ -16,7 +16,7 @@ type WalletConnectOpts = {
 export function walletConnectForQR({
   projectId,
   metadata = {
-    name: 'VIA Bridge',
+    name: 'Via Bridge',
     description: 'Bridge assets securely to the VIA network',
     // Check if `typeof window` because code can run on the server
     url: typeof window !== 'undefined' ? window.location.origin : 'https://testnet.bridge.onvia.org',

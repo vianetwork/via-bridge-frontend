@@ -3,6 +3,7 @@
 
 import { cn } from "@/lib/utils";
 import type { BridgeRoute } from "@/services/bridge/types";
+import Image from "next/image";
 
 /**
  * Network lane selector
@@ -36,7 +37,8 @@ interface NetworkChipProps {
 }
 
 function NetworkChip({ label, networkName, icon }: NetworkChipProps) {
-  const displayIcon = icon || networkName.charAt(0).toUpperCase();
+  const hasIcon = icon && icon.startsWith('/');
+  const fallbackText = networkName.charAt(0).toUpperCase();
 
   return (
     <button type="button" className={cn("group w-full rounded-xl sm:rounded-2xl", "bg-white border-slate-200", "px-3 sm:px-4 py-2 sm:py-3", "text-left shadow-sm hover:shadow transition-shadow")} aria-label={`${label} ${networkName}`}>
@@ -45,7 +47,19 @@ function NetworkChip({ label, networkName, icon }: NetworkChipProps) {
 
       {/*Network icon and name*/}
       <div className="mt-0.5 sm:mt-1 flex items-center gap-2">
-        <div className="h-6 w-6 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 text-xs">{displayIcon}</div>
+        <div className="h-6 w-6 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden">
+          {hasIcon ? (
+            <Image
+              src={icon}
+              alt={networkName}
+              width={24}
+              height={24}
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <span className="text-slate-600 text-xs">{fallbackText}</span>
+          )}
+        </div>
         <div className="font-semibold text-slate-900">{networkName}</div>
       </div>
     </button>

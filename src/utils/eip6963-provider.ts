@@ -191,20 +191,16 @@ export class EIP6963ProviderStore {
     this.ensureInitialized();
 
     if (this.providers.length > 0) {
-      console.log(`EIP6963ProviderStore: waitForProviders - Already have ${this.providers.length} provider(s)`);
       return;
     }
-
-    console.log(`EIP6963ProviderStore: waitForProviders - Waiting up to ${timeout}ms for providers...`);
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => reject(new Error('Timeout waiting for providers')), timeout);
     });
 
     try {
       await Promise.race([this.providerReadyPromise, timeoutPromise]);
-      console.log(`EIP6963ProviderStore: waitForProviders - Provider detected!`);
-    } catch (error) {
-      console.warn(`EIP6963ProviderStore: waitForProviders - No wallet provider detected within ${timeout}ms timeout period: ${error}`);
+    } catch {
+      // Provider not detected within timeout
     }
   }
 }

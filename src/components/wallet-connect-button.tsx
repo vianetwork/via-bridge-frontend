@@ -9,7 +9,7 @@ import Image from "next/image";
 interface WalletConnectButtonProps {
   walletType: "xverse" | "metamask"
   isConnected: boolean
-  helperText?: boolean
+  helperText?: boolean | string // Can be boolean or custom message string
   onConnect: () => Promise<boolean>
   onDisconnect: () => void
 }
@@ -87,7 +87,9 @@ export default function WalletConnectButton({
         <h3 className="text-xl font-semibold">Connect {walletName}</h3>
         {helperText && (
           <p className="text-sm text-muted-foreground max-w-[280px]">
-            {walletType === "xverse"
+            {typeof helperText === "string" 
+              ? helperText
+              : walletType === "xverse"
               ? "Xverse wallet connection is required to deposit BTC to VIA network"
               : `${walletName} wallet connection is required to withdraw BTC from VIA to Bitcoin network`}
           </p>

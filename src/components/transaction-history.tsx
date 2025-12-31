@@ -1,16 +1,22 @@
 
-import { useWalletStore } from "@/store/wallet-store";
 import { ExternalLink, Clock, CheckCircle, XCircle, RefreshCw, HelpCircle } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
+import { Transaction } from "@/store/wallet-store"; // Import Transaction type
 
 interface TransactionHistoryProps {
   isLoading?: boolean;
   onRefresh?: () => void;
+  transactions: Transaction[]; // Pass directly
+  excludeSymbol?: string; // Optional: exclude transactions with this symbol (e.g., 'BTC' to exclude Bitcoin transactions)
 }
 
-export function TransactionHistory({ isLoading = false, onRefresh }: TransactionHistoryProps) {
-  const { transactions } = useWalletStore();
+export function TransactionHistory({ isLoading = false, onRefresh, transactions, excludeSymbol }: TransactionHistoryProps) {
+  // Filter out transactions by symbol if specified (e.g., exclude BTC from ETH bridge)
+  const filteredTransactions = excludeSymbol
+    ? transactions.filter(tx => (tx.symbol || 'BTC') !== excludeSymbol)
+    : transactions;
+
 
   return (
     <div className="w-full">
@@ -79,11 +85,11 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
         </div>
       </div>
 
-      {isLoading && transactions.length === 0 ? (
+      {isLoading && filteredTransactions.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
           Loading transactions...
         </div>
-      ) : transactions.length === 0 ? (
+      ) : filteredTransactions.length === 0 ? (
         <div className="py-8 text-center text-sm text-muted-foreground">
           No transactions yet
         </div>
@@ -91,7 +97,7 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
         <div className="border rounded-md">
           <div className="h-[150px] overflow-y-auto pr-1">
             <div className="space-y-2 p-2">
-              {transactions.map((tx) => (
+              {filteredTransactions.map((tx) => (
                 <div key={tx.id} className="flex items-start justify-between rounded-md border p-3 text-sm">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
@@ -104,7 +110,7 @@ export function TransactionHistory({ isLoading = false, onRefresh }: Transaction
                       {tx.status === 'Processed' && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {tx.status === 'Failed' && <XCircle className="h-4 w-4 text-red-500" />}
 
-                      <span className="font-medium capitalize">{tx.type} {tx.amount} BTC</span>
+                      <span className="font-medium capitalize">{tx.type} {tx.amount} {tx.symbol || 'BTC'}</span>
                       <span className="text-xs text-muted-foreground">
                         {formatDistanceToNow(tx.timestamp, { addSuffix: true })}
                       </span>

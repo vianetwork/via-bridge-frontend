@@ -97,6 +97,7 @@ export default function BridgeInterface() {
                 <TransactionHistory
                   isLoading={isLoadingTransactions}
                   onRefresh={handleRefresh}
+                  transactions={transactions}
                 />
               </div>
             )}

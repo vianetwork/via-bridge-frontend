@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { Button } from "@/components/ui/button";
-import { LogOut, AlertCircle, Menu, Droplet } from "lucide-react";
+import { LogOut, AlertCircle, Menu, Droplet, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { useState } from "react";
 import { Layer } from "@/services/config";
@@ -30,11 +30,13 @@ export default function Header() {
     isMetamaskConnected,
     bitcoinAddress,
     viaAddress,
+    l1Address,
     disconnectXverse,
     disconnectMetamask,
     connectXverse,
     isCorrectBitcoinNetwork,
     isCorrectViaNetwork,
+    isCorrectL1Network,
     switchNetwork
   } = useWalletState();
 
@@ -157,13 +159,26 @@ export default function Header() {
 
       <DropdownMenuSeparator />
 
-      <DropdownMenuLabel>VIA Wallet</DropdownMenuLabel>
+      <DropdownMenuLabel>EVM Wallet</DropdownMenuLabel>
       {isMetamaskConnected ? (
         <>
           <DropdownMenuItem className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
-              <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
+              {(() => {
+                // Determine which network is active and show appropriate label
+                const isOnSepolia = isCorrectL1Network;
+                const isOnVia = isCorrectViaNetwork;
+                const address = l1Address || viaAddress;
+                const networkLabel = isOnSepolia ? "SEP" : isOnVia ? "VIA" : "EVM";
+                const isActiveNetwork = isOnSepolia || isOnVia;
+                
+                return (
+                  <>
+                    <div className={`w-2 h-2 ${isActiveNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                    <span>{networkLabel}: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
+                  </>
+                );
+              })()}
             </div>
             <Button
               variant="ghost"
@@ -177,13 +192,13 @@ export default function Header() {
               <LogOut className="h-3.5 w-3.5" />
             </Button>
           </DropdownMenuItem>
-          {!isCorrectViaNetwork && (
+          {!isCorrectViaNetwork && !isCorrectL1Network && (
             <DropdownMenuItem
               onClick={() => handleSwitchNetwork(Layer.L2)}
               className="text-amber-600"
             >
               <AlertCircle className="h-4 w-4 mr-2" />
-              Switch to VIA network
+              Switch to Via Network
             </DropdownMenuItem>
           )}
         </>
@@ -201,14 +216,14 @@ export default function Header() {
         <div className="flex items-center gap-2">
           <Link href="/" className="flex items-center gap-2">
             <Image
-              src="/via-logo.svg"
-              alt="VIA Bridge"
+              src="/via-logo-new.svg"
+              alt="Via Bridge"
               width={28}
               height={28}
               priority
               className="md:w-8 md:h-8"
             />
-            <span className="text-lg md:text-l font-bold">VIA Bridge</span>
+            <span className="text-lg md:text-l font-bold">Via Bridge</span>
           </Link>
           <span className="text-[10px] md:text-xs font-semibold px-1.5 py-0.5 md:px-2 md:py-0.5 bg-orange-100 text-orange-800 rounded-md border border-orange-200">
             Alpha Testnet
@@ -216,6 +231,25 @@ export default function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className="hidden md:flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors px-3 py-1.5 rounded-md hover:bg-slate-100"
+              >
+                Bridge
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start">
+              <DropdownMenuItem asChild>
+                <Link href="/bitcoin-bridge">Bitcoin Bridge</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/ethereum-bridge">Ethereum Bridge</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {enableFaucet && (
             <Link
               href="/faucet"
@@ -241,7 +275,7 @@ export default function Header() {
                 </Button>
               ) : (
                 <Button 
-                  variant="outline" 
+                  variant="outline"
                   size="sm"
                   onClick={handleConnectXverse}
                   disabled={isConnectingXverse}
@@ -276,7 +310,10 @@ export default function Header() {
                 <DropdownMenuContent align="end" className="w-64">
                   <DropdownMenuLabel>Navigation</DropdownMenuLabel>
                   <DropdownMenuItem asChild>
-                    <Link href="/">Bridge</Link>
+                    <Link href="/bitcoin-bridge">Bitcoin Bridge</Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/ethereum-bridge">Ethereum Bridge</Link>
                   </DropdownMenuItem>
                   {(enableFaucet) && (
                     <DropdownMenuItem asChild>
@@ -318,8 +355,21 @@ export default function Header() {
                   className="flex items-center gap-2"
                   onClick={handleDisconnectMetamask}
                 >
-                  <div className={`w-2 h-2 ${isCorrectViaNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
-                  <span>VIA: {viaAddress?.slice(0, 6)}...{viaAddress?.slice(-4)}</span>
+                  {(() => {
+                    // Determine which network is active and show appropriate label
+                    const isOnSepolia = isCorrectL1Network;
+                    const isOnVia = isCorrectViaNetwork;
+                    const address = l1Address || viaAddress;
+                    const networkLabel = isOnSepolia ? "SEP" : isOnVia ? "VIA" : "EVM";
+                    const isActiveNetwork = isOnSepolia || isOnVia;
+                    
+                    return (
+                      <>
+                        <div className={`w-2 h-2 ${isActiveNetwork ? 'bg-green-500' : 'bg-amber-500'} rounded-full`}></div>
+                        <span>{networkLabel}: {address?.slice(0, 6)}...{address?.slice(-4)}</span>
+                      </>
+                    );
+                  })()}
                 </Button>
               ) : (
                 <EVMSelectorButton />

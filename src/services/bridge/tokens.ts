@@ -33,7 +33,7 @@ export const TOKENS: Record<string, TokenInfo> = {
     symbol: 'BTC',
     name: 'Bitcoin',
     decimals: 8,
-    icon: '/bitcoin.svg', // TODO: Add icon file
+    icon: '/bitcoin-logo.svg',
   },
   
   // TODO  uncomment when ready

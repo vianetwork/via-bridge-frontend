@@ -116,35 +116,35 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
     fetchBalance();
   }, [viaAddress]);
 
-    const liveAmount = form.watch("amount");
-    const debouncedAmount = useDebounce(liveAmount, 600); // 600ms debounce delay
-    const lastSatsRef = useRef<number | null>(null);
-    useEffect(() => {
-        setAmount(String(liveAmount ?? ""));
-        }, [liveAmount]);
-    useEffect(() => {
-        try {
-            const str = String(debouncedAmount ?? "").trim();
-          if (!str) return;  // if the user hasn't typed a number yet, don't do anything'
-          const sats = toL1Amount(str);
-            if (!Number.isFinite(sats)) return;
-            if (sats  <= 0 ) return;
-            if (sats <  MIN_WITHDRAW_SATS) return;  // 0.00002 BTC minimum
-            if (lastSatsRef.current === sats) return;
-            lastSatsRef.current = sats;
-            fetchFeeEstimation(sats);
-        } catch (err) {
-            console.error("Error fetching fee estimation:", err);
-        }
-    }, [debouncedAmount, fetchFeeEstimation]);
+  const liveAmount = form.watch("amount");
+  const debouncedAmount = useDebounce(liveAmount, 600); // 600ms debounce delay
+  const lastSatsRef = useRef<number | null>(null);
+  useEffect(() => {
+    setAmount(String(liveAmount ?? ""));
+  }, [liveAmount]);
+  useEffect(() => {
+    try {
+      const str = String(debouncedAmount ?? "").trim();
+      if (!str) return;  // if the user hasn't typed a number yet, don't do anything'
+      const sats = toL1Amount(str);
+      if (!Number.isFinite(sats)) return;
+      if (sats <= 0) return;
+      if (sats < MIN_WITHDRAW_SATS) return;  // 0.00002 BTC minimum
+      if (lastSatsRef.current === sats) return;
+      lastSatsRef.current = sats;
+      fetchFeeEstimation(sats);
+    } catch (err) {
+      console.error("Error fetching fee estimation:", err);
+    }
+  }, [debouncedAmount, fetchFeeEstimation]);
 
-    // Check that net sats >= 0 when both amount and fee are known
-    const netSats =
-      feeEstimation
-        ? toL1Amount((amount || "0")) - feeEstimation.fee
-        : 0;
-    const insufficientNet = feeEstimation ? netSats < 0 : false;
-    const hasAmount = Boolean((form.watch("amount") || "").trim());
+  // Check that net sats >= 0 when both amount and fee are known
+  const netSats =
+    feeEstimation
+      ? toL1Amount((amount || "0")) - feeEstimation.fee
+      : 0;
+  const insufficientNet = feeEstimation ? netSats < 0 : false;
+  const hasAmount = Boolean((form.watch("amount") || "").trim());
 
     // handle cancellation from approval modal
   const handleCancelWithdraw = () => {
@@ -154,7 +154,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   // Derived form validity for CTA state
   const recipient = form.watch("recipientBitcoinAddress");
   const recipientValid = verifyBitcoinAddress(recipient);
-  const amountStr = form.watch("amount") || "0" ;
+  const amountStr = form.watch("amount") || "0";
   const amountValid =
     parseFloat(amountStr) >= MIN_WITHDRAW_BTC &&
     (!balance || parseFloat(amountStr) <= parseFloat(balance));
@@ -165,7 +165,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   async function onSubmit(values: z.infer<typeof withdrawFormSchema>) {
     if (isSubmitting) return; // prevent concurrent submissions
     if (!viaAddress) {
-      toast.error("VIA address is required", {description: "Please connect your VIA wallet to proceed with the withdrawal.",});
+      toast.error("VIA address is required", { description: "Please connect your VIA wallet to proceed with the withdrawal.", });
       return;
   }
 
@@ -177,7 +177,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           setIsSubmitting(false);
           return;
         }
-        toast.error("Invalid Bitcoin address", {description: "Please enter a valid Bitcoin address or connect your wallet to autofill.",});
+        toast.error("Invalid Bitcoin address", { description: "Please enter a valid Bitcoin address or connect your wallet to autofill.", });
         setIsSubmitting(false);
         return;
       }
@@ -343,7 +343,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                       type="button"
                       onClick={() => {
                         if (balance) {
-                            form.setValue("amount", String(balance));
+                          form.setValue("amount", String(balance));
                         }
                       }}
                       disabled={
@@ -357,8 +357,8 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                 </FormControl>
                 {((form.formState.touchedFields.amount || form.formState.isSubmitted) &&
                   String(form.getValues("amount") || "").trim().length > 0) && (
-                  <FormMessage />
-                )}
+                    <FormMessage />
+                  )}
 
                 {balance && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
@@ -393,7 +393,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                 )}
 
                 {/* balance usage progress */}
-                {balance && Number(balance) >0 && (
+                {balance && Number(balance) > 0 && (
                   <FormAmountSlider
                     form={form}
                     name="amount"
@@ -407,7 +407,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
                     sliderAccentClassName="accent-green-500"
                     ariaLabel="Withdraw amount"
                     decimals={8}
-                    />
+                  />
                 )}
 
                 {field.value && (
@@ -461,16 +461,16 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
               </FormItem>
             )}
           />
-          
+
           <FormField control={form.control} name="recipientBitcoinAddress" render={({ field }) => (
-              <FormItem>
-                <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange}/>
-                {(form.formState.isSubmitted || (form.formState.dirtyFields.recipientBitcoinAddress && String(form.getValues("recipientBitcoinAddress") || "").trim().length > 0)
-                ) && (
+            <FormItem>
+              <AddressFieldWithWallet mode="bitcoin" label="Recipient Bitcoin Address" placeholder="bc1..." value={field.value || ""} onChange={field.onChange} />
+              {(form.formState.isSubmitted || (form.formState.dirtyFields.recipientBitcoinAddress && String(form.getValues("recipientBitcoinAddress") || "").trim().length > 0)
+              ) && (
                   <FormMessage />
                 )}
-              </FormItem>
-            )}
+            </FormItem>
+          )}
           />
           {txHash && (
             <Alert className="bg-primary/5 border-primary/10">
@@ -483,7 +483,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
           {/* Submit Button */}
           {hasAmount && insufficientNet && (<div className="text-xs text-red-500 text-center">Insufficient balance after fees</div>)}
           <Button type="submit" className="w-full" disabled={isSubmitting || !canSubmit}
-                  aria-disabled={isSubmitting || !canSubmit} title={!canSubmit ? ctaLabel: undefined}
+            aria-disabled={isSubmitting || !canSubmit} title={!canSubmit ? ctaLabel : undefined}
           >
             {isSubmitting ? (
               <>
