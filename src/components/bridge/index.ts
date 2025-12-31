@@ -15,3 +15,4 @@ export { RecipientAddressSection } from "./recipient-address-section";
 export { BridgeSubmitButton } from "./bridge-submit-button";
 export { BridgeForm } from "./bridge-form";
 export { TransactionSuccessDialog } from "./transaction-success-dialog";
+export { SourceWalletBanner } from "./source-wallet-banner";

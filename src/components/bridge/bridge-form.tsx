@@ -1,12 +1,13 @@
 // src/components/bridge/bridge-form.tsx
 "use client";
 import {useState, useMemo, useEffect} from "react";
+import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { useBridgeSubmit } from "@/hooks/useBridgeSubmit";
 import { useBalance} from "@/hooks/useBalance";
 import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
-import { BRIDGE_CONFIG } from "@/services/config";
+import { BRIDGE_CONFIG, Layer } from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { useWalletState } from "@/hooks/use-wallet-state";
@@ -22,6 +23,7 @@ import {
   RecipientAddressSection,
   BridgeSubmitButton,
   TransactionSuccessDialog,
+  SourceWalletBanner,
 } from "./index";
 import ApprovalModal from "@/components/approval-modal";
 import {useDebounce} from "@/hooks/useDebounce";
@@ -33,6 +35,9 @@ import {
   MIN_WITHDRAW_BTC,
   MIN_WITHDRAW_SATS,
 } from "@/services/constants";
+
+// Dynamic import for wallet selector to avoid SSR issue
+const WalletsSelectorContainer = dynamic(() => import("@/components/wallets/selector-container"), { ssr: false });
 
 interface BridgeFormProps {
   /** Initial mode */
@@ -62,13 +67,13 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
   const [amount, setAmount] = useState("");
   const [recipientAddress, setRecipientAddress] = useState("");
   const [approvalOpen, setApprovalOpen] = useState(false);
+  const [showEvmWalletSelector, setShowEvmWalletSelector] = useState(false);
 
   // Use custom hook for submission logic
   const { isSubmitting, successResult, submit, reset: resetSubmit, cancel } = useBridgeSubmit();
 
-  // Get wallet data from store
-  const { bitcoinAddress, bitcoinPublicKey } = useWalletStore();
-  const { viaAddress } = useWalletStore();
+  // Get wallet data and connection states from store
+  const { bitcoinAddress, bitcoinPublicKey, viaAddress, isXverseConnected, isMetamaskConnected, isCorrectBitcoinNetwork, isCorrectViaNetwork, connectXverse, switchNetwork } = useWalletStore();
 
   const {
     //isLoadingFeeEstimation,
@@ -161,13 +166,42 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     return Math.max(0, bal - feeReserve);
   }, [balance, route.fromNetwork.type]);
 
-  // Get minimum amount based on direction
+  // Get minimum amount based on a direction
   const minAmount = mode === "deposit" ? MIN_DEPOSIT_BTC : MIN_WITHDRAW_BTC;
   const minAmountSats = mode === "deposit" ? MIN_DEPOSIT_SATS : MIN_WITHDRAW_SATS;
 
   // calculate net receive in sats
   const amountInSats = Math.floor(amountNumber * 100_000_000);
   const netReceive = Math.max(0, amountInSats - (storeFeeEstimation?.fee ?? 0));
+
+  // Source wallet validation based on route direction
+  // Deposit BTC to VIA: need Bitcoin wallet (e.g., Xverse) to send from
+  // Withdraw VIA to BTC: need EVM wallet to send from
+  const sourceWalletStatus = useMemo(() => {
+    const sourceType = route.fromNetwork.type;
+
+    if (sourceType === "bitcoin") {
+      // Bitcoin -> VIA deposit requires a Bitcoin wallet (e.g., Xverse) as source
+      const isConnected = isXverseConnected && !!bitcoinAddress && !!bitcoinPublicKey;
+      const isCorrectNetwork = isCorrectBitcoinNetwork;
+      return {
+        isConnected,
+        isCorrectNetwork,
+        isReady: isConnected && isCorrectNetwork,
+        walletType: "bitcoin" as const,
+      };
+    } else {
+      // VIA -> external withdrawal requires EVM wallet as source
+      const isConnected = isMetamaskConnected && !!viaAddress;
+      const isCorrectNetwork = isCorrectViaNetwork;
+      return {
+        isConnected,
+        isCorrectNetwork,
+        isReady: isConnected && isCorrectNetwork,
+        walletType: "evm" as const,
+      };
+    }
+  }, [route.fromNetwork.type, isXverseConnected, isMetamaskConnected, bitcoinAddress, bitcoinPublicKey, viaAddress, isCorrectBitcoinNetwork, isCorrectViaNetwork]);
 
   // validation
   const hasAmount = amount.trim().length > 0 && amountNumber > 0;
@@ -182,18 +216,31 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     return verifyRecipientAddress(recipientAddress, route.toNetwork.type);
   }, [recipientAddress, route.toNetwork.type, hasRecipientAddress]);
 
-  const canSubmit = isAmountValid && isRecipientValid && !isSubmitting;
+  const canSubmit = isAmountValid && isRecipientValid && sourceWalletStatus.isReady && !isSubmitting;
 
   // validation message for the button
-  const validationMessage = !hasRecipientAddress
-    ? "Connect wallet or enter address manually"
-    : !isRecipientValid
-      ? `Enter a valid ${route.toNetwork.displayName} address`
-      : !hasAmount
-        ? "Enter transfer amount"
-        : isAmountBelowMin
-          ? `Minimum amount is ${minAmount} BTC (${minAmountSats.toLocaleString()} sats)` // TODO support token symbol instead of BTC
-          : "";
+  const validationMessage = (() => {
+    const walletLabel = sourceWalletStatus.walletType === "bitcoin" ? "Bitcoin" : "EVM";
+    if (!sourceWalletStatus.isConnected) {
+      return `Connect your ${walletLabel} wallet to ${mode}`;
+    }
+    if (!sourceWalletStatus.isCorrectNetwork) {
+      return `Switch to the correct ${walletLabel} network`;
+    }
+    if (!hasRecipientAddress) {
+      return "Connect wallet or enter address manually";
+    }
+    if (!isRecipientValid) {
+      return `Enter a valid ${route.toNetwork.displayName} address`;
+    }
+    if (!hasAmount) {
+      return "Enter transfer amount";
+    }
+    if (isAmountBelowMin) {
+      return `Minimum amount is ${minAmount} BTC (${minAmountSats.toLocaleString()} sats)`;
+    }
+    return "";
+  })();
 
   const handleChangeMode = (newMode: BridgeMode) => {
     setMode(newMode);
@@ -213,6 +260,23 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     setMode(mode === "deposit" ? "withdraw" : "deposit");
     setAmount("");
     setRecipientAddress("");
+  };
+
+  // Handler for connecting source wallet
+  const handleConnectSourceWallet = () => {
+    if (sourceWalletStatus.walletType === "bitcoin") {
+      connectXverse();
+    } else {
+      setShowEvmWalletSelector(true);
+    }
+  };
+
+  // Handler for switching source wallet network
+  const handleSwitchSourceNetwork = () => {
+    // Bitcoin wallet -> switch to Bitcoin network (L1)
+    // EVM wallet -> switch to VIA network (L2)
+    const targetLayer = sourceWalletStatus.walletType === "bitcoin" ? Layer.L1 : Layer.L2;
+    switchNetwork(targetLayer);
   };
 
 // Handle reset after a successful transaction
@@ -262,10 +326,13 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           {/*Network Lane*/}
           <NetworkLaneSelector route={route} onSwap={handleSwap} />
 
+          {/*Source Wallet Banner - prompt user to connect the wallet they are sending FROM*/}
+          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
+
           {/*Amount section conditionally shown if a balance is available*/}
           { balance && parseFloat(balance) > 0 && (
             <div className="space-y-6 mb-8">
-              <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} maxDisabled={!balance || parseFloat(balance) <= 0}/>
+              <TransferAmountInput value={amount} onChange={setAmount} onMax={handleMaxAmount} unit={unit} placeHolder="0.0" maxDisabled={!balance || parseFloat(balance) <= 0}/>
             </div>
           )}
 
@@ -314,6 +381,15 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           onReset={handleReset}
         />
       </div>
+
+      {/* EVM Wallet Selector Modal */}
+      {showEvmWalletSelector && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 9999, pointerEvents: "none" }}>
+          <div style={{ pointerEvents: "auto" }}>
+            <WalletsSelectorContainer initialOpen={true} onClose={() => setShowEvmWalletSelector(false)} showTrigger={false} />
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );

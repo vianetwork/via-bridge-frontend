@@ -65,13 +65,6 @@ export default function FaucetInterface() {
 
   useEffect(() => {
     if (viaAddress) {
-      handleUseConnectedWallet();
-    }
-  }, [viaAddress]);
-
-
-  const handleUseConnectedWallet = () => {
-    if (viaAddress) {
       setFaucetRequest(prev => ({
         ...prev,
         address: viaAddress,
@@ -79,7 +72,7 @@ export default function FaucetInterface() {
         error: undefined
       }));
     }
-  };
+  }, [viaAddress]);
 
   const handleRequestFunds = async () => {
     if (!faucetRequest.address.trim()) {
