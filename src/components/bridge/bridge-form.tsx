@@ -10,7 +10,6 @@ import { GetCurrentRoute } from "@/services/bridge/routes";
 import { BRIDGE_CONFIG, Layer } from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
-import { useWalletState } from "@/hooks/use-wallet-state";
 
 import {
   BridgeModeTabs,
@@ -81,9 +80,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     fetchFeeEstimation,
     fetchDepositFeeEstimation,
   } = useWalletStore();
-
-  // Network switching for withdrawals
-  const { isMetamaskConnected, isCorrectViaNetwork } = useWalletState();
+  
   const { switchToL2 } = useNetworkSwitcher();
   const { checkMetamaskNetwork } = useWalletStore();
 
