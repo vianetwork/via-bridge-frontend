@@ -1,0 +1,88 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { isContractDeployed } from "./contract";
+
+// Mock ethers module
+vi.mock("ethers", () => ({
+  BrowserProvider: vi.fn(),
+}));
+
+describe("isContractDeployed", () => {
+  const mockAddress = "0x327d741E500E11Ab69F9D1A496A0ab4F934fA463";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Mock window.ethereum using vi.stubGlobal
+    vi.stubGlobal("ethereum", {});
+  });
+
+  afterEach(() => {
+    // Restore all stubbed globals
+    vi.unstubAllGlobals();
+  });
+
+  it("returns false when no ethereum provider is available", async () => {
+    // Remove ethereum provider
+    vi.stubGlobal("ethereum", undefined);
+
+    const result = await isContractDeployed(mockAddress);
+
+    expect(result).toBe(false);
+  });
+
+  it("returns false when getCode returns 0x (no contract)", async () => {
+    const { BrowserProvider } = await import("ethers");
+    const mockGetCode = vi.fn().mockResolvedValue("0x");
+    const mockProvider = { getCode: mockGetCode };
+
+    vi.mocked(BrowserProvider).mockImplementation(
+      () => mockProvider as unknown as InstanceType<typeof BrowserProvider>
+    );
+
+    const result = await isContractDeployed(mockAddress);
+
+    expect(mockGetCode).toHaveBeenCalledWith(mockAddress);
+    expect(result).toBe(false);
+  });
+
+  it("returns true when getCode returns bytecode (contract exists)", async () => {
+    const { BrowserProvider } = await import("ethers");
+    const mockGetCode = vi
+      .fn()
+      .mockResolvedValue("0x608060405234801561001057600080fd5b50");
+    const mockProvider = { getCode: mockGetCode };
+
+    vi.mocked(BrowserProvider).mockImplementation(
+      () => mockProvider as unknown as InstanceType<typeof BrowserProvider>
+    );
+
+    const result = await isContractDeployed(mockAddress);
+
+    expect(mockGetCode).toHaveBeenCalledWith(mockAddress);
+    expect(result).toBe(true);
+  });
+
+  it("returns false when getCode throws an error", async () => {
+    const { BrowserProvider } = await import("ethers");
+    const mockGetCode = vi.fn().mockRejectedValue(new Error("RPC error"));
+    const mockProvider = { getCode: mockGetCode };
+
+    vi.mocked(BrowserProvider).mockImplementation(
+      () => mockProvider as unknown as InstanceType<typeof BrowserProvider>
+    );
+
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await isContractDeployed(mockAddress);
+
+    expect(result).toBe(false);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Error checking contract deployment:",
+      expect.any(Error)
+    );
+
+    errorSpy.mockRestore();
+  });
+});
