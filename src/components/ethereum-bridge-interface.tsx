@@ -28,8 +28,9 @@ import { fetchAaveData } from "@/services/ethereum/aave";
 import { ethers } from "ethers";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
-import { ERC20_ABI } from "@/services/ethereum/abis";
 import { fetchVaultMetrics } from "@/services/api/vault-metrics";
+import { getERC20Balance } from "@/services/ethereum/balance";
+import { toast } from "sonner";
 
 // A hook to fetch APY for assets
 // Note: Always fetches from Sepolia network, regardless of connected wallet network
@@ -207,19 +208,13 @@ export default function EthereumBridgeInterface() {
 
         try {
             setIsLoadingBalance(true);
-            if (typeof window === "undefined" || !window.ethereum) {
-                setBalance(null);
-                return;
+            const result = await getERC20Balance(tokenAddress, walletAddress, selectedAsset.decimals);
+            setBalance(result.balance);
+            if (result.error) {
+                toast.error("Failed to fetch balance", {
+                    description: result.error,
+                });
             }
-            const { BrowserProvider, Contract, formatUnits } = await import("ethers");
-            const browserProvider = new BrowserProvider(window.ethereum);
-            const tokenContract = new Contract(tokenAddress, ERC20_ABI, browserProvider);
-            const bal = await tokenContract.balanceOf(walletAddress);
-            const balFormatted = formatUnits(bal, selectedAsset.decimals);
-            setBalance(balFormatted);
-        } catch (err) {
-            console.error("Error fetching balance:", err);
-            setBalance(null);
         } finally {
             setIsLoadingBalance(false);
         }
