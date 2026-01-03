@@ -38,7 +38,7 @@ export async function getERC20Balance(tokenAddress: string, walletAddress: strin
 
     const { BrowserProvider, Contract, formatUnits } = await import("ethers");
     const browserProvider = new BrowserProvider(window.ethereum);
-    const tokenContract = new Contract(tokenAddress, ERC20_ABI, browserProvider)
+    const tokenContract = new Contract(tokenAddress, ERC20_ABI, browserProvider);
     const balance = await tokenContract.balanceOf(walletAddress);
     const balanceFormatted = formatUnits(balance, decimals);
 
