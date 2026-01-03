@@ -1,6 +1,3 @@
-
-
-
 export enum EthereumNetwork {
   SEPOLIA = "sepolia",
 }

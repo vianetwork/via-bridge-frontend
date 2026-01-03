@@ -1,14 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Enable experimental features for better performance
-  experimental: {
-    // Only enable turbopack in development if explicitly requested
-    turbo: process.env.NODE_ENV === 'development' && process.env.DISABLE_TURBO !== 'true' ? {
-      // Turbopack configuration for development
-    } : undefined,
-  },
-  
   // Production optimizations
   compiler: {
     // Remove console logs in production

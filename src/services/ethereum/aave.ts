@@ -48,20 +48,25 @@ function formatCompactNumber(num: number): string {
 
 /**
  * Fetches the current supply APY and TVL for a given asset on Aave V3.
- * @param chainId The chain ID of the network.
+ * @param chainId The chain ID of the network (number or hex string).
  * @param tokenAddress The address of the asset (e.g., USDC).
  * @param provider An ethers.js Provider instance.
  * @returns Object containing formatted APY and TVL.
  */
 export async function fetchAaveData(
-  chainId: string,
+  chainId: number | string,
   tokenAddress: string,
   provider: ethers.Provider
 ): Promise<AaveData> {
   try {
+    // Normalize chainId to hex string for comparison with config
+    const chainIdHex = typeof chainId === 'number'
+      ? `0x${chainId.toString(16)}`
+      : chainId;
+
     // Determine network from chainId
     const networkEntry = Object.entries(ETHEREUM_NETWORK_CONFIG).find(
-      ([, config]) => config.chainId.toLowerCase() === chainId.toLowerCase()
+      ([, config]) => config.chainId.toLowerCase() === chainIdHex.toLowerCase()
     );
 
     if (!networkEntry) {

@@ -14,7 +14,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { VaultCard } from "@/components/vault-card";
-import { SUPPORTED_ASSETS, EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
+import { SUPPORTED_ASSETS, EthereumNetwork } from "@/services/ethereum/config";
 import EthereumDepositForm from "@/components/ethereum-deposit-form";
 import EthereumWithdrawForm from "@/components/ethereum-withdraw-form";
 import { useWalletState } from "@/hooks/use-wallet-state";
@@ -24,67 +24,12 @@ import { useWalletStore, walletEvents } from "@/store/wallet-store";
 import PendingWithdrawals from "@/components/pending-withdrawals";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Clock, Loader2, AlertCircle } from "lucide-react";
-import { fetchAaveData } from "@/services/ethereum/aave";
-import { ethers } from "ethers";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
+import { useAaveData } from "@/hooks/use-aave-data";
+import { useVaultMetrics, calculateExpectedAmount } from "@/hooks/use-vault-metrics";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
-import { fetchVaultMetrics } from "@/services/api/vault-metrics";
 import { getERC20Balance } from "@/services/ethereum/balance";
 import { toast } from "sonner";
-
-// A hook to fetch APY for assets
-// Note: Always fetches from Sepolia network, regardless of connected wallet network
-function useAaveData() {
-    const [apys, setApys] = useState<Record<string, string>>({});
-    const [loading, setLoading] = useState<boolean>(true);
-
-    useEffect(() => {
-        async function fetchData() {
-            setLoading(true);
-
-            let readProvider: ethers.Provider;
-
-            try {
-                // Always use Sepolia, regardless of connected chain
-                const targetChainId = EthereumNetwork.SEPOLIA;
-                const networkConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-
-                const rpcUrl = networkConfig.rpcUrls[0];
-                readProvider = new ethers.JsonRpcProvider(rpcUrl);
-
-                await Promise.all(SUPPORTED_ASSETS.map(async (asset) => {
-                    if (!asset.active) {
-                        return; // Skip inactive assets
-                    }
-
-                    const address = asset.addresses?.[targetChainId as EthereumNetwork] || asset.addresses?.[EthereumNetwork.SEPOLIA];
-                    if (address && address !== '0x0000000000000000000000000000000000000000') {
-                        const { apy } = await fetchAaveData(networkConfig.chainId, address, readProvider);
-                        setApys(prev => ({ ...prev, [asset.symbol]: apy }));
-                    } else {
-                        setApys(prev => ({ ...prev, [asset.symbol]: asset.apy }));
-                    }
-                }));
-            } catch (error) {
-                console.error("Error in useAaveData:", error);
-                // Fallback to defaults
-                const defaultApys: Record<string, string> = {};
-                SUPPORTED_ASSETS.forEach(a => {
-                    defaultApys[a.symbol] = a.apy;
-                });
-                setApys(defaultApys);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        // Only fetch once on mount, not when chainId changes
-        fetchData();
-    }, []); // Empty dependency array - fetch only once
-
-    return { apys, loading };
-}
-
 
 // Helper function to create Ethereum bridge route
 function getEthereumRoute(mode: BridgeMode, tokenSymbol: string): BridgeRoute {
@@ -125,11 +70,6 @@ export default function EthereumBridgeInterface() {
     const [isYieldEnabled, setIsYieldEnabled] = useState<boolean>(true);
     const [showTransactions, setShowTransactions] = useState(false);
 
-    const [vaultTvl, setVaultTvl] = useState<string | null>(null);
-    const [isLoadingVaultTvl, setIsLoadingVaultTvl] = useState(false);
-    const [exchangeRate, setExchangeRate] = useState<string | null>(null); // Raw rate value for calculations
-    const [exchangeRateDisplay, setExchangeRateDisplay] = useState<string | null>(null); // Formatted string for display
-    const [isLoadingExchangeRate, setIsLoadingExchangeRate] = useState(false);
     const [apys, setApys] = useState<Record<string, string>>({});
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -152,12 +92,30 @@ export default function EthereumBridgeInterface() {
     const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
 
     // Use Aave data as fallback, but API will override for yield vaults
-    const { apys: aaveApys, loading: loadingApy } = useAaveData();
+    const { apys: aaveApys, isLoading: loadingApy } = useAaveData();
     
     // Initialize apys from Aave data
     useEffect(() => {
         setApys(aaveApys);
     }, [aaveApys]);
+
+    // Memoize the APY update callback to prevent infinite re-renders
+    const handleApyUpdate = useCallback((symbol: string, apy: string) => {
+        setApys((prev) => ({ ...prev, [symbol]: apy }));
+    }, []);
+
+    // Fetch vault metrics (TVL, APY, exchange rate) - SINGLE API CALL
+    const {
+        tvl: vaultTvl,
+        exchangeRate,
+        exchangeRateDisplay,
+        isLoading: isLoadingVaultMetrics,
+    } = useVaultMetrics({
+        assetSymbol: selectedAssetSymbol,
+        isYieldEnabled,
+        activeTab,
+        onApyUpdate: handleApyUpdate,
+    });
 
     const selectedAsset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || defaultAsset;
     const route = getEthereumRoute(activeTab, selectedAsset.symbol);
@@ -234,23 +192,7 @@ export default function EthereumBridgeInterface() {
         if (activeTab !== "withdraw" || !isYieldEnabled || !amountNumber || !exchangeRate) {
             return null;
         }
-
-        try {
-            const rate = parseFloat(exchangeRate);
-            if (isNaN(rate) || rate === 0) return null;
-            
-            // For withdrawal: vUSDC -> USDC, so we use 1/rate
-            const inverseRate = 1 / rate;
-            const expected = amountNumber * inverseRate;
-            return {
-                expected: expected.toFixed(selectedAsset.decimals),
-                rate: inverseRate.toFixed(6),
-                inputAmount: amountNumber.toFixed(selectedAsset.decimals)
-            };
-        } catch (error) {
-            console.error("Error calculating expected amount:", error);
-            return null;
-        }
+        return calculateExpectedAmount(amountNumber, exchangeRate, "withdraw", selectedAsset.decimals);
     }, [activeTab, isYieldEnabled, amountNumber, exchangeRate, selectedAsset.decimals]);
 
     const handleSwap = () => {
@@ -292,98 +234,6 @@ export default function EthereumBridgeInterface() {
         setAmount(cleaned);
     };
 
-    // Fetch TVL, APY, and exchange rate from API
-    // Deposit tab: L1 TVL, Withdraw tab: L2 TVL
-    useEffect(() => {
-        async function fetchMetrics() {
-            try {
-                setIsLoadingVaultTvl(true);
-
-                const asset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || SUPPORTED_ASSETS[0];
-                const vaultType = isYieldEnabled ? "yield" : "normal";
-
-                // Fetch metrics from API
-                const metrics = await fetchVaultMetrics(
-                    asset.symbol,
-                    vaultType,
-                    "sepolia",
-                    asset.decimals
-                );
-
-                // Use TVL from API (same for both tabs)
-                setVaultTvl(metrics.tvl);
-                
-                // Update APY from API if available (will override Aave data for yield vaults)
-                if (metrics.apy && isYieldEnabled) {
-                    setApys(prev => ({ ...prev, [asset.symbol]: metrics.apy || prev[asset.symbol] }));
-                }
-            } catch (error) {
-                console.error("[EthereumBridgeInterface] Error fetching vault metrics:", error);
-                setVaultTvl(null);
-            } finally {
-                setIsLoadingVaultTvl(false);
-            }
-        }
-
-        fetchMetrics();
-    }, [selectedAssetSymbol, isYieldEnabled, activeTab]);
-
-    // Fetch exchange rate from API (only for yield vaults)
-    // Deposit: USDC -> vUSDC (1 USDC = X vUSDC)
-    // Withdraw: vUSDC -> USDC (1 vUSDC = X USDC)
-    useEffect(() => {
-        async function fetchExchangeRate() {
-            if (!isYieldEnabled) {
-                setExchangeRate(null);
-                setExchangeRateDisplay(null);
-                return;
-            }
-
-            try {
-                setIsLoadingExchangeRate(true);
-
-                const asset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || SUPPORTED_ASSETS[0];
-                const vaultType = "yield";
-
-                // Fetch metrics from API
-                const metrics = await fetchVaultMetrics(
-                    asset.symbol,
-                    vaultType,
-                    "sepolia",
-                    asset.decimals
-                );
-
-                if (metrics.exchangeRate) {
-                    const rate = parseFloat(metrics.exchangeRate);
-                    // Store raw rate for calculations
-                    setExchangeRate(rate.toString());
-                    // Store formatted string for display
-                    if (activeTab === "deposit") {
-                        // Deposit: 1 USDC = X vUSDC (exchange rate)
-                        const l2Symbol = asset.l2ValueSymbol || `v${asset.symbol}`;
-                        setExchangeRateDisplay(`1 ${asset.symbol} = ${rate.toFixed(4)} ${l2Symbol}`);
-                    } else {
-                        // Withdraw: 1 vUSDC = X USDC (1/exchange rate)
-                        const inverseRate = (1 / rate).toFixed(4);
-                        const l2Symbol = asset.l2ValueSymbol || `v${asset.symbol}`;
-                        setExchangeRateDisplay(`1 ${l2Symbol} = ${inverseRate} ${asset.symbol}`);
-                    }
-                } else {
-                    setExchangeRate(null);
-                    setExchangeRateDisplay(null);
-                }
-            } catch (error) {
-                console.error("[EthereumBridgeInterface] Error fetching exchange rate:", error);
-                setExchangeRate(null);
-                setExchangeRateDisplay(null);
-            } finally {
-                setIsLoadingExchangeRate(false);
-            }
-        }
-
-        fetchExchangeRate();
-    }, [selectedAssetSymbol, isYieldEnabled, activeTab]);
-
     // Use the ready count from pending withdrawals component
     // This is updated when MessageManager checks are complete
     // Only show count after mount to prevent hydration mismatches
@@ -398,7 +248,7 @@ export default function EthereumBridgeInterface() {
     // When "Normal bridging without yield" is enabled, show 0% APY.
     // Show "..." when loading, otherwise show fetched APY or nothing
     const displayApy = isYieldEnabled
-        ? (loadingApy || isLoadingVaultTvl ? "..." : (currentApy || "..."))
+        ? (loadingApy || isLoadingVaultMetrics ? "..." : (currentApy || "..."))
         : "0%";
 
     // TVL represents value bridged through the selected vault (normal or yield)
@@ -416,7 +266,7 @@ export default function EthereumBridgeInterface() {
         ...selectedAsset,
         symbol: displaySymbol,
         apy: displayApy,
-        tvl: isLoadingVaultTvl ? "..." : currentTvl
+        tvl: isLoadingVaultMetrics ? "..." : currentTvl
     };
 
     // Auto-switch network when wallet is connected but on wrong network
@@ -648,7 +498,7 @@ export default function EthereumBridgeInterface() {
                             icon={displayAsset.icon}
                             apy={displayAsset.apy}
                             tvl={displayAsset.tvl}
-                            exchangeRate={isLoadingExchangeRate ? "..." : exchangeRateDisplay || undefined}
+                            exchangeRate={isLoadingVaultMetrics ? "..." : exchangeRateDisplay || undefined}
                             isSelected={true}
                             selectionHint="Change"
                             onClick={() => setIsDialogOpen(true)}

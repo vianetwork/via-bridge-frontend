@@ -1,4 +1,5 @@
 import { defineChain } from 'viem';
+import { sepolia as viemSepolia } from "viem/chains";
 
 export const ViaTestnet = defineChain({
   id: 25223, // 0x6287
@@ -26,4 +27,14 @@ export const ViaMainnet = defineChain({
     default: { name: 'Blockscout', url: 'https://blockscout.onvia.org' },
   },
   testnet: false,
+});
+
+// Ethereum Sepolia - extend viem's build-in with custom RPC if needed
+export const EthereumSepolia = defineChain({
+  ...viemSepolia,
+  rpcUrls: {
+    default: {
+      http: [process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || 'https://eth-sepolia.g.alchemy.com/v2/1uiSbDzdztbtMS63fthe6Hh_oYKUImtK'],
+    }
+  },
 });
