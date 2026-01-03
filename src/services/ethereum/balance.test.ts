@@ -9,6 +9,9 @@ vi.mock("ethers", () => ({
   BrowserProvider: vi.fn(),
   Contract: vi.fn(),
   formatUnits: vi.fn(),
+  isError: vi.fn((error: unknown, code: string) => {
+    return error && typeof error === "object" && "code" in error && (error as { code: string }).code === code;
+  }),
 }));
 
 // Mock the contract utility
@@ -95,9 +98,10 @@ describe("getERC20Balance", () => {
 
     vi.mocked(isContractDeployed).mockResolvedValue(true);
 
-    const mockBalanceOf = vi.fn().mockRejectedValue(
-      new Error('could not decode result data (value="0x", code=BAD_DATA)')
-    );
+    // Create an error with the code property like ethers does
+    const badDataError = new Error('could not decode result data (value="0x")');
+    (badDataError as unknown as { code: string }).code = "BAD_DATA";
+    const mockBalanceOf = vi.fn().mockRejectedValue(badDataError);
     const mockProvider = {};
     const mockContract = { balanceOf: mockBalanceOf };
 

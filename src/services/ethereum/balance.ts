@@ -1,4 +1,5 @@
 // src/services/ethereum/balance.ts
+import { isError } from "ethers";
 import { ERC20_ABI } from "./abis";
 import { isContractDeployed } from "./contract";
 
@@ -44,7 +45,7 @@ export async function getERC20Balance(tokenAddress: string, walletAddress: strin
 
     return { balance: balanceFormatted, error: null };
   } catch (err) {
-    if (err instanceof Error && err.message.includes("BAD_DATA")) {
+    if (isError(err, "BAD_DATA")) {
       console.warn(`Contract at ${tokenAddress} may not implement balanceOf or is not an ERC20 token`);
       return { balance: null, error: "Contract does not implement balanceOf" };
     }
