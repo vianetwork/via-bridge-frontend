@@ -26,10 +26,12 @@ import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Clock, Loader2, AlertCircle } from "lucide-react";
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { useAaveData } from "@/hooks/use-aave-data";
-import { useVaultMetrics, calculateExpectedAmount } from "@/hooks/use-vault-metrics";
+import { useVaultMetrics } from "@/hooks/use-vault-metrics";
+import { calculateVaultConversion } from "@/utils/vault-conversion";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
 import { getERC20Balance } from "@/services/ethereum/balance";
 import { toast } from "sonner";
+import {formatVaultRate} from "@/utils/vault-conversion";
 
 // Helper function to create Ethereum bridge route
 function getEthereumRoute(mode: BridgeMode, tokenSymbol: string): BridgeRoute {
@@ -99,25 +101,36 @@ export default function EthereumBridgeInterface() {
         setApys(aaveApys);
     }, [aaveApys]);
 
-    // Memoize the APY update callback to prevent infinite re-renders
-    const handleApyUpdate = useCallback((symbol: string, apy: string) => {
-        setApys((prev) => ({ ...prev, [symbol]: apy }));
-    }, []);
-
-    // Fetch vault metrics (TVL, APY, exchange rate) - SINGLE API CALL
-    const {
-        tvl: vaultTvl,
-        exchangeRate,
-        exchangeRateDisplay,
-        isLoading: isLoadingVaultMetrics,
-    } = useVaultMetrics({
+    // Fetch vault metrics (TVL, APY, exchange rate)
+    const { metrics: vaultMetrics, isLoading: isLoadingVaultMetrics } = useVaultMetrics({
         assetSymbol: selectedAssetSymbol,
         isYieldEnabled,
-        activeTab,
-        onApyUpdate: handleApyUpdate,
     });
 
     const selectedAsset = SUPPORTED_ASSETS.find(a => a.symbol === selectedAssetSymbol) || defaultAsset;
+
+    // Update APY from vault metrics when available (overrides Aave data for yield vaults)
+    useEffect(() => {
+        if (vaultMetrics.apy && isYieldEnabled) {
+            setApys((prev) => ({ ...prev, [selectedAssetSymbol]: vaultMetrics.apy! }));
+        }
+    }, [vaultMetrics.apy, isYieldEnabled, selectedAssetSymbol]);
+
+    // Derive exchange rate display string
+    const exchangeRateDisplay = useMemo(() => {
+        if (!isYieldEnabled || !vaultMetrics.exchangeRate) return null;
+
+        const underlyingSymbol = selectedAsset.symbol; // e.g., "USDC"
+        const vaultShareSymbol = selectedAsset.l2ValueSymbol || `v${underlyingSymbol}`; // e.g., "vUSDC"
+
+        return formatVaultRate(
+            vaultMetrics.exchangeRate,
+            underlyingSymbol,
+            vaultShareSymbol,
+            activeTab
+        );
+    }, [isYieldEnabled, vaultMetrics.exchangeRate, selectedAsset, activeTab]);
+
     const route = getEthereumRoute(activeTab, selectedAsset.symbol);
 
     // Fetch balance based on active tab
@@ -189,11 +202,11 @@ export default function EthereumBridgeInterface() {
 
     // Calculate expected amount to receive for withdrawal (l2ValueSymbol -> base symbol)
     const expectedAmountData = useMemo(() => {
-        if (activeTab !== "withdraw" || !isYieldEnabled || !amountNumber || !exchangeRate) {
+        if (activeTab !== "withdraw" || !isYieldEnabled || !amountNumber || !vaultMetrics.exchangeRate) {
             return null;
         }
-        return calculateExpectedAmount(amountNumber, exchangeRate, "withdraw", selectedAsset.decimals);
-    }, [activeTab, isYieldEnabled, amountNumber, exchangeRate, selectedAsset.decimals]);
+        return calculateVaultConversion(amountNumber, vaultMetrics.exchangeRate, "withdraw", selectedAsset.decimals);
+    }, [activeTab, isYieldEnabled, amountNumber, vaultMetrics.exchangeRate, selectedAsset.decimals]);
 
     const handleSwap = () => {
         setActiveTab(activeTab === "deposit" ? "withdraw" : "deposit");
@@ -242,7 +255,7 @@ export default function EthereumBridgeInterface() {
     // Merge dynamic APY into selected asset
     // Don't use hardcoded asset.apy - only use fetched data or show "..."
     const currentApy = apys[selectedAsset.symbol];
-    const currentTvl = vaultTvl || selectedAsset.tvl;
+    const currentTvl = vaultMetrics.tvl || selectedAsset.tvl;
 
     // Create displayAsset but override apy with dynamic values.
     // When "Normal bridging without yield" is enabled, show 0% APY.
@@ -601,16 +614,16 @@ export default function EthereumBridgeInterface() {
                                     <div className="flex items-center justify-between text-sm">
                                         <span className="text-muted-foreground">Expected to receive:</span>
                                         <span className="font-semibold text-blue-700">
-                                            {expectedAmountData.expected} {selectedAsset.symbol}
+                                            {expectedAmountData.outputAmount} {selectedAsset.symbol}
                                         </span>
                                     </div>
                                     <div className="text-xs text-muted-foreground pt-1 border-t border-blue-200">
                                         <div className="flex items-center gap-1">
                                             <span>{expectedAmountData.inputAmount} {selectedAsset.l2ValueSymbol || `v${selectedAsset.symbol}`}</span>
                                             <span>×</span>
-                                            <span>{expectedAmountData.rate}</span>
+                                            <span>{expectedAmountData.displayRate}</span>
                                             <span>=</span>
-                                            <span className="font-medium">{expectedAmountData.expected} {selectedAsset.symbol}</span>
+                                            <span className="font-medium">{expectedAmountData.outputAmount} {selectedAsset.symbol}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -676,7 +689,7 @@ export default function EthereumBridgeInterface() {
                                         isYield={isYieldEnabled}
                                         amount={amount}
                                         onAmountReset={() => setAmount("")}
-                                        exchangeRate={exchangeRate}
+                                        exchangeRate={vaultMetrics.exchangeRate}
                                         onBalanceRefresh={fetchBalance}
                                     />
                                 )
@@ -750,7 +763,7 @@ export default function EthereumBridgeInterface() {
                                             isYield={isYieldEnabled}
                                             amount={amount}
                                             onAmountReset={() => setAmount("")}
-                                            exchangeRate={exchangeRate}
+                                            exchangeRate={vaultMetrics.exchangeRate}
                                             onBalanceRefresh={fetchBalance}
                                         />
                                     )
