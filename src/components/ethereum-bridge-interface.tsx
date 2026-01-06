@@ -1,3 +1,4 @@
+// src/components/ethereum-bridge-interface.tsx
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -27,9 +28,9 @@ import { ChevronDown, ChevronUp, Clock, Loader2, AlertCircle } from "lucide-reac
 import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { useAaveData } from "@/hooks/use-aave-data";
 import { useVaultMetrics } from "@/hooks/use-vault-metrics";
+import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
 import { calculateVaultConversion } from "@/utils/vault-conversion";
 import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
-import { getERC20Balance } from "@/services/ethereum/balance";
 import { toast } from "sonner";
 import {formatVaultRate} from "@/utils/vault-conversion";
 
@@ -79,8 +80,6 @@ export default function EthereumBridgeInterface() {
     const [readyWithdrawalsCount, setReadyWithdrawalsCount] = useState(0);
     const [isMounted, setIsMounted] = useState(false);
     const [amount, setAmount] = useState<string>("");
-    const [balance, setBalance] = useState<string | null>(null);
-    const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
     // Track if component is mounted (client-side only) to prevent hydration mismatches
     useEffect(() => {
@@ -133,68 +132,28 @@ export default function EthereumBridgeInterface() {
 
     const route = getEthereumRoute(activeTab, selectedAsset.symbol);
 
-    // Fetch balance based on active tab
-    const fetchBalance = useCallback(async () => {
-        if (!isMetamaskConnected) {
-            setBalance(null);
-            return;
-        }
+    // Token address for balance fetching
+  // - Deposit: fetch underlying token balance on Ethereum L1 (e.g., USDC on Sepolia)
+  // - Withdraw: fetch underlying token balance on Via L2 (e.g., USDC on Via)
+  const underlyingTokenAddress = selectedAsset.addresses?.[EthereumNetwork.SEPOLIA];
+  const vaultShareAddress = isYieldEnabled
+    ? selectedAsset.vaultAddresses.via.yieldBearing
+    : selectedAsset.vaultAddresses.via.standard;
 
-        // For deposit: use l1Address or viaAddress (same wallet, different networks)
-        // For withdraw: use viaAddress
-        const address = activeTab === "deposit" ? (l1Address || viaAddress) : viaAddress;
-        const isCorrectNetwork = activeTab === "deposit" ? isCorrectL1Network : isCorrectViaNetwork;
-        const tokenAddress = activeTab === "deposit" 
-            ? selectedAsset.addresses?.[EthereumNetwork.SEPOLIA]
-            : (isYieldEnabled ? selectedAsset.vaults.l2.yield : selectedAsset.vaults.l2.normal);
+  const balanceTokenAddress = activeTab === "deposit" ? underlyingTokenAddress : vaultShareAddress;
 
-        // If no address, try to get it from the wallet provider directly
-        let walletAddress = address;
-        if (!walletAddress && typeof window !== "undefined" && window.ethereum) {
-            try {
-                const { BrowserProvider } = await import("ethers");
-                const browserProvider = new BrowserProvider(window.ethereum);
-                const signer = await browserProvider.getSigner();
-                walletAddress = await signer.getAddress();
-            } catch (err) {
-                console.error("Error getting wallet address:", err);
-            }
-        }
+  // compute wallet address and network check based on mode
+  const balanceWalletAddress = activeTab === "deposit" ? (l1Address || viaAddress) : viaAddress;
+  const isCorrectNetworkForBalance = activeTab === "deposit" ? isCorrectL1Network : isCorrectViaNetwork;
 
-        if (!walletAddress || !tokenAddress) {
-            setBalance(null);
-            return;
-        }
-
-        // For deposit, we still need to be on the correct network
-        // For withdraw, we need to be on VIA network
-        if (activeTab === "deposit" && !isCorrectNetwork) {
-            setBalance(null);
-            return;
-        }
-        if (activeTab === "withdraw" && !isCorrectViaNetwork) {
-            setBalance(null);
-            return;
-        }
-
-        try {
-            setIsLoadingBalance(true);
-            const result = await getERC20Balance(tokenAddress, walletAddress, selectedAsset.decimals);
-            setBalance(result.balance);
-            if (result.error) {
-                toast.error("Failed to fetch balance", {
-                    description: result.error,
-                });
-            }
-        } finally {
-            setIsLoadingBalance(false);
-        }
-    }, [activeTab, isMetamaskConnected, l1Address, viaAddress, isCorrectL1Network, isCorrectViaNetwork, selectedAsset, isYieldEnabled]);
-
-    // Fetch balance when dependencies change
-    useEffect(() => {
-        fetchBalance();
-    }, [fetchBalance]);
+  // fetch balance using hook
+  const { balance, isLoading: isLoadingBalance, refetch } = useEthereumBalance({
+    tokenAddress: balanceTokenAddress,
+    walletAddress: balanceWalletAddress,
+    decimals: selectedAsset.decimals,
+    isOnCorrectNetwork: isCorrectNetworkForBalance,
+    isConnected: isMetamaskConnected
+  });
 
     // Calculate amount values
     const amountNumber = parseFloat(amount) || 0;
@@ -690,7 +649,7 @@ export default function EthereumBridgeInterface() {
                                         amount={amount}
                                         onAmountReset={() => setAmount("")}
                                         exchangeRate={vaultMetrics.exchangeRate}
-                                        onBalanceRefresh={fetchBalance}
+                                        onBalanceRefresh={refetch}
                                     />
                                 )
                             ) : (
@@ -764,7 +723,7 @@ export default function EthereumBridgeInterface() {
                                             amount={amount}
                                             onAmountReset={() => setAmount("")}
                                             exchangeRate={vaultMetrics.exchangeRate}
-                                            onBalanceRefresh={fetchBalance}
+                                            onBalanceRefresh={refetch}
                                         />
                                     )
                                 ) : (

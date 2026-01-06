@@ -205,7 +205,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
 
             // 3. Determine addresses
             const tokenAddress = asset.addresses[EthereumNetwork.SEPOLIA];
-            const vaultAddress = isYield ? asset.vaults.l1.yield : asset.vaults.l1.normal;
+            const vaultAddress = isYield ? asset.vaultAddresses.ethereum.yieldBearing : asset.vaultAddresses.ethereum.standard;
 
             if (!tokenAddress || !vaultAddress) {
                 throw new Error("Configuration missing for this asset/network");

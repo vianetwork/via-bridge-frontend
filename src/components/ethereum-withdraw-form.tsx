@@ -120,8 +120,8 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     const isFetchingRef = useRef(false);
     
     // Extract contract addresses to stable references for useCallback dependency
-    const yieldVaultAddress = asset.vaults.l2.yield;
-    const normalVaultAddress = asset.vaults.l2.normal;
+    const yieldVaultAddress = asset.vaultAddresses.via.yieldBearing;
+    const normalVaultAddress = asset.vaultAddresses.via.standard;
     const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
 
     // Fetch Balance from L2 - use stable dependencies
@@ -190,7 +190,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
 
             // 2. Withdraw interaction
             // Contract: L2 Vault
-            const vaultAddress = isYield ? asset.vaults.l2.yield : asset.vaults.l2.normal;
+            const vaultAddress = isYield ? asset.vaultAddresses.via.yieldBearing : asset.vaultAddresses.via.standard;
             if (!vaultAddress) {
                 throw new Error("L2 Vault address not configured");
             }
