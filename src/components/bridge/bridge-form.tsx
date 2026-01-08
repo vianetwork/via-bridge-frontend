@@ -9,7 +9,8 @@ import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { BRIDGE_CONFIG, Layer } from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
-import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
+import { useSwitchChain, useChainId } from "wagmi";
+import { ViaTestnet } from "@/lib/wagmi/chains";
 
 import {
   BridgeModeTabs,
@@ -81,7 +82,12 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     fetchDepositFeeEstimation,
   } = useWalletStore();
   
-  const { switchToL2 } = useNetworkSwitcher();
+  const { switchChainAsync: switchChain } = useSwitchChain();
+  const currentChainId = useChainId();
+
+  // Derive if we need to switch to Via (only for withdraw mode)
+  const needsSwitch = mode === "withdraw" && isMetamaskConnected && currentChainId !== ViaTestnet.id;
+
   const { checkMetamaskNetwork } = useWalletStore();
 
   // Debounce amount to avoid excessive API calls
@@ -106,11 +112,9 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
       // If not on VIA network, try to switch
       if (!isCorrectViaNetwork) {
         try {
-          const result = await switchToL2();
-          if (result.success) {
+         await switchChain({ chainId: ViaTestnet.id});
             // Refresh network state after switch
             await checkMetamaskNetwork();
-          }
         } catch (error) {
           console.error("Auto-switch to VIA failed:", error);
         }
@@ -118,7 +122,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     };
 
     autoSwitchToVia();
-  }, [mode, isMetamaskConnected, isCorrectViaNetwork, switchToL2, checkMetamaskNetwork]);
+  }, [mode, isMetamaskConnected, isCorrectViaNetwork, switchChain, checkMetamaskNetwork]);
 
   // Fetch fee estimation when debounced amount changes
   useEffect(() => {

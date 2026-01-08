@@ -1,5 +1,5 @@
 import { defineChain } from 'viem';
-import { sepolia as viemSepolia } from "viem/chains";
+import { mainnet as viemMainnet, sepolia as viemSepolia } from "viem/chains";
 
 export const ViaTestnet = defineChain({
   id: 25223, // 0x6287
@@ -38,3 +38,7 @@ export const EthereumSepolia = defineChain({
     }
   },
 });
+
+// Ethereum Mainnet - use viem's built-in chain directly
+// Note: viemMainnet includes default public RPC URLs from Cloudflare, Ankr, etc.
+export const EthereumMainnet = viemMainnet;

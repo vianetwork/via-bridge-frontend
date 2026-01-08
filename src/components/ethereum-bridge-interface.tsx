@@ -25,14 +25,14 @@ import { useWalletStore, walletEvents } from "@/store/wallet-store";
 import PendingWithdrawals from "@/components/pending-withdrawals";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, ChevronUp, Clock, Loader2, AlertCircle } from "lucide-react";
-import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
 import { useAaveData } from "@/hooks/use-aave-data";
 import { useVaultMetrics } from "@/hooks/use-vault-metrics";
 import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
 import { calculateVaultConversion } from "@/utils/vault-conversion";
-import { EthereumNetwork as EthNetwork } from "@/services/ethereum/config";
 import { toast } from "sonner";
 import {formatVaultRate} from "@/utils/vault-conversion";
+import { useSwitchChain, useChainId } from "wagmi";
+import { ViaTestnet, EthereumSepolia } from "@/lib/wagmi/chains";
 
 // Helper function to create Ethereum bridge route
 function getEthereumRoute(mode: BridgeMode, tokenSymbol: string): BridgeRoute {
@@ -88,9 +88,16 @@ export default function EthereumBridgeInterface() {
 
     const { isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress } = useWalletState();
     const { ethTransactions, isLoadingTransactions, fetchEthTransactions, checkL1Network, checkMetamaskNetwork } = useWalletStore();
-    const { switchToEthereum, switchToL2, isSwitching: isSwitchingNetwork, status: networkStatus } = useNetworkSwitcher();
+    const { switchChainAsync: switchChain, isPending: isSwitchingNetwork } = useSwitchChain();
+    const currentChainId = useChainId();
     const [isAutoSwitching, setIsAutoSwitching] = useState(false);
     const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
+
+    // Derive target chain from active tab
+    const targetChain = activeTab === "deposit" ? EthereumSepolia : ViaTestnet;
+
+    // Derive if we need to switch (skip if pending withdrawals modal is open - it needs Sepolia)
+    const needsSwitch = isMetamaskConnected && currentChainId !== targetChain.id && !isPendingWithdrawalsOpen;
 
     // Use Aave data as fallback, but API will override for yield vaults
     const { apys: aaveApys, isLoading: loadingApy } = useAaveData();
@@ -241,100 +248,43 @@ export default function EthereumBridgeInterface() {
         tvl: isLoadingVaultMetrics ? "..." : currentTvl
     };
 
-    // Auto-switch network when wallet is connected but on wrong network
-    // Skip auto-switch if pending withdrawals modal is open (it needs Sepolia)
-    useEffect(() => {
-        const autoSwitchNetwork = async () => {
-            if (!isMetamaskConnected) {
-                setAutoSwitchFailed(false);
-                return;
-            }
+    // Auto-switch network when wallet is connected but on the wrong network
+    // Skip auto-switch if pending withdrawal modal is open
+  useEffect(() => {
+    if (!needsSwitch) {
+      setAutoSwitchFailed(false);
+      return;
+    }
 
-            // Don't auto-switch if pending withdrawals modal is open (it needs Sepolia)
-            if (isPendingWithdrawalsOpen) {
-                return;
-            }
+    setIsAutoSwitching(true);
+    setAutoSwitchFailed(false);
 
-            // For deposit tab: need Sepolia network
-            if (activeTab === "deposit") {
-                // First check current network state
-                await checkL1Network();
-                
-                // If still on wrong network, try to switch
-                if (!isCorrectL1Network) {
-                    setIsAutoSwitching(true);
-                    setAutoSwitchFailed(false);
-                    try {
-                        const result = await switchToEthereum(EthNetwork.SEPOLIA);
-                        if (result.success) {
-                            // Refresh network state after switch
-                            await checkL1Network();
-                            setAutoSwitchFailed(false);
-                            
-                            // Fetch transactions after successful network switch
-                            setTimeout(() => {
-                                const store = useWalletStore.getState();
-                                const effectiveL1Address = store.l1Address || store.viaAddress;
-                                const effectiveL2Address = store.viaAddress || store.l1Address;
-                                if (effectiveL1Address && effectiveL2Address) {
-                                    fetchEthTransactions();
-                                }
-                            }, 1000);
-                        } else {
-                            setAutoSwitchFailed(true);
-                        }
-                    } catch (error) {
-                        console.error("Auto-switch to Sepolia failed:", error);
-                        setAutoSwitchFailed(true);
-                    } finally {
-                        setIsAutoSwitching(false);
-                    }
-                } else {
-                    setAutoSwitchFailed(false);
-                }
-            }
-            // For withdraw tab: need VIA network
-            else if (activeTab === "withdraw") {
-                // First check current network state
-                await checkMetamaskNetwork();
-                
-                // If still on wrong network, try to switch
-                if (!isCorrectViaNetwork) {
-                    setIsAutoSwitching(true);
-                    setAutoSwitchFailed(false);
-                    try {
-                        const result = await switchToL2();
-                        if (result.success) {
-                            // Refresh network state after switch
-                            await checkMetamaskNetwork();
-                            setAutoSwitchFailed(false);
-                            
-                            // Fetch transactions after successful network switch
-                            setTimeout(() => {
-                                const store = useWalletStore.getState();
-                                const effectiveL1Address = store.l1Address || store.viaAddress;
-                                const effectiveL2Address = store.viaAddress || store.l1Address;
-                                if (effectiveL1Address && effectiveL2Address) {
-                                    fetchEthTransactions();
-                                }
-                            }, 1000);
-                        } else {
-                            setAutoSwitchFailed(true);
-                        }
-                    } catch (error) {
-                        console.error("Auto-switch to VIA failed:", error);
-                        setAutoSwitchFailed(true);
-                    } finally {
-                        setIsAutoSwitching(false);
-                    }
-                } else {
-                    setAutoSwitchFailed(false);
-                }
-            }
-        };
+    switchChain({ chainId: targetChain.id }).then(() => {
+      setIsAutoSwitching(false);
+    }).catch((error) => {
+      console.error(`Auto-switch to ${activeTab === "deposit" ? "Ethereum" : "VIA"} failed:`, error);
+      setAutoSwitchFailed(true);
+    });
+  }, [needsSwitch, targetChain.id, switchChain, activeTab]);
 
-        autoSwitchNetwork();
-    }, [activeTab, isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, switchToEthereum, switchToL2, checkL1Network, checkMetamaskNetwork, isPendingWithdrawalsOpen, fetchEthTransactions]);
+  // Fetch transactions when chain changes to correct network
+  useEffect(() => {
+    // Only fetch when on the correct network for the current tab
+    const isOnCorrectNetwork =
+      (activeTab === "deposit" && currentChainId === EthereumSepolia.id) ||
+      (activeTab === "withdraw" && currentChainId === ViaTestnet.id);
+
+    if (!isMetamaskConnected || !isOnCorrectNetwork) return;
+
+    // For EVM wallets, the same address works on both Ethereum and Via Network
+    // Use whichever address is available (they're the same underlying address anyways)
+    const store = useWalletStore.getState();
+    const connectedEvmAddress = store.l1Address || store.viaAddress;
+
+    if (connectedEvmAddress) {
+      fetchEthTransactions();
+    }
+  }, [currentChainId, activeTab, isMetamaskConnected, fetchEthTransactions]);
 
     // Reset amount when switching tabs
     useEffect(() => {
@@ -596,7 +546,7 @@ export default function EthereumBridgeInterface() {
                                     <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
                                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                         <p className="text-sm text-muted-foreground">
-                                            {networkStatus || "Switching to Sepolia network..."}
+                                            Switching to Sepolia network...
                                         </p>
                                     </div>
                                 ) : (!isCorrectL1Network || autoSwitchFailed) ? (
@@ -616,13 +566,9 @@ export default function EthereumBridgeInterface() {
                                             onClick={async () => {
                                                 setIsAutoSwitching(true);
                                                 try {
-                                                    const result = await switchToEthereum(EthNetwork.SEPOLIA);
-                                                    if (result.success) {
-                                                        await checkL1Network();
-                                                        setAutoSwitchFailed(false);
-                                                    } else {
-                                                        setAutoSwitchFailed(true);
-                                                    }
+                                                    await switchChain({ chainId: EthereumSepolia.id });
+                                                    await checkL1Network();
+                                                    setAutoSwitchFailed(false);
                                                 } catch {
                                                     setAutoSwitchFailed(true);
                                                 } finally {
@@ -670,7 +616,7 @@ export default function EthereumBridgeInterface() {
                                         <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
                                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                             <p className="text-sm text-muted-foreground">
-                                                {networkStatus || "Switching to Via network..."}
+                                                Switching to Via network...
                                             </p>
                                         </div>
                                     ) : (!isCorrectViaNetwork || autoSwitchFailed) ? (
@@ -690,13 +636,9 @@ export default function EthereumBridgeInterface() {
                                                 onClick={async () => {
                                                     setIsAutoSwitching(true);
                                                     try {
-                                                        const result = await switchToL2();
-                                                        if (result.success) {
-                                                            await checkMetamaskNetwork();
-                                                            setAutoSwitchFailed(false);
-                                                        } else {
-                                                            setAutoSwitchFailed(true);
-                                                        }
+                                                        await switchChain({ chainId: ViaTestnet.id });
+                                                        await checkMetamaskNetwork();
+                                                        setAutoSwitchFailed(false);
                                                     } catch {
                                                         setAutoSwitchFailed(true);
                                                     } finally {

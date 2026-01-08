@@ -18,7 +18,8 @@ import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
 import { Transaction } from "@/store/wallet-store";
-import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
+import { useSwitchChain, useChainId } from "wagmi";
+import { EthereumSepolia} from "@/lib/wagmi/chains";
 import { useWithdrawalReadinessStore } from "@/store/withdrawal-readiness-store";
 
 interface PendingWithdrawal {
@@ -48,7 +49,11 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   const [isMounted, setIsMounted] = useState(false);
   const { l1Address, isCorrectL1Network, isL1Connected, isMetamaskConnected, viaAddress } = useWalletState();
   const { fetchEthTransactions, checkL1Network, setIsL1Connected, setL1Address } = useWalletStore();
-  const { switchToEthereum } = useNetworkSwitcher();
+  const { switchChainAsync: switchChain } = useSwitchChain();
+  const currentChainId = useChainId();
+  // Derive if we need to switch to Ethereum
+  const needsSwitch = open && isMetamaskConnected && currentChainId !== EthereumSepolia.id;
+
   const { 
     getReadiness, 
     startPeriodicCheck, 
@@ -61,64 +66,6 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   useEffect(() => {
     setIsMounted(true);
   }, []);
-
-  // Auto-switch to Sepolia when modal opens
-  useEffect(() => {
-    if (!open || !isMetamaskConnected) {
-      setIsAutoSwitching(false);
-      return;
-    }
-
-    const autoSwitchToSepolia = async () => {
-      // Check current network state first
-      await checkL1Network();
-      
-      // Get the latest network state from the store
-      const store = useWalletStore.getState();
-      
-      // Ensure L1 connection is set if wallet is connected
-      // If user has viaAddress but not l1Address, use viaAddress for L1 (same wallet, different network)
-      if (isMetamaskConnected && viaAddress && !store.l1Address) {
-        setL1Address(viaAddress);
-        setIsL1Connected(true);
-      }
-      
-      // If not on Sepolia, try to switch
-      if (!store.isCorrectL1Network) {
-        setIsAutoSwitching(true);
-        try {
-          const result = await switchToEthereum(EthereumNetwork.SEPOLIA);
-          if (result.success) {
-            // Refresh network state after switch
-            await checkL1Network();
-            // Ensure L1 connection is set after successful switch
-            if (isMetamaskConnected && (viaAddress || l1Address)) {
-              if (!store.l1Address && viaAddress) {
-                setL1Address(viaAddress);
-              }
-              setIsL1Connected(true);
-            }
-          } else {
-            console.warn("Auto-switch to Sepolia failed:", result.error);
-          }
-        } catch (error) {
-          console.error("Error auto-switching to Sepolia:", error);
-        } finally {
-          setIsAutoSwitching(false);
-        }
-      } else {
-        // Already on Sepolia, but ensure L1 connection is set
-        if (isMetamaskConnected && (viaAddress || l1Address)) {
-          if (!store.l1Address && viaAddress) {
-            setL1Address(viaAddress);
-          }
-          setIsL1Connected(true);
-        }
-      }
-    };
-
-    autoSwitchToSepolia();
-  }, [open, isMetamaskConnected, switchToEthereum, checkL1Network, viaAddress, l1Address, setIsL1Connected, setL1Address]);
 
   // Filter withdrawals - include all withdrawals with required data
   // We rely on on-chain checks (MessageManager + vault.withdrawalInfo) as source of truth
@@ -388,10 +335,8 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
               onClick={async () => {
                 setIsAutoSwitching(true);
                 try {
-                  const result = await switchToEthereum(EthereumNetwork.SEPOLIA);
-                  if (result.success) {
-                    await checkL1Network();
-                  }
+                  await switchChain({ chainId: EthereumSepolia.id });
+                  await checkL1Network();
                 } catch (error) {
                   console.error("Error switching to Sepolia:", error);
                 } finally {
@@ -513,4 +458,5 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     </Dialog>
   );
 }
+
 
