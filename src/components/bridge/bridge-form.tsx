@@ -7,10 +7,8 @@ import { useBridgeSubmit } from "@/hooks/useBridgeSubmit";
 import { useBalance} from "@/hooks/useBalance";
 import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
-import { BRIDGE_CONFIG, Layer } from "@/services/config";
+import {BRIDGE_CONFIG, Layer} from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
-import { useSwitchChain, useChainId } from "wagmi";
-import { ViaTestnet } from "@/lib/wagmi/chains";
 
 import {
   BridgeModeTabs,
@@ -82,47 +80,8 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     fetchDepositFeeEstimation,
   } = useWalletStore();
   
-  const { switchChainAsync: switchChain } = useSwitchChain();
-  const currentChainId = useChainId();
-
-  // Derive if we need to switch to Via (only for withdraw mode)
-  const needsSwitch = mode === "withdraw" && isMetamaskConnected && currentChainId !== ViaTestnet.id;
-
-  const { checkMetamaskNetwork } = useWalletStore();
-
   // Debounce amount to avoid excessive API calls
   const debouncedAmount = useDebounce(amount, 600);
-
-  // Auto-switch to VIA network when withdrawal mode is selected
-  useEffect(() => {
-    const autoSwitchToVia = async () => {
-      // Only auto-switch for withdrawal mode
-      if (mode !== "withdraw") {
-        return;
-      }
-
-      // Only proceed if wallet is connected
-      if (!isMetamaskConnected) {
-        return;
-      }
-
-      // Check current network state
-      await checkMetamaskNetwork();
-
-      // If not on VIA network, try to switch
-      if (!isCorrectViaNetwork) {
-        try {
-         await switchChain({ chainId: ViaTestnet.id});
-            // Refresh network state after switch
-            await checkMetamaskNetwork();
-        } catch (error) {
-          console.error("Auto-switch to VIA failed:", error);
-        }
-      }
-    };
-
-    autoSwitchToVia();
-  }, [mode, isMetamaskConnected, isCorrectViaNetwork, switchChain, checkMetamaskNetwork]);
 
   // Fetch fee estimation when debounced amount changes
   useEffect(() => {

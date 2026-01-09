@@ -32,7 +32,7 @@ import { calculateVaultConversion } from "@/utils/vault-conversion";
 import { toast } from "sonner";
 import {formatVaultRate} from "@/utils/vault-conversion";
 import { useSwitchChain, useChainId } from "wagmi";
-import { ViaTestnet, EthereumSepolia } from "@/lib/wagmi/chains";
+import { CURRENT_CHAINS } from "@/services/config";
 
 // Helper function to create Ethereum bridge route
 function getEthereumRoute(mode: BridgeMode, tokenSymbol: string): BridgeRoute {
@@ -94,10 +94,12 @@ export default function EthereumBridgeInterface() {
     const [autoSwitchFailed, setAutoSwitchFailed] = useState(false);
 
     // Derive target chain from active tab
-    const targetChain = activeTab === "deposit" ? EthereumSepolia : ViaTestnet;
+    const targetChainId = activeTab === "deposit"
+      ? CURRENT_CHAINS.ethereum.id
+      : CURRENT_CHAINS.via.id;
 
     // Derive if we need to switch (skip if pending withdrawals modal is open - it needs Sepolia)
-    const needsSwitch = isMetamaskConnected && currentChainId !== targetChain.id && !isPendingWithdrawalsOpen;
+    const needsSwitch = isMetamaskConnected && currentChainId !== targetChainId && !isPendingWithdrawalsOpen;
 
     // Use Aave data as fallback, but API will override for yield vaults
     const { apys: aaveApys, isLoading: loadingApy } = useAaveData();
@@ -259,20 +261,20 @@ export default function EthereumBridgeInterface() {
     setIsAutoSwitching(true);
     setAutoSwitchFailed(false);
 
-    switchChain({ chainId: targetChain.id }).then(() => {
+    switchChain({ chainId: targetChainId }).then(() => {
       setIsAutoSwitching(false);
     }).catch((error) => {
-      console.error(`Auto-switch to ${activeTab === "deposit" ? "Ethereum" : "VIA"} failed:`, error);
+      console.error(`Auto-switch to ${activeTab === "deposit" ? CURRENT_CHAINS.ethereum.name : CURRENT_CHAINS.via.name} failed:`, error);
       setAutoSwitchFailed(true);
     });
-  }, [needsSwitch, targetChain.id, switchChain, activeTab]);
+  }, [needsSwitch, targetChainId, switchChain, activeTab]);
 
   // Fetch transactions when chain changes to correct network
   useEffect(() => {
     // Only fetch when on the correct network for the current tab
     const isOnCorrectNetwork =
-      (activeTab === "deposit" && currentChainId === EthereumSepolia.id) ||
-      (activeTab === "withdraw" && currentChainId === ViaTestnet.id);
+      (activeTab === "deposit" && currentChainId === CURRENT_CHAINS.ethereum.id) ||
+      (activeTab === "withdraw" && currentChainId === CURRENT_CHAINS.via.id);
 
     if (!isMetamaskConnected || !isOnCorrectNetwork) return;
 
@@ -542,31 +544,31 @@ export default function EthereumBridgeInterface() {
                         {/* Form Content */}
                         {activeTab === "deposit" ? (
                             isMetamaskConnected ? (
-                                isAutoSwitching || isSwitchingNetwork ? (
-                                    <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
-                                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                                        <p className="text-sm text-muted-foreground">
-                                            Switching to Sepolia network...
-                                        </p>
-                                    </div>
+                                    isAutoSwitching || isSwitchingNetwork ? (
+                                        <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
+                                            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                                            <p className="text-sm text-muted-foreground">
+                                                Switching to {CURRENT_CHAINS.ethereum.name} network...
+                                            </p>
+                                        </div>
                                 ) : (!isCorrectL1Network || autoSwitchFailed) ? (
                                     <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
                                         <div className="rounded-full bg-amber-100 p-4">
                                             <AlertCircle className="h-8 w-8 text-amber-600" />
                                         </div>
                                         <div className="space-y-2">
-                                            <h3 className="font-semibold">Switch to Sepolia</h3>
+                                            <h3 className="font-semibold">Switch to {CURRENT_CHAINS.ethereum.name}</h3>
                                             <p className="text-sm text-muted-foreground max-w-[250px]">
                                                 {autoSwitchFailed 
                                                     ? "Automatic network switch failed. Please switch manually."
-                                                    : "Your wallet is connected. Please switch to Sepolia network to continue."}
+                                                    : `Your wallet is connected. Please switch to ${CURRENT_CHAINS.ethereum.name} network to continue.`}
                                             </p>
                                         </div>
                                         <Button 
                                             onClick={async () => {
                                                 setIsAutoSwitching(true);
                                                 try {
-                                                    await switchChain({ chainId: EthereumSepolia.id });
+                                                    await switchChain({ chainId: CURRENT_CHAINS.ethereum.id });
                                                     await checkL1Network();
                                                     setAutoSwitchFailed(false);
                                                 } catch {
@@ -584,7 +586,7 @@ export default function EthereumBridgeInterface() {
                                                     Switching...
                                                 </>
                                             ) : (
-                                                "Switch to Sepolia"
+                                                `Switch to ${CURRENT_CHAINS.ethereum.name}`
                                             )}
                                         </Button>
                                     </div>
@@ -616,7 +618,7 @@ export default function EthereumBridgeInterface() {
                                         <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
                                             <Loader2 className="h-8 w-8 animate-spin text-primary" />
                                             <p className="text-sm text-muted-foreground">
-                                                Switching to Via network...
+                                                Switching to {CURRENT_CHAINS.via.name} network...
                                             </p>
                                         </div>
                                     ) : (!isCorrectViaNetwork || autoSwitchFailed) ? (
@@ -625,18 +627,18 @@ export default function EthereumBridgeInterface() {
                                                 <AlertCircle className="h-8 w-8 text-amber-600" />
                                             </div>
                                             <div className="space-y-2">
-                                                <h3 className="font-semibold">Switch to Via Network</h3>
+                                                <h3 className="font-semibold">Switch to {CURRENT_CHAINS.via.name}</h3>
                                                 <p className="text-sm text-muted-foreground max-w-[250px]">
                                                     {autoSwitchFailed 
                                                         ? "Automatic network switch failed. Please switch manually."
-                                                        : "Your wallet is connected. Please switch to Via network to continue."}
+                                                        : `Your wallet is connected. Please switch to ${CURRENT_CHAINS.via.name} to continue.`}
                                                 </p>
                                             </div>
                                             <Button 
                                                 onClick={async () => {
                                                     setIsAutoSwitching(true);
                                                     try {
-                                                        await switchChain({ chainId: ViaTestnet.id });
+                                                        await switchChain({ chainId: CURRENT_CHAINS.via.id });
                                                         await checkMetamaskNetwork();
                                                         setAutoSwitchFailed(false);
                                                     } catch {
@@ -654,7 +656,7 @@ export default function EthereumBridgeInterface() {
                                                         Switching...
                                                     </>
                                                 ) : (
-                                                    "Switch to Via Network"
+                                                    `Switch to ${CURRENT_CHAINS.via.name}`
                                                 )}
                                             </Button>
                                         </div>
