@@ -35,13 +35,18 @@ export const TOKENS: Record<string, TokenInfo> = {
     decimals: 8,
     icon: '/bitcoin-logo.svg',
   },
-  
-  // TODO  uncomment when ready
-  // USDC: {
-  //   symbol: 'USDC',
-  //   name: 'USD Coin',
+  USDC: {
+    symbol: 'USDC',
+    name: 'USD Coin',
+    decimals: 6,
+    icon: '/usdc.svg',
+    contractAddress: '0x...', // Contract addresses are network-specific and stored in routes or ethereum/config.ts but it should be here
+  },
+  // TODO uncomment when USDT is available on Via
+  // USDT: {
+  //   symbol: 'USDT',
+  //   name: 'Tether USD',
   //   decimals: 6,
-  //   icon: '/usdc.svg',
-  //   contractAddress: '0x...', // Add per network
-  // },
+  //   icon: '/usdt.svg',
+  // }
 };

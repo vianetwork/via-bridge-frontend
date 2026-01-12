@@ -19,7 +19,8 @@ import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
 import { Transaction } from "@/store/wallet-store";
 import { useSwitchChain, useChainId } from "wagmi";
-import { CURRENT_CHAINS } from "@/services/config";
+import { BRIDGE_CONFIG } from "@/services/config";
+import { GetCurrentRoute } from "@/services/bridge/routes";
 import { useWithdrawalReadinessStore } from "@/store/withdrawal-readiness-store";
 
 interface PendingWithdrawal {
@@ -51,9 +52,13 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   const { fetchEthTransactions, checkL1Network, setIsL1Connected, setL1Address } = useWalletStore();
   const { switchChainAsync: switchChain } = useSwitchChain();
   const currentChainId = useChainId();
-  // Derive if we need to switch to Ethereum
-  const needsSwitch = open && isMetamaskConnected && currentChainId !== CURRENT_CHAINS.ethereum.id;
-
+  
+  // Get Ethereum network info from route (for claiming, we always need Ethereum L1)
+  // Use 'withdraw' direction since claiming happens on Ethereum
+  const ethereumRoute = GetCurrentRoute('withdraw', BRIDGE_CONFIG.defaultNetwork, 'ethereum');
+  const ethereumChainId = ethereumRoute.toNetwork.chainId!;
+  const ethereumChainName = ethereumRoute.toNetwork.displayName;
+  
   const { 
     getReadiness, 
     startPeriodicCheck, 
@@ -309,7 +314,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
             <Loader2 className="h-5 w-5 text-blue-600 flex-shrink-0 animate-spin" />
             <div className="flex-1">
               <p className="text-sm font-medium text-blue-900">
-                Switching to {CURRENT_CHAINS.ethereum.name}...
+                Switching to {ethereumChainName}...
               </p>
               <p className="text-xs text-blue-700 mt-1">
                 Please approve the network switch in your wallet.
@@ -323,10 +328,10 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
             <AlertCircle className="h-5 w-5 text-amber-600 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-sm font-medium text-amber-900">
-                Connect to {CURRENT_CHAINS.ethereum.name}
+                Connect to {ethereumChainName}
               </p>
               <p className="text-xs text-amber-700 mt-1">
-                You need to be connected to {CURRENT_CHAINS.ethereum.name} to claim withdrawals.
+                You need to be connected to {ethereumChainName} to claim withdrawals.
               </p>
             </div>
             <Button
@@ -335,10 +340,10 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
               onClick={async () => {
                 setIsAutoSwitching(true);
                 try {
-                  await switchChain({ chainId: CURRENT_CHAINS.ethereum.id });
+                  await switchChain({ chainId: ethereumChainId });
                   await checkL1Network();
                 } catch (error) {
-                  console.error(`Error switching to ${CURRENT_CHAINS.ethereum.name}:`, error);
+                  console.error(`Error switching to ${ethereumChainName}:`, error);
                 } finally {
                   setIsAutoSwitching(false);
                 }
@@ -351,7 +356,7 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
                   Switching...
                 </>
               ) : (
-                `Switch to ${CURRENT_CHAINS.ethereum.name}`
+                `Switch to ${ethereumChainName}`
               )}
             </Button>
           </div>
@@ -458,5 +463,3 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     </Dialog>
   );
 }
-
-

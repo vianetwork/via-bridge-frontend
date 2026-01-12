@@ -1,6 +1,6 @@
 import { NetworkInfo } from '@/services/bridge/types';
 import { BitcoinNetwork } from '@/services/bitcoin/types';
-import { ViaMainnet, ViaTestnet } from '@/lib/wagmi/chains';
+import {EthereumMainnet, EthereumSepolia, ViaMainnet, ViaTestnet} from '@/lib/wagmi/chains';
 import { BTC_NETWORK_NAMES } from '@/services/networks/bitcoin';
 
 /**
@@ -73,4 +73,18 @@ export const NETWORKS: Record<string, NetworkInfo> = {
     type: 'evm',
     //icon: '/via-testnet.svg', // TODO: Add icon file
   },
+  ETHEREUM_MAINNET: {
+    id: 'ethereum-mainnet',
+    displayName: EthereumMainnet.name,
+    chainId: EthereumMainnet.id,
+    type: 'evm',
+    icon: '/ethereum-logo.png',
+  },
+  ETHEREUM_SEPOLIA: {
+    id: 'ethereum-sepolia',
+    displayName: EthereumSepolia.name,
+    chainId: EthereumSepolia.id,
+    type: 'evm',
+    icon: '/ethereum-logo.png',
+  }
 };

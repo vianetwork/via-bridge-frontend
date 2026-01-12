@@ -136,36 +136,3 @@ export const BRIDGE_CONFIG = {
   defaultNetwork: env().NEXT_PUBLIC_NETWORK,
   viaChainId: VIA_NETWORK_CONFIG[env().NEXT_PUBLIC_NETWORK].chainId,
 } as const;
-
-/**
- * Environment-aware chain getters.
- *
- * Returns the viem Chain object for the current BRIDGE_CONFIG environment.
- * Uses getters for lazy evaluation based on BRIDGE_CONFIG.defaultNetwork.
- *
- * @example
- * ```typescript
- * import { CURRENT_CHAINS } from '@/services/config';
- *
- * // Get chain IDs for wagmi switchChain
- * await switchChain({ chainId: CURRENT_CHAINS.via.id });
- * await switchChain({ chainId: CURRENT_CHAINS.ethereum.id });
- *
- * // Access chain properties
- * console.log(CURRENT_CHAINS.via.name);      // "Via Network Sepolia" or "Via Network"
- * console.log(CURRENT_CHAINS.ethereum.name); // "Sepolia" or "Ethereum"
- * ```
- */
-export const CURRENT_CHAINS = {
-  get via(): Chain {
-    return BRIDGE_CONFIG.defaultNetwork == BitcoinNetwork.MAINNET
-      ? ViaMainnet
-      : ViaTestnet;
-  },
-  /** Ethereum L1 chain (Sepolia or Mainnet based on BRIDGE_CONFIG) */
-  get ethereum(): Chain {
-    return BRIDGE_CONFIG.defaultNetwork == BitcoinNetwork.MAINNET
-      ? EthereumMainnet
-      : EthereumSepolia;
-  },
-} as const;

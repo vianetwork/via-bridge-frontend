@@ -84,30 +84,83 @@ export const BRIDGE_ROUTES: BridgeRoute[] = [
     token: TOKENS.BTC,
     direction: "withdraw",
     enabled: true,
-  }
+  },
+  {
+    id: 'usdc-ethereum-sepolia-to-via-testnet',
+    fromNetwork: NETWORKS.ETHEREUM_SEPOLIA,
+    toNetwork: NETWORKS.VIA_TESTNET,
+    token: TOKENS.USDC,
+    direction: 'deposit',
+    enabled: true,
+  },
+  {
+    id: 'usdc-via-testnet-to-ethereum-sepolia',
+    fromNetwork: NETWORKS.VIA_TESTNET,
+    toNetwork: NETWORKS.ETHEREUM_SEPOLIA,
+    token: TOKENS.USDC,
+    direction: 'withdraw',
+    enabled: true,
+  }, // TODO enable Mainnet routes when mainnet is ready
+  {
+    id: 'usdc-ethereum-mainnet-to-via-mainnet',
+    fromNetwork: NETWORKS.ETHEREUM_MAINNET,
+    toNetwork: NETWORKS.VIA_MAINNET,
+    token: TOKENS.USDC,
+    direction: 'deposit',
+    enabled: false,
+  },
+  {
+    id: 'usdc-via-mainnet-to-ethereum-mainnet',
+    fromNetwork: NETWORKS.VIA_MAINNET,
+    toNetwork: NETWORKS.ETHEREUM_MAINNET,
+    token: TOKENS.USDC,
+    direction: 'withdraw',
+    enabled: false,
+  },
 ];
+
+type BridgeType = 'bitcoin' | 'ethereum';
 
 /**
  * Get the current route based on direction and environment
+ *
+ * @param direction - 'deposit' or 'withdraw'
+ * @param network - Environment (defaults to BRIDGE_CONFIG.defaultNetwork)
+ * @param bridgeType - Which bridge: 'bitcoin' (default) or 'ethereum'
+ * @param token - Token symbol (defaults based on bridgeType: 'BTC' for bitcoin, 'USDC' for ethereum)
+ *
+ * @example
+ * ```typescript
+ * // Bitcoin bridge (unchanged - backward compatible)
+ * const btcRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork);
+ *
+ * // Ethereum bridge
+ * const ethRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork, 'ethereum');
+ * const usdtRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork, 'ethereum', 'USDT');
+ * ```
  */
-export function GetCurrentRoute(direction: 'deposit' | 'withdraw', btcNetwork: BitcoinNetwork = BRIDGE_CONFIG.defaultNetwork) {
-  const viaNetworkId = btcNetwork === BitcoinNetwork.MAINNET
-  ? NETWORKS.VIA_MAINNET.id
-  : NETWORKS.VIA_TESTNET.id;
+export function GetCurrentRoute(direction: 'deposit' | 'withdraw', network: BitcoinNetwork = BRIDGE_CONFIG.defaultNetwork, bridgeType: BridgeType = 'bitcoin', token?: string): BridgeRoute {
 
-  const btcNetworkId = btcNetwork === BitcoinNetwork.MAINNET
-    ? NETWORKS.BITCOIN_MAINNET.id
-    : NETWORKS.BITCOIN_TESTNET4.id;
+  const isMainnet = network === BitcoinNetwork.MAINNET;
 
-  const routeId = direction === 'deposit' // TODO do this cleaner one day because ethereum network support is coming
-    ? `${btcNetworkId}-to-${viaNetworkId}`
-    : `${viaNetworkId}-to-${btcNetworkId}`;
+  // Determine bridge network based on type and environment
+  const bridgeNetworkId = bridgeType === 'bitcoin' ? (isMainnet ? NETWORKS.BITCOIN_MAINNET.id : NETWORKS.BITCOIN_TESTNET4.id)
+    : (isMainnet ? NETWORKS.ETHEREUM_MAINNET.id : NETWORKS.ETHEREUM_SEPOLIA.id);
 
-  // Find the matching enabled route
-  const route =  BRIDGE_ROUTES.find(r => r.id === routeId && r.enabled);
+  const viaNetworkId = isMainnet ? NETWORKS.VIA_MAINNET.id : NETWORKS.VIA_TESTNET.id;
+
+  const tokenSymbol = token ?? (bridgeType === 'bitcoin' ? TOKENS.BTC.symbol : TOKENS.USDC.symbol);
+
+  // Find route by properties
+  const route = BRIDGE_ROUTES.find(r =>
+    r.direction === direction &&
+    r.fromNetwork.id === (direction === 'deposit' ?
+    bridgeNetworkId : viaNetworkId) &&
+    r.toNetwork.id === (direction === 'deposit' ? viaNetworkId : bridgeNetworkId) &&
+    r.token.symbol === tokenSymbol && r.enabled);
 
   if (!route) {
-    throw new Error(`No enabled route found for ${direction}`);
+    throw new Error(`No enabled route found for ${direction} ${tokenSymbol} on ${bridgeType} ${network}`);
   }
 
   return route;
