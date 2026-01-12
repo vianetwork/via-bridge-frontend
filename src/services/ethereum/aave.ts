@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { AAVE_POOL_ADDRESSES, ETHEREUM_NETWORK_CONFIG, EthereumNetwork } from "./config";
+import { AAVE_POOL_ADDRESSES } from "./config";
 
 // ABI for Aave V3 Pool.getReserveData
 // function getReserveData(address asset) external view returns (DataTypes.ReserveData memory);
@@ -59,26 +59,15 @@ export async function fetchAaveData(
   provider: ethers.Provider
 ): Promise<AaveData> {
   try {
-    // Normalize chainId to hex string for comparison with config
-    const chainIdHex = typeof chainId === 'number'
-      ? `0x${chainId.toString(16)}`
+    // Normalize chainId to number for lookup
+    const chainIdNum = typeof chainId === 'string'
+      ? parseInt(chainId, 16)
       : chainId;
 
-    // Determine network from chainId
-    const networkEntry = Object.entries(ETHEREUM_NETWORK_CONFIG).find(
-      ([, config]) => config.chainId.toLowerCase() === chainIdHex.toLowerCase()
-    );
+    // Direct lookup by chainId
+    const poolAddress = AAVE_POOL_ADDRESSES[chainIdNum];
 
-    if (!networkEntry) {
-      console.warn(`[fetchAaveData] Network not found for chainId: ${chainId}`);
-      return { apy: "0%", tvl: "$0" };
-    }
-
-    const network = networkEntry[0] as EthereumNetwork;
-    const poolAddress = AAVE_POOL_ADDRESSES[network]; // This config key now points to Pool addresses
-
-    if (!poolAddress || poolAddress === "0x0000000000000000000000000000000000000000") {
-      // console.warn(`[fetchAaveData] Pool address not configured for network: ${network}`);
+    if (!poolAddress) {
       return { apy: "0%", tvl: "$0" };
     }
 

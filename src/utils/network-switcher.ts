@@ -1,8 +1,10 @@
 import { VIA_NETWORK_CONFIG, BRIDGE_CONFIG } from "@/services/config";
-import { ETHEREUM_NETWORK_CONFIG, EthereumNetwork } from "@/services/ethereum/config";
 import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
 import { eip6963Store } from "@/utils/eip6963-provider";
 import { useWalletStore } from "@/store/wallet-store";
+import { EthereumSepolia, EthereumMainnet } from "@/lib/wagmi/chains";
+import { BitcoinNetwork } from "@/services/bitcoin/types";
+
 
 export type NetworkType = "bitcoin" | "via" | "ethereum";
 
@@ -246,14 +248,14 @@ export async function switchNetwork(
     }
 
     case "ethereum": {
+      // Use environment-aware Ethereum chain config
+      const ethereumConfig = getEthereumChainConfig();
       if (!targetChainId) {
-        // Default to Sepolia
-        const sepoliaConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-        return switchEvmNetwork(sepoliaConfig.chainId, sepoliaConfig, onStatusUpdate);
+        return switchEvmNetwork(ethereumConfig.chainId, ethereumConfig, onStatusUpdate);
       }
       return switchEvmNetwork(
         targetChainId,
-        networkConfig || ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA],
+        networkConfig || ethereumConfig,
         onStatusUpdate
       );
     }
@@ -301,13 +303,29 @@ export async function switchToL2Network(
 }
 
 /**
+ * Get Ethereum chain config for wallet_addEthereumChain
+ * Uses viem chain definitions as source of truth
+ */
+function getEthereumChainConfig() {
+  const isMainnet = BRIDGE_CONFIG.defaultNetwork === BitcoinNetwork.MAINNET;
+  const chain = isMainnet ? EthereumMainnet : EthereumSepolia;
+
+  return {
+    chainId: `0x${chain.id.toString(16)}`,
+    chainName: chain.name,
+    nativeCurrency: chain.nativeCurrency,
+    rpcUrls: chain.rpcUrls.default.http,
+    blockExplorerUrls: chain.blockExplorers?.default ? [chain.blockExplorers.default.url] : [],
+  };
+}
+
+/**
  * Convenience function to switch to L1 Ethereum network (e.g., Sepolia)
  */
 export async function switchToEthereumNetwork(
-  targetNetwork: EthereumNetwork = EthereumNetwork.SEPOLIA,
   onStatusUpdate?: (status: string) => void
 ): Promise<NetworkSwitchResult> {
-  const networkConfig = ETHEREUM_NETWORK_CONFIG[targetNetwork];
+  const networkConfig = getEthereumChainConfig();
 
   return switchNetwork({
     networkType: "ethereum",
@@ -316,4 +334,3 @@ export async function switchToEthereumNetwork(
     onStatusUpdate,
   });
 }
-

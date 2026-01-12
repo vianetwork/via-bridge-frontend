@@ -125,23 +125,22 @@ type BridgeType = 'bitcoin' | 'ethereum';
  * Get the current route based on direction and environment
  *
  * @param direction - 'deposit' or 'withdraw'
- * @param network - Environment (defaults to BRIDGE_CONFIG.defaultNetwork)
  * @param bridgeType - Which bridge: 'bitcoin' (default) or 'ethereum'
  * @param token - Token symbol (defaults based on bridgeType: 'BTC' for bitcoin, 'USDC' for ethereum)
  *
  * @example
  * ```typescript
  * // Bitcoin bridge (unchanged - backward compatible)
- * const btcRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork);
+ * const btcRoute = GetCurrentRoute('deposit');
  *
  * // Ethereum bridge
- * const ethRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork, 'ethereum');
- * const usdtRoute = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork, 'ethereum', 'USDT');
+ * const ethRoute = GetCurrentRoute('deposit', 'ethereum');
+ * const usdtRoute = GetCurrentRoute('deposit', 'ethereum', 'USDT');
  * ```
  */
-export function GetCurrentRoute(direction: 'deposit' | 'withdraw', network: BitcoinNetwork = BRIDGE_CONFIG.defaultNetwork, bridgeType: BridgeType = 'bitcoin', token?: string): BridgeRoute {
+export function GetCurrentRoute(direction: 'deposit' | 'withdraw', bridgeType: BridgeType = 'bitcoin', token?: string): BridgeRoute {
 
-  const isMainnet = network === BitcoinNetwork.MAINNET;
+  const isMainnet = BRIDGE_CONFIG.defaultNetwork === BitcoinNetwork.MAINNET;
 
   // Determine bridge network based on type and environment
   const bridgeNetworkId = bridgeType === 'bitcoin' ? (isMainnet ? NETWORKS.BITCOIN_MAINNET.id : NETWORKS.BITCOIN_TESTNET4.id)
@@ -160,7 +159,7 @@ export function GetCurrentRoute(direction: 'deposit' | 'withdraw', network: Bitc
     r.token.symbol === tokenSymbol && r.enabled);
 
   if (!route) {
-    throw new Error(`No enabled route found for ${direction} ${tokenSymbol} on ${bridgeType} ${network}`);
+    throw new Error(`No enabled route found for ${direction} ${tokenSymbol} on ${bridgeType} bridge`);
   }
 
   return route;

@@ -13,7 +13,6 @@ import { Loader2, ExternalLink, CheckCircle2, Clock, AlertCircle } from "lucide-
 import { ethers } from "ethers";
 import { toast } from "sonner";
 import { BRIDGE_ABI } from "@/services/ethereum/abis";
-import { EthereumNetwork } from "@/services/ethereum/config";
 import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
@@ -49,13 +48,12 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   const [isAutoSwitching, setIsAutoSwitching] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const { l1Address, isCorrectL1Network, isL1Connected, isMetamaskConnected, viaAddress } = useWalletState();
-  const { fetchEthTransactions, checkL1Network, setIsL1Connected, setL1Address } = useWalletStore();
+  const { fetchEthTransactions, checkL1Network } = useWalletStore();
   const { switchChainAsync: switchChain } = useSwitchChain();
-  const currentChainId = useChainId();
-  
+
   // Get Ethereum network info from route (for claiming, we always need Ethereum L1)
   // Use 'withdraw' direction since claiming happens on Ethereum
-  const ethereumRoute = GetCurrentRoute('withdraw', BRIDGE_CONFIG.defaultNetwork, 'ethereum');
+  const ethereumRoute = GetCurrentRoute('withdraw', 'ethereum');
   const ethereumChainId = ethereumRoute.toNetwork.chainId!;
   const ethereumChainName = ethereumRoute.toNetwork.displayName;
   
@@ -180,10 +178,10 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     try {
       setClaimingIds(prev => new Set(prev).add(withdrawal.nonce));
 
-      // Ensure we're on Sepolia and get signer
-      const networkResult = await ensureEthereumNetwork(EthereumNetwork.SEPOLIA);
+      // Ensure we're on the correct Ethereum network and get signer
+      const networkResult = await ensureEthereumNetwork();
       if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
-        throw new Error(networkResult.error || "Please switch your wallet to Sepolia network manually.");
+        throw new Error(networkResult.error || "Please switch your wallet to the correct Ethereum network manually.");
       }
 
       const { signer } = networkResult;

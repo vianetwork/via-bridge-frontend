@@ -7,8 +7,8 @@ import { useBridgeSubmit } from "@/hooks/useBridgeSubmit";
 import { useBalance} from "@/hooks/useBalance";
 import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
-import {BRIDGE_CONFIG, Layer} from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
+import { Layer } from "@/services/config";
 
 import {
   BridgeModeTabs,
@@ -98,7 +98,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     }
   }, [debouncedAmount, mode, fetchFeeEstimation, fetchDepositFeeEstimation]);
 
-  const route = useMemo(() => GetCurrentRoute(mode, BRIDGE_CONFIG.defaultNetwork), [mode]);
+  const route = useMemo(() => GetCurrentRoute(mode), [mode]);
   const unit = route.token.symbol;
 
 

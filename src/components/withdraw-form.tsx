@@ -70,7 +70,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   }, [abortController]);
 
   // Get the current bridge route configuration
-  const bridgeRoute = GetCurrentRoute('withdraw', BRIDGE_CONFIG.defaultNetwork);
+  const bridgeRoute = GetCurrentRoute('withdraw');
   const { fromNetwork, toNetwork, token } = bridgeRoute;
 
   // Calculate net BTC amount after fee estimation

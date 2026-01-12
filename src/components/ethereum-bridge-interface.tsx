@@ -14,7 +14,7 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 import { VaultCard } from "@/components/vault-card";
-import { SUPPORTED_ASSETS, EthereumNetwork } from "@/services/ethereum/config";
+import { SUPPORTED_ASSETS, getAssetAddress } from "@/services/ethereum/config";
 import EthereumDepositForm from "@/components/ethereum-deposit-form";
 import EthereumWithdrawForm from "@/components/ethereum-withdraw-form";
 import { useWalletState } from "@/hooks/use-wallet-state";
@@ -66,7 +66,7 @@ export default function EthereumBridgeInterface() {
 
     // Get current route based on active tab (uses bridge domain model)
     const route = useMemo(() => 
-        GetCurrentRoute(activeTab, BRIDGE_CONFIG.defaultNetwork, 'ethereum'),
+        GetCurrentRoute(activeTab, 'ethereum'),
         [activeTab]
     );
 
@@ -118,7 +118,7 @@ export default function EthereumBridgeInterface() {
     // Token address for balance fetching
   // - Deposit: fetch underlying token balance on Ethereum L1 (e.g., USDC on Sepolia)
   // - Withdraw: fetch underlying token balance on Via L2 (e.g., USDC on Via)
-  const underlyingTokenAddress = selectedAsset.addresses?.[EthereumNetwork.SEPOLIA];
+  const underlyingTokenAddress = getAssetAddress(selectedAsset);
   const vaultShareAddress = isYieldEnabled
     ? selectedAsset.vaultAddresses.via.yieldBearing
     : selectedAsset.vaultAddresses.via.standard;

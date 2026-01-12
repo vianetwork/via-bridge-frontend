@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Loader2, Wallet, AlertCircle, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
-import { SUPPORTED_ASSETS, EthereumNetwork, ETHEREUM_NETWORK_CONFIG } from "@/services/ethereum/config";
+import { SUPPORTED_ASSETS, getAssetAddress } from "@/services/ethereum/config";
+import { EthereumSepolia } from "@/lib/wagmi/chains";
 import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { ensureEthereumNetwork } from "@/utils/ensure-network";
@@ -147,7 +148,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
     const isFetchingRef = useRef(false);
     
     // Extract token address to a stable reference for useCallback dependency
-    const tokenAddress = asset.addresses[EthereumNetwork.SEPOLIA];
+    const tokenAddress = getAssetAddress(asset);
 
     // Fetch Balance function - extracted to be reusable
     const fetchBalance = useCallback(async () => {
@@ -191,12 +192,11 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             setStatus("Initializing...");
 
             // 1. Setup read-only provider for allowance checks
-            const sepoliaConfig = ETHEREUM_NETWORK_CONFIG[EthereumNetwork.SEPOLIA];
-            const readProvider = new ethers.JsonRpcProvider(sepoliaConfig.rpcUrls[0]);
+            const readProvider = new ethers.JsonRpcProvider(EthereumSepolia.rpcUrls.default.http[0]);
 
             // 2. Ensure network is correct and get provider/signer
             setStatus("Checking network...");
-            const networkResult = await ensureEthereumNetwork(EthereumNetwork.SEPOLIA);
+            const networkResult = await ensureEthereumNetwork();
             if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
                 throw new Error(networkResult.error || "Please switch your wallet to Sepolia network manually.");
             }
@@ -204,7 +204,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             const { signer } = networkResult;
 
             // 3. Determine addresses
-            const tokenAddress = asset.addresses[EthereumNetwork.SEPOLIA];
+            const tokenAddress = getAssetAddress(asset);
             const vaultAddress = isYield ? asset.vaultAddresses.ethereum.yieldBearing : asset.vaultAddresses.ethereum.standard;
 
             if (!tokenAddress || !vaultAddress) {

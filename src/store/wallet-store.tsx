@@ -8,7 +8,6 @@ import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
 import { switchToL1Network, switchToEthereumNetwork } from "@/utils/network-switcher";
-import { EthereumNetwork } from "@/services/ethereum/config";
 import { requestWalletAccountSelection, setupAccountsChangedListener, cleanupAccountsChangedListener } from "@/utils/evm-account-selection";
 
 // Create events for wallet state changes
@@ -857,13 +856,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         });
       }
 
-      // Step 2: Automatically switch to Sepolia network
-      console.log("🔄 Switching to Sepolia network...");
-      const networkResult = await switchToEthereumNetwork(EthereumNetwork.SEPOLIA);
+      // Step 2: Automatically switch to the correct Ethereum network (environment-aware)
+      console.log("🔄 Switching to Ethereum network...");
+      const networkResult = await switchToEthereumNetwork();
       
       if (networkResult.success) {
         set({ isCorrectL1Network: true });
-        console.log("✅ Connected to L1 wallet and switched to Sepolia");
+        console.log("✅ Connected to L1 wallet and switched to Ethereum network");
         walletEvents.networkChanged.emit();
       } else {
         // If switch failed, still mark as connected but network is incorrect

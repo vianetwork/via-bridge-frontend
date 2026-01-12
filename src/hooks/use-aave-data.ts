@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { ethers } from "ethers";
 import { fetchAaveData } from "@/services/ethereum/aave";
-import { SUPPORTED_ASSETS, EthereumNetwork } from "@/services/ethereum/config";
+import { SUPPORTED_ASSETS, getAssetAddress } from "@/services/ethereum/config";
 import { EthereumSepolia } from "@/lib/wagmi/chains";
 
 export interface AaveApyState {
@@ -47,7 +47,7 @@ export function useAaveData(): AaveApyState {
               return; // skip inactive assets
             }
 
-            const address = asset.addresses?.[EthereumNetwork.SEPOLIA];
+            const address = getAssetAddress(asset);
 
             if (address && address !== "0x0000000000000000000000000000000000000000") {
               const { apy } = await fetchAaveData(

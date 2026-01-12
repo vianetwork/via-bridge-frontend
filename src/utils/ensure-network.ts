@@ -1,7 +1,6 @@
 import { ethers, BrowserProvider } from "ethers";
 import { switchToL2Network, switchToEthereumNetwork } from "./network-switcher";
 import { getNetworkConfig } from "@/services/config";
-import { EthereumNetwork } from "@/services/ethereum/config";
 
 export interface EnsureNetworkResult {
   success: boolean;
@@ -13,10 +12,13 @@ export interface EnsureNetworkResult {
 /**
  * Ensures the wallet is on the correct network and returns a ready-to-use provider and signer.
  * This is a unified helper for both deposit and withdrawal flows.
+ * 
+ * Network selection is environment-aware:
+ * - VIA: Uses BRIDGE_CONFIG.defaultNetwork to determine testnet vs mainnet
+ * - Ethereum: Uses BRIDGE_CONFIG.defaultNetwork to determine Sepolia vs Mainnet
  */
 export async function ensureNetworkForTransaction(
-  networkType: "via" | "ethereum",
-  targetNetwork?: EthereumNetwork
+  networkType: "via" | "ethereum"
 ): Promise<EnsureNetworkResult> {
   try {
     // Validate window.ethereum is available
@@ -27,14 +29,14 @@ export async function ensureNetworkForTransaction(
       };
     }
 
-    // Switch network based on type
+    // Switch network based on type (both are now environment-aware)
     let networkSwitchResult;
     if (networkType === "via") {
       const networkConfig = getNetworkConfig();
       networkSwitchResult = await switchToL2Network(networkConfig.chainId);
     } else {
-      const ethereumNetwork = targetNetwork || EthereumNetwork.SEPOLIA;
-      networkSwitchResult = await switchToEthereumNetwork(ethereumNetwork);
+      // switchToEthereumNetwork is now environment-aware (uses BRIDGE_CONFIG.defaultNetwork)
+      networkSwitchResult = await switchToEthereumNetwork();
     }
 
     if (!networkSwitchResult.success) {
@@ -76,11 +78,9 @@ export async function ensureViaNetwork(): Promise<EnsureNetworkResult> {
 }
 
 /**
- * Convenience function for ensuring Ethereum (L1) network
+ * Convenience function for ensuring Ethereum (L1) network.
+ * Network selection is environment-aware based on BRIDGE_CONFIG.defaultNetwork.
  */
-export async function ensureEthereumNetwork(
-  targetNetwork: EthereumNetwork = EthereumNetwork.SEPOLIA
-): Promise<EnsureNetworkResult> {
-  return ensureNetworkForTransaction("ethereum", targetNetwork);
+export async function ensureEthereumNetwork(): Promise<EnsureNetworkResult> {
+  return ensureNetworkForTransaction("ethereum");
 }
-
