@@ -9,6 +9,7 @@ import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
 import { switchToL1Network, switchToEthereumNetwork } from "@/utils/network-switcher";
 import { requestWalletAccountSelection, setupAccountsChangedListener, cleanupAccountsChangedListener } from "@/utils/evm-account-selection";
+import { GetCurrentRoute } from '@/services/bridge/routes';
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -813,8 +814,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) return;
 
-      // Sepolia Chain ID
-      const expectedChainId = "0xaa36a7"; // 11155111
+      const route = GetCurrentRoute('deposit', 'ethereum');
+      const expectedChainIdNum = route.fromNetwork.chainId;
+      if (!expectedChainIdNum) {
+        set({ isCorrectL1Network: false });
+        return;
+      }
+      const expectedChainId = `0x${expectedChainIdNum.toString(16)}`;
       const chainId = await bestProvider.provider.request({ method: 'eth_chainId' }) as string;
       const isCorrect = chainId.toLowerCase() === expectedChainId.toLowerCase();
 

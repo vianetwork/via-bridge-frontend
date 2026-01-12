@@ -1,5 +1,6 @@
-import { defineChain } from 'viem';
 import { mainnet as viemMainnet, sepolia as viemSepolia } from "viem/chains";
+import { defineChain, type Chain } from 'viem';
+
 
 export const ViaTestnet = defineChain({
   id: 25223, // 0x6287
@@ -42,3 +43,18 @@ export const EthereumSepolia = defineChain({
 // Ethereum Mainnet - use viem's built-in chain directly
 // Note: viemMainnet includes default public RPC URLs from Cloudflare, Ankr, etc.
 export const EthereumMainnet = viemMainnet;
+
+/**
+ * Lookup helper used by UI/services that only have numeric chainId.
+ * Keep this list in sync with exported chains
+ */
+const CHAIN_MAP = new Map<number, Chain>([
+  [ViaTestnet.id, ViaTestnet],
+  [ViaMainnet.id, ViaMainnet],
+  [EthereumSepolia.id, EthereumSepolia],
+  [EthereumMainnet.id, EthereumMainnet],
+]);
+
+export function getViemChainById(chainId: number): Chain | undefined {
+  return CHAIN_MAP.get(chainId);
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -15,10 +15,10 @@ import { ensureViaNetwork } from "@/utils/ensure-network";
 import { ethers, getAddress, BrowserProvider } from "ethers";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { ERC20_ABI, VAULT_ABI } from "@/services/ethereum/abis";
-import { getNetworkConfig } from "@/services/config";
 import ApprovalModal from "@/components/approval-modal";
 import { getWalletDisplayMetaByRdns } from "@/utils/wallet-metadata";
-import { NETWORKS } from "@/services/bridge/networks";
+import { GetCurrentRoute } from '@/services/bridge/routes';
+import { getEvmTxExplorerUrl } from '@/services/bridge/explorer';
 
 interface EthereumWithdrawFormProps {
     asset: typeof SUPPORTED_ASSETS[0];
@@ -84,6 +84,8 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     // Get wallet name from selected wallet
     const walletMeta = selectedWallet ? getWalletDisplayMetaByRdns(selectedWallet) : null;
     const walletName = walletMeta?.name || "Wallet";
+
+    const withdrawRoute = useMemo(() => GetCurrentRoute('withdraw', 'ethereum'), []);
 
     const form = useForm<z.infer<ReturnType<typeof createWithdrawFormSchema>> & { _balance?: string }>({
         resolver: zodResolver(createWithdrawFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
@@ -186,7 +188,6 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
             }
 
             const { signer } = networkResult;
-            const networkConfig = getNetworkConfig();
 
             // 2. Withdraw interaction
             // Contract: L2 Vault
@@ -212,7 +213,10 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
             setStatus("Waiting for confirmation...");
             await tx.wait();
 
-            const explorerUrlValue = `${networkConfig.blockExplorerUrls?.[0]}/tx/${tx.hash}`;
+            const explorerUrlValue = getEvmTxExplorerUrl(withdrawRoute.fromNetwork, tx.hash);
+            if (!explorerUrlValue) {
+                console.warn('Missing explorer configuration, transaction link unavailable');
+            }
             setTxHash(tx.hash);
             setExplorerUrl(explorerUrlValue);
             setIsSuccess(true);
@@ -222,7 +226,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                 amount: values.amount,
                 status: 'Pending',
                 txHash: tx.hash,
-                l2ExplorerUrl: explorerUrlValue,
+                l2ExplorerUrl: explorerUrlValue || undefined,
                 symbol: asset.symbol
             });
 
@@ -556,14 +560,8 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },
-                    fromNetwork: NETWORKS.VIA_TESTNET,
-                    toNetwork: {
-                        id: 'ethereum-sepolia',
-                        displayName: 'Ethereum Sepolia',
-                        chainId: 11155111,
-                        type: 'evm' as const,
-                        icon: '/ethereum-logo.png',
-                    },
+                    fromNetwork: withdrawRoute.fromNetwork,
+                    toNetwork: withdrawRoute.toNetwork,
                     recipientAddress: form.watch("recipientAddress") || "",
                 }}
             />

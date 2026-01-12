@@ -47,6 +47,9 @@ export type NetworkInfo = {
 
   /** Network type: 'bitcoin' for Bitcoin, 'evm' for EVM-compatible chains */
   type: 'bitcoin' | 'evm';
+
+  /** URL for the default block explorer. */
+  blockExplorerUrl?: string;
 };
 
 /**

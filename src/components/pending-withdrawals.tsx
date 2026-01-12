@@ -17,8 +17,7 @@ import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
 import { Transaction } from "@/store/wallet-store";
-import { useSwitchChain, useChainId } from "wagmi";
-import { BRIDGE_CONFIG } from "@/services/config";
+import { useSwitchChain } from "wagmi";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { useWithdrawalReadinessStore } from "@/store/withdrawal-readiness-store";
 

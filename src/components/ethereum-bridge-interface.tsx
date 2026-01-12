@@ -1,12 +1,11 @@
 // src/components/ethereum-bridge-interface.tsx
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { BridgeModeTabs, type BridgeMode } from "@/components/bridge/bridge-mode-tabs";
 import { NetworkLaneSelector, TransferAmountInput, AvailableBalanceDisplay, AmountSlider } from "@/components/bridge";
 import { cn } from "@/lib/utils";
-import type { BridgeRoute } from "@/services/bridge/types";
 import {
     Dialog,
     DialogContent,
@@ -28,10 +27,8 @@ import { useAaveData } from "@/hooks/use-aave-data";
 import { useVaultMetrics } from "@/hooks/use-vault-metrics";
 import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
 import { calculateVaultConversion } from "@/utils/vault-conversion";
-import { toast } from "sonner";
 import {formatVaultRate} from "@/utils/vault-conversion";
 import { useSwitchChain, useChainId } from "wagmi";
-import { BRIDGE_CONFIG } from "@/services/config";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 
 export default function EthereumBridgeInterface() {
@@ -258,7 +255,7 @@ export default function EthereumBridgeInterface() {
     if (connectedEvmAddress) {
       fetchEthTransactions();
     }
-  }, [currentChainId, activeTab, isMetamaskConnected, fetchEthTransactions]);
+  }, [currentChainId, targetChainId, isMetamaskConnected, fetchEthTransactions]);
 
     // Reset amount when switching tabs
     useEffect(() => {

@@ -10,15 +10,14 @@ import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Loader2, Wallet, AlertCircle, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { SUPPORTED_ASSETS, getAssetAddress } from "@/services/ethereum/config";
-import { EthereumSepolia } from "@/lib/wagmi/chains";
+import { getViemChainById } from '@/lib/wagmi/chains';
 import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import ApprovalModal from "@/components/approval-modal";
 import { getWalletDisplayMetaByRdns } from "@/utils/wallet-metadata";
-import { NETWORKS } from "@/services/bridge/networks";
-
-
+import { GetCurrentRoute } from '@/services/bridge/routes';
+import { getEvmTxExplorerUrl } from '@/services/bridge/explorer';
 
 interface EthereumDepositFormProps {
     asset: typeof SUPPORTED_ASSETS[0];
@@ -84,6 +83,13 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
     // Get wallet name from selected wallet
     const walletMeta = selectedWallet ? getWalletDisplayMetaByRdns(selectedWallet) : null;
     const walletName = walletMeta?.name || "Wallet";
+
+    const depositRoute = useMemo(() => GetCurrentRoute('deposit', 'ethereum'), []);
+    const l1Chain = useMemo(() => {
+        const chainId = depositRoute.fromNetwork.chainId;
+        if (!chainId) return undefined;
+        return getViemChainById(chainId);
+    }, [depositRoute.fromNetwork.chainId]);
 
     const form = useForm<z.infer<ReturnType<typeof createDepositFormSchema>> & { _balance?: string }>({
         resolver: zodResolver(createDepositFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
@@ -192,7 +198,10 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             setStatus("Initializing...");
 
             // 1. Setup read-only provider for allowance checks
-            const readProvider = new ethers.JsonRpcProvider(EthereumSepolia.rpcUrls.default.http[0]);
+            if (!l1Chain) {
+                throw new Error('Missing Ethereum chain configuration for current route');
+            }
+            const readProvider = new ethers.JsonRpcProvider(l1Chain.rpcUrls.default.http[0]);
 
             // 2. Ensure network is correct and get provider/signer
             setStatus("Checking network...");
@@ -245,7 +254,10 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             setStatus("Waiting for confirmation...");
             await tx.wait();
 
-            const explorerUrlValue = `https://sepolia.etherscan.io/tx/${tx.hash}`;
+            const explorerUrlValue = getEvmTxExplorerUrl(depositRoute.fromNetwork, tx.hash);
+            if (!explorerUrlValue) {
+                console.warn('Missing explorer configuration, transaction link unavailable');
+            }
             setTxHash(tx.hash);
             setExplorerUrl(explorerUrlValue);
             setIsSuccess(true);
@@ -255,7 +267,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                 amount: values.amount,
                 status: 'Pending',
                 txHash: tx.hash,
-                l1ExplorerUrl: explorerUrlValue,
+                l1ExplorerUrl: explorerUrlValue || undefined,
                 symbol: asset.symbol
             });
 
@@ -366,7 +378,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-semibold tracking-tight">Deposit Transaction Submitted</h3>
                                     <p className="text-muted-foreground text-sm">
-                                        Your deposit transaction has been submitted to the Sepolia network and it is being processed
+                                        Your deposit transaction has been submitted to the {depositRoute.fromNetwork.displayName} network and it is being processed
                                     </p>
                                 </div>
                             </div>
@@ -605,14 +617,8 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
                         decimals: asset.decimals,
                         icon: asset.icon,
                     },
-                    fromNetwork: {
-                        id: 'ethereum-sepolia',
-                        displayName: 'Ethereum Sepolia',
-                        chainId: 11155111,
-                        type: 'evm' as const,
-                        icon: '/ethereum-logo.png',
-                    },
-                    toNetwork: NETWORKS.VIA_TESTNET,
+                    fromNetwork: depositRoute.fromNetwork,
+                    toNetwork: depositRoute.toNetwork,
                     recipientAddress: form.watch("recipientAddress") || "",
                 }}
             />
