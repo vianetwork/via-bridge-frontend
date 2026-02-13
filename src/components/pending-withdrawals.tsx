@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,11 +13,14 @@ import { Loader2, ExternalLink, CheckCircle2, Clock, AlertCircle } from "lucide-
 import { ethers } from "ethers";
 import { toast } from "sonner";
 import { BRIDGE_ABI } from "@/services/ethereum/abis";
-import { ensureEthereumNetwork } from "@/utils/ensure-network";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
 import { Transaction } from "@/store/wallet-store";
 import { useSwitchChain } from "wagmi";
+import { getWalletClient } from "@wagmi/core";
+import { wagmiConfig } from "@/lib/wagmi/config";
+import { clientToSigner } from "@/hooks/use-ethers-signer";
+import { getAddChainParams } from "@/lib/wagmi/chains";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { useWithdrawalReadinessStore } from "@/store/withdrawal-readiness-store";
 
@@ -55,6 +58,11 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
   const ethereumRoute = GetCurrentRoute('withdraw', 'ethereum');
   const ethereumChainId = ethereumRoute.toNetwork.chainId!;
   const ethereumChainName = ethereumRoute.toNetwork.displayName;
+
+  const addEthereumChainParameter = useMemo(
+    () => getAddChainParams(ethereumChainId),
+    [ethereumChainId]
+  );
   
   const { 
     getReadiness, 
@@ -177,13 +185,17 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
     try {
       setClaimingIds(prev => new Set(prev).add(withdrawal.nonce));
 
-      // Ensure we're on the correct Ethereum network and get signer
-      const networkResult = await ensureEthereumNetwork();
-      if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
-        throw new Error(networkResult.error || "Please switch your wallet to the correct Ethereum network manually.");
-      }
+      // Switch to correct Ethereum L1 and get signer imperatively
+      await switchChain({
+        chainId: ethereumChainId,
+        addEthereumChainParameter,
+      });
 
-      const { signer } = networkResult;
+      const walletClient = await getWalletClient(wagmiConfig, { chainId: ethereumChainId });
+      if (!walletClient) {
+        throw new Error("Wallet not ready. Connect your wallet and try again.");
+      }
+      const signer = clientToSigner(walletClient);
       
       // Use L1 vault address from API response
       const vaultAddress = withdrawal.l1Vault;
@@ -337,7 +349,10 @@ export default function PendingWithdrawals({ transactions, onClaimSuccess, open,
               onClick={async () => {
                 setIsAutoSwitching(true);
                 try {
-                  await switchChain({ chainId: ethereumChainId });
+                  await switchChain({
+                    chainId: ethereumChainId,
+                    addEthereumChainParameter,
+                  });
                   await checkL1Network();
                 } catch (error) {
                   console.error(`Error switching to ${ethereumChainName}:`, error);

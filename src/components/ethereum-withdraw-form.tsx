@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -11,14 +11,19 @@ import { toast } from "sonner";
 import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
 import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
-import { ensureViaNetwork } from "@/utils/ensure-network";
-import { ethers, getAddress, BrowserProvider } from "ethers";
+import { ethers, getAddress } from "ethers";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
-import { ERC20_ABI, VAULT_ABI } from "@/services/ethereum/abis";
+import { VAULT_ABI } from "@/services/ethereum/abis";
 import ApprovalModal from "@/components/approval-modal";
 import { getWalletDisplayMetaByRdns } from "@/utils/wallet-metadata";
 import { GetCurrentRoute } from '@/services/bridge/routes';
 import { getEvmTxExplorerUrl } from '@/services/bridge/explorer';
+import { useSwitchChain } from "wagmi";
+import { getWalletClient } from "@wagmi/core";
+import { wagmiConfig } from "@/lib/wagmi/config";
+import { clientToSigner } from "@/hooks/use-ethers-signer";
+import { getAddChainParams } from "@/lib/wagmi/chains";
+import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
 
 interface EthereumWithdrawFormProps {
     asset: typeof SUPPORTED_ASSETS[0];
@@ -71,7 +76,6 @@ const createWithdrawFormSchema = (balance: string | null, minAmount: string = "0
 export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountReset, exchangeRate, onBalanceRefresh }: EthereumWithdrawFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<string>("");
-    const [balance, setBalance] = useState<string | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [txHash, setTxHash] = useState<string | null>(null);
@@ -86,6 +90,25 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
     const walletName = walletMeta?.name || "Wallet";
 
     const withdrawRoute = useMemo(() => GetCurrentRoute('withdraw', 'ethereum'), []);
+
+    const viaChainId = withdrawRoute.fromNetwork.chainId!;
+    const { switchChainAsync } = useSwitchChain();
+    const addEthereumChainParameter = useMemo(
+        () => getAddChainParams(viaChainId),
+        [viaChainId]
+    );
+
+    // Balance via hook (replaces manual window.ethereum calls)
+    const yieldVaultAddress = asset.vaultAddresses.via.yieldBearing;
+    const normalVaultAddress = asset.vaultAddresses.via.standard;
+    const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
+    const { balance, refetch: refetchBalance } = useEthereumBalance({
+        tokenAddress: targetContract,
+        walletAddress: viaAddress,
+        decimals: asset.decimals,
+        isOnCorrectNetwork: isCorrectViaNetwork,
+        isConnected: isMetamaskConnected,
+    });
 
     const form = useForm<z.infer<ReturnType<typeof createWithdrawFormSchema>> & { _balance?: string }>({
         resolver: zodResolver(createWithdrawFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
@@ -119,75 +142,25 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
         }
     }, [balance, form]);
 
-    const isFetchingRef = useRef(false);
-    
-    // Extract contract addresses to stable references for useCallback dependency
-    const yieldVaultAddress = asset.vaultAddresses.via.yieldBearing;
-    const normalVaultAddress = asset.vaultAddresses.via.standard;
-    const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
-
-    // Fetch Balance from L2 - use stable dependencies
-    const fetchBalance = useCallback(async () => {
-        // Compute target contract from stable addresses
-        const targetContract = isYield ? yieldVaultAddress : normalVaultAddress;
-        // Need wallet address, correct network, and vault contract
-        if (!viaAddress || !isCorrectViaNetwork || !targetContract) return;
-
-        // Prevent multiple simultaneous fetches
-        if (isFetchingRef.current) return;
-        isFetchingRef.current = true;
-
-        try {
-            // Use browser wallet provider instead of RPC
-            if (typeof window === "undefined" || !window.ethereum) {
-                setBalance(null);
-                return;
-            }
-            const browserProvider = new BrowserProvider(window.ethereum);
-            const tokenContract = new ethers.Contract(targetContract, ERC20_ABI, browserProvider);
-            const bal = await tokenContract.balanceOf(viaAddress);
-            const balFormatted = ethers.formatUnits(bal, asset.decimals);
-            setBalance(balFormatted);
-        } catch (err) {
-            console.error("Error fetching L2 balance:", err);
-            setBalance(null);
-            } finally {
-                isFetchingRef.current = false;
-            }
-    }, [viaAddress, isCorrectViaNetwork, isYield, yieldVaultAddress, normalVaultAddress, asset.decimals]);
-
-    // Initial fetch and refresh on dependencies change
-    useEffect(() => {
-        fetchBalance();
-    }, [fetchBalance]);
-
-    // Refresh when tab becomes visible - use stable dependencies
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible' && viaAddress && isCorrectViaNetwork && targetContract) {
-                fetchBalance();
-            }
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-    }, [viaAddress, isCorrectViaNetwork, targetContract, fetchBalance]);
-
-
     async function onSubmit(values: z.infer<ReturnType<typeof createWithdrawFormSchema>>) {
         try {
             setIsSubmitting(true);
             setApprovalOpen(true);
             setStatus("Initializing...");
 
-            // Ensure network is correct and get provider/signer
-            setStatus("Checking network...");
-            const networkResult = await ensureViaNetwork();
-            if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
-                throw new Error(networkResult.error || "Please switch your wallet to Via Network manually.");
-            }
+            // Switch to correct network and get signer imperatively
+            setStatus("Switching network...");
+            await switchChainAsync({
+                chainId: viaChainId,
+                addEthereumChainParameter,
+            });
 
-            const { signer } = networkResult;
+            // Get signer AFTER switch completes (hook value is stale in closure)
+            const walletClient = await getWalletClient(wagmiConfig, { chainId: viaChainId });
+            if (!walletClient) {
+                throw new Error("Wallet not ready. Connect your wallet and try again.");
+            }
+            const signer = clientToSigner(walletClient);
 
             // 2. Withdraw interaction
             // Contract: L2 Vault
@@ -240,7 +213,7 @@ export default function EthereumWithdrawForm({ asset, isYield, amount, onAmountR
             }
 
             // Refresh balance after successful withdrawal (both form and parent)
-            await fetchBalance();
+            await refetchBalance();
             if (onBalanceRefresh) {
                 await onBalanceRefresh();
             }

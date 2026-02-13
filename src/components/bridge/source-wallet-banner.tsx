@@ -58,7 +58,7 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, o
                 {walletLabel} Wallet Required
               </div>
               <div className="text-xs text-slate-600">
-                Connect your {walletLabel} wallet to sign and send the transaction
+                Connect your {walletLabel} wallet
               </div>
             </div>
           </div>

@@ -1,5 +1,5 @@
-import { ethers, getAddress, BrowserProvider } from "ethers";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { ethers, getAddress } from "ethers";
+import { useState, useEffect, useMemo } from "react";
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
 import { ERC20_ABI, VAULT_ABI } from "@/services/ethereum/abis";
 import { useForm } from "react-hook-form";
@@ -10,10 +10,17 @@ import { Form, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Loader2, Wallet, AlertCircle, ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 import { SUPPORTED_ASSETS, getAssetAddress } from "@/services/ethereum/config";
-import { getViemChainById } from '@/lib/wagmi/chains';
+import {
+    getAddChainParams,
+    getViemChainById,
+} from '@/lib/wagmi/chains';
 import { useWalletStore } from "@/store/wallet-store";
 import { useWalletState } from "@/hooks/use-wallet-state";
-import { ensureEthereumNetwork } from "@/utils/ensure-network";
+import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
+import { useSwitchChain } from "wagmi";
+import { getWalletClient } from "@wagmi/core";
+import { wagmiConfig } from "@/lib/wagmi/config";
+import { clientToSigner } from "@/hooks/use-ethers-signer";
 import ApprovalModal from "@/components/approval-modal";
 import { getWalletDisplayMetaByRdns } from "@/utils/wallet-metadata";
 import { GetCurrentRoute } from '@/services/bridge/routes';
@@ -70,7 +77,6 @@ const createDepositFormSchema = (balance: string | null, minAmount: string = "0.
 export default function EthereumDepositForm({ asset, isYield, amount, onAmountReset, exchangeRate, onBalanceRefresh }: EthereumDepositFormProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [status, setStatus] = useState<string>(""); // For displaying "Approving..." or "Depositing..."
-    const [balance, setBalance] = useState<string | null>(null);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
     const [txHash, setTxHash] = useState<string | null>(null);
@@ -90,6 +96,24 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
         if (!chainId) return undefined;
         return getViemChainById(chainId);
     }, [depositRoute.fromNetwork.chainId]);
+
+    const depositChainId = depositRoute.fromNetwork.chainId!;
+    const { switchChainAsync } = useSwitchChain();
+    const addEthereumChainParameter = useMemo(
+        () => getAddChainParams(depositChainId),
+        [depositChainId]
+    );
+
+    // Balance via hook
+    const walletAddress = l1Address || viaAddress;
+    const tokenAddress = getAssetAddress(asset);
+    const { balance, refetch: refetchBalance } = useEthereumBalance({
+        tokenAddress,
+        walletAddress,
+        decimals: asset.decimals,
+        isOnCorrectNetwork: isCorrectL1Network,
+        isConnected: isMetamaskConnected || isL1Connected,
+    });
 
     const form = useForm<z.infer<ReturnType<typeof createDepositFormSchema>> & { _balance?: string }>({
         resolver: zodResolver(createDepositFormSchema(balance, asset.minAmount || "0.000001", asset.decimals)),
@@ -149,48 +173,6 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
         }
     }, [isYield, amount, exchangeRate, asset.decimals]);
 
-    // Get the address to use for balance checking (prefer l1Address, fallback to viaAddress)
-    const walletAddress = l1Address || viaAddress;
-    const isFetchingRef = useRef(false);
-    
-    // Extract token address to a stable reference for useCallback dependency
-    const tokenAddress = getAssetAddress(asset);
-
-    // Fetch Balance function - extracted to be reusable
-    const fetchBalance = useCallback(async () => {
-        // Need wallet address, correct network, and asset address
-        if (!walletAddress || !isCorrectL1Network || !tokenAddress) return;
-
-        // Prevent multiple simultaneous fetches
-        if (isFetchingRef.current) return;
-        isFetchingRef.current = true;
-
-        try {
-            // Use browser wallet provider instead of RPC
-            if (typeof window === "undefined" || !window.ethereum) {
-                setBalance(null);
-                return;
-            }
-            const browserProvider = new BrowserProvider(window.ethereum);
-            const tokenContract = new ethers.Contract(tokenAddress, ERC20_ABI, browserProvider);
-            const bal = await tokenContract.balanceOf(walletAddress);
-            const balFormatted = ethers.formatUnits(bal, asset.decimals);
-            setBalance(balFormatted);
-        } catch (err) {
-            console.error("Error fetching balance:", err);
-            setBalance(null);
-            } finally {
-                isFetchingRef.current = false;
-            }
-    }, [walletAddress, isCorrectL1Network, tokenAddress, asset.decimals]);
-
-    // Fetch Balance - use stable dependencies to prevent spam
-    useEffect(() => {
-        fetchBalance();
-        // Use stable dependencies: only wallet address, network state, asset symbol and address
-    }, [fetchBalance]);
-
-
     async function onSubmit(values: z.infer<ReturnType<typeof createDepositFormSchema>>) {
         try {
             setIsSubmitting(true);
@@ -203,14 +185,19 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             }
             const readProvider = new ethers.JsonRpcProvider(l1Chain.rpcUrls.default.http[0]);
 
-            // 2. Ensure network is correct and get provider/signer
-            setStatus("Checking network...");
-            const networkResult = await ensureEthereumNetwork();
-            if (!networkResult.success || !networkResult.provider || !networkResult.signer) {
-                throw new Error(networkResult.error || "Please switch your wallet to Sepolia network manually.");
-            }
+            // 2. Switch to correct network and get signer imperatively
+            setStatus("Switching network...");
+            await switchChainAsync({
+                chainId: depositChainId,
+                addEthereumChainParameter,
+            });
 
-            const { signer } = networkResult;
+            // Get signer AFTER switch completes (hook value is stale in closure)
+            const walletClient = await getWalletClient(wagmiConfig, { chainId: depositChainId });
+            if (!walletClient) {
+                throw new Error("Wallet not ready. Connect your wallet and try again.");
+            }
+            const signer = clientToSigner(walletClient);
 
             // 3. Determine addresses
             const tokenAddress = getAssetAddress(asset);
@@ -281,7 +268,7 @@ export default function EthereumDepositForm({ asset, isYield, amount, onAmountRe
             }
 
             // Refresh balance after successful deposit (both form and parent)
-            await fetchBalance();
+            await refetchBalance();
             if (onBalanceRefresh) {
                 await onBalanceRefresh();
             }
