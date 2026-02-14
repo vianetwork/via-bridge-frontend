@@ -287,7 +287,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           <NetworkLaneSelector route={route} onSwap={handleSwap} />
 
           {/*Source Wallet Banner - prompt user to connect the wallet they are sending FROM*/}
-          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
+          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} targetNetworkLabel={route.fromNetwork.displayName} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
 
           {/*Amount section conditionally shown if a balance is available*/}
           { balance && parseFloat(balance) > 0 && (

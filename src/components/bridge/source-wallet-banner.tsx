@@ -10,8 +10,8 @@ interface SourceWalletBannerProps {
   isConnected: boolean;
   /** Whether the source wallet is on the correct network */
   isCorrectNetwork: boolean;
-  /** Optional label for the network the source wallet should be on (e.g. "Ethereum Sepolia") */
-  targetNetworkLabel?: string;
+  /** Label for the network the source wallet should be on (e.g. "Ethereum Sepolia", "Bitcoin Testnet4") */
+  targetNetworkLabel: string;
   /** Callback to connect the source wallet */
   onConnect: () => void;
   /** Callback to switch to the correct network */
@@ -34,6 +34,7 @@ interface SourceWalletBannerProps {
  *   walletType="bitcoin"
  *   isConnected={false}
  *   isCorrectNetwork={false}
+ *   targetNetworkLabel="Bitcoin Testnet4"
  *   onConnect={handleConnect}
  *   onSwitchNetwork={handleSwitchNetwork}
  * />
@@ -77,9 +78,6 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, t
   }
 
   // Connected but wrong network state
-  const targetNetwork =
-    targetNetworkLabel ?? (walletType === "bitcoin" ? "Bitcoin network" : "VIA network");
-  
   return (
     <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300 rounded-xl px-4 py-3.5 shadow-md mb-6">
       <div className="flex items-center justify-between">
@@ -92,7 +90,7 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, t
               Wrong Network Detected
             </div>
             <div className="text-xs text-amber-700">
-              Switch to {targetNetwork} to continue
+              Switch to {targetNetworkLabel} to continue
             </div>
           </div>
         </div>
