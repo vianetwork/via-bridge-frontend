@@ -13,6 +13,9 @@ export function useWalletState() {
     async function checkConnections() {
       await walletStore.checkXverseConnection();
       await walletStore.checkMetamaskNetwork();
+      // Ethereum bridge deposit depends on isCorrectL1Network to fetch L1 token balance.
+      // Without this, users on eg., Ethereum/Sepolia already would see 0 balance until chainChanged fires.
+      await walletStore.checkL1Network();
     }
 
     checkConnections();

@@ -826,7 +826,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) return;
 
-      const route = GetCurrentRoute('withdraw', 'ethereum');
+      const route = GetCurrentRoute('deposit', 'ethereum');
       const expectedChainIdNum = route.fromNetwork.chainId;
       if (!expectedChainIdNum) {
         set({ isCorrectL1Network: false });
@@ -876,7 +876,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       // Switch to Ethereum L1 via wagmi core (keeps wagmi state in sync)
       try {
-        const route = GetCurrentRoute('withdraw', 'ethereum');
+        const route = GetCurrentRoute('deposit', 'ethereum');
         const chainId = route.fromNetwork.chainId;
         if (!chainId) throw new Error('Missing Ethereum chainId for current route');
 

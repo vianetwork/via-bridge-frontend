@@ -2,7 +2,6 @@
 "use client";
 
 import AddressFieldWithWallet from "@/components/address-field-with-wallet";
-import { Button } from "@/components/ui/button";
 
 interface WithdrawSectionProps {
   amount: string;
@@ -14,6 +13,8 @@ interface WithdrawSectionProps {
 }
 
 export function WithdrawSection({ amount, recipient, onRecipientChange, expectedReceive, onSubmit, isSubmitting }: WithdrawSectionProps) {
+  const canSubmit = !isSubmitting && !!amount && !!recipient;
+
   return (
     <div className="space-y-4">
       <AddressFieldWithWallet mode="ethereum" label="Recipient Ethereum Address" placeholder="0x..." value={recipient} onChange={onRecipientChange} />
@@ -24,7 +25,18 @@ export function WithdrawSection({ amount, recipient, onRecipientChange, expected
         </div>
       )}
 
-      <Button onClick={onSubmit} disabled={isSubmitting || !amount || !recipient}>Withdraw</Button>
+      <button
+        type="button"
+        onClick={onSubmit}
+        disabled={!canSubmit}
+        className={`w-full py-4 rounded-md font-semibold text-base transition-colors ${
+          canSubmit
+            ? "bg-blue-600 hover:bg-blue-700 text-white"
+            : "bg-slate-300 text-slate-500 cursor-not-allowed"
+        }`}
+      >
+        {isSubmitting ? "Processing..." : "Withdraw"}
+      </button>
     </div>
   );
 }

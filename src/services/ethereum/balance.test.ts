@@ -28,26 +28,14 @@ describe("getERC20Balance", () => {
   const mockTokenAddress = "0x327d741E500E11Ab69F9D1A496A0ab4F934fA463";
   const mockWalletAddress = "0x1234567890123456789012345678901234567890";
   const mockDecimals = 6;
+  const mockEIP1193Provider = { request: vi.fn() } as unknown as EIP1193Provider;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Mock window.ethereum using vi.stubGlobal
-    vi.stubGlobal("ethereum", {});
   });
 
   afterEach(() => {
-    // Restore all stubbed globals
     vi.unstubAllGlobals();
-  });
-
-  it("returns null when no ethereum provider is available", async () => {
-    // Remove ethereum provider
-    vi.stubGlobal("ethereum", undefined);
-
-    const result = await getERC20Balance(mockTokenAddress, mockWalletAddress, mockDecimals);
-
-    expect(result.balance).toBeNull();
-    expect(result.error).toBe("No ethereum provider");
   });
 
   it("returns null when no contract exists at address", async () => {
@@ -56,9 +44,9 @@ describe("getERC20Balance", () => {
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await getERC20Balance(mockTokenAddress, mockWalletAddress, mockDecimals);
+    const result = await getERC20Balance(mockEIP1193Provider, mockTokenAddress, mockWalletAddress, mockDecimals);
 
-    expect(isContractDeployed).toHaveBeenCalledWith(mockTokenAddress);
+    expect(isContractDeployed).toHaveBeenCalledWith(mockEIP1193Provider, mockTokenAddress);
     expect(result.balance).toBeNull();
     expect(result.error).toBe("Contract does not exist");
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("No contract deployed"));
@@ -84,9 +72,9 @@ describe("getERC20Balance", () => {
     );
     vi.mocked(formatUnits).mockReturnValue("1.0");
 
-    const result = await getERC20Balance(mockTokenAddress, mockWalletAddress, mockDecimals);
+    const result = await getERC20Balance(mockEIP1193Provider, mockTokenAddress, mockWalletAddress, mockDecimals);
 
-    expect(isContractDeployed).toHaveBeenCalledWith(mockTokenAddress);
+    expect(isContractDeployed).toHaveBeenCalledWith(mockEIP1193Provider, mockTokenAddress);
     expect(mockBalanceOf).toHaveBeenCalledWith(mockWalletAddress);
     expect(result.balance).toBe("1.0");
     expect(result.error).toBeNull();
@@ -114,7 +102,7 @@ describe("getERC20Balance", () => {
 
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-    const result = await getERC20Balance(mockTokenAddress, mockWalletAddress, mockDecimals);
+    const result = await getERC20Balance(mockEIP1193Provider, mockTokenAddress, mockWalletAddress, mockDecimals);
 
     expect(result.balance).toBeNull();
     expect(result.error).toBe("Contract does not implement balanceOf");
@@ -144,7 +132,7 @@ describe("getERC20Balance", () => {
 
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await getERC20Balance(mockTokenAddress, mockWalletAddress, mockDecimals);
+    const result = await getERC20Balance(mockEIP1193Provider, mockTokenAddress, mockWalletAddress, mockDecimals);
 
     expect(result.balance).toBeNull();
     expect(result.error).toBe("Network error");

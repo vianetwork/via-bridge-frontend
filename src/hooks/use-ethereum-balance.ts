@@ -1,6 +1,9 @@
 // src/hooks/use-ethereum-balance.ts
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getERC20Balance } from "@/services/ethereum/balance";
+import { getPreferredWeb3ProviderAsync } from "@/utils/ethereum-provider";
+import { eip6963Store } from "@/utils/eip6963-provider";
+import { useWalletStore } from "@/store/wallet-store";
 
 export interface EthereumBalance {
   balance: string | null;
@@ -26,6 +29,8 @@ export function useEthereumBalance({tokenAddress, walletAddress, decimals, isOnC
   const [balance, setBalance] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+
+  const selectedWalletRdns = useWalletStore((s) => s.selectedWallet);
 
   // Prevent multiple simultaneous fetches
   const isFetchingRef = useRef(false);
@@ -53,7 +58,18 @@ export function useEthereumBalance({tokenAddress, walletAddress, decimals, isOnC
     setError(null);
 
     try {
-      const result = await getERC20Balance(tokenAddress, walletAddress, decimals);
+      // Resolve the correct provider: prefer the selected wallet, fall back to preferred
+      const providerDetail = selectedWalletRdns
+        ? eip6963Store.getProviderByRdns(selectedWalletRdns)
+        : null;
+      const bestProvider = providerDetail ?? (await getPreferredWeb3ProviderAsync());
+      if (!bestProvider) {
+        setBalance(null);
+        setError(new Error("No wallet provider"));
+        return;
+      }
+
+      const result = await getERC20Balance(bestProvider.provider, tokenAddress, walletAddress, decimals);
 
       setBalance(result.balance);
 
@@ -69,7 +85,7 @@ export function useEthereumBalance({tokenAddress, walletAddress, decimals, isOnC
       setIsLoading(false);
       isFetchingRef.current = false;
     }
-  }, [tokenAddress, walletAddress, decimals, isOnCorrectNetwork, isConnected]);
+  }, [tokenAddress, walletAddress, decimals, isOnCorrectNetwork, isConnected, selectedWalletRdns]);
 
   // Fetch on mount and when dependencies change
   useEffect(() => {

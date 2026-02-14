@@ -10,6 +10,8 @@ interface SourceWalletBannerProps {
   isConnected: boolean;
   /** Whether the source wallet is on the correct network */
   isCorrectNetwork: boolean;
+  /** Optional label for the network the source wallet should be on (e.g. "Ethereum Sepolia") */
+  targetNetworkLabel?: string;
   /** Callback to connect the source wallet */
   onConnect: () => void;
   /** Callback to switch to the correct network */
@@ -37,7 +39,7 @@ interface SourceWalletBannerProps {
  * />
  * ```
  */
-export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, onConnect, onSwitchNetwork}: SourceWalletBannerProps) {
+export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, targetNetworkLabel, onConnect, onSwitchNetwork}: SourceWalletBannerProps) {
   // Don't render if the wallet is ready
   if (isConnected && isCorrectNetwork) return null;
 
@@ -75,8 +77,8 @@ export function SourceWalletBanner({walletType, isConnected, isCorrectNetwork, o
   }
 
   // Connected but wrong network state
-  // Bitcoin wallet -> needs Bitcoin network, EVM wallet -> needs VIA network
-  const targetNetwork = walletType === "bitcoin" ? "Bitcoin network" : "VIA network";
+  const targetNetwork =
+    targetNetworkLabel ?? (walletType === "bitcoin" ? "Bitcoin network" : "VIA network");
   
   return (
     <div className="bg-gradient-to-r from-amber-50 to-amber-100 border-2 border-amber-300 rounded-xl px-4 py-3.5 shadow-md mb-6">
