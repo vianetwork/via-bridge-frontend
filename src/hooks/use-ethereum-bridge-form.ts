@@ -175,10 +175,9 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     setAmount(max.toFixed(selectedAsset.decimals));
   };
 
+  // AmountSlider emits the raw token amount (0..max), not a percentage.
   const handleSliderChange = (value: number) => {
-    if (!balance) return;
-    const sliderAmount = (value / 100) * maxAmount;
-    setAmount(sliderAmount.toFixed(selectedAsset.decimals));
+    setAmount(value.toFixed(selectedAsset.decimals));
   };
 
   const submitDeposit = useCallback(async () => {
