@@ -68,7 +68,7 @@ export default function BridgeInterface() {
   }, [fetchTransactions]);
 
   return (
-    <div className="flex flex-col items-center pb-6">
+    <div className="w-full flex flex-col items-center pb-6">
       <BridgeForm/>
 
       {/*Transaction History shown when any wallet is connected*/}
