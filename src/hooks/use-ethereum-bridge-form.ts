@@ -11,6 +11,7 @@ import { getAddChainParams } from "@/lib/wagmi/chains";
 import { clientToSigner } from "@/hooks/use-ethers-signer";
 import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
 import { useWalletState } from "@/hooks/use-wallet-state";
+import { useWalletStore } from "@/store/wallet-store";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { useAaveData } from "@/hooks/use-aave-data";
 import { useVaultMetrics } from "@/hooks/use-vault-metrics";
@@ -21,6 +22,7 @@ import { parseTokenAmount } from "@/utils/token-amount";
 
 import type { BridgeMode } from "@/components/bridge/bridge-mode-tabs";
 import type { SupportedAsset } from "@/services/ethereum/config";
+import type { TransactionResult } from "@/hooks/useBridgeSubmit";
 
 export interface UseEthereumBridgeFormResult {
   mode: BridgeMode;
@@ -64,6 +66,8 @@ export interface UseEthereumBridgeFormResult {
   submitWithdraw: () => Promise<void>;
   isSubmitting: boolean;
   submitError: string | null;
+  successResult: TransactionResult | null;
+  resetSuccessResult: () => void;
 
   recipientAddress: string;
   setRecipientAddress: (value: string) => void;
@@ -85,11 +89,13 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successResult, setSuccessResult] = useState<TransactionResult | null>(null);
 
   const [isClaimModalOpen, setClaimModalOpen] = useState(false);
   const [readyWithdrawalsCount, setReadyWithdrawalsCount] = useState(0);
 
   const { isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress } = useWalletState();
+  const { addLocalTransaction } = useWalletStore();
 
   const route = useMemo(() => GetCurrentRoute(mode, "ethereum"), [mode]);
   const targetChainId = route.fromNetwork.chainId!;
@@ -199,7 +205,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
       if (!walletClient) throw new Error("Wallet not ready");
       const signer = clientToSigner(walletClient);
 
-      await executeEthereumDeposit({
+      const result = await executeEthereumDeposit({
         asset: selectedAsset,
         amount,
         recipientViaAddress: recipientAddress,
@@ -207,7 +213,31 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
         signer,
       });
 
-      setAmount("");
+      const explorerUrl = result.l1ExplorerUrl
+        ?? (route.fromNetwork.blockExplorerUrl
+          ? `${route.fromNetwork.blockExplorerUrl.replace(/\/+$/, "")}/tx/${result.txHash}`
+          : "#");
+
+      addLocalTransaction({
+        type: "deposit",
+        amount,
+        status: "Pending",
+        txHash: result.txHash,
+        l1ExplorerUrl: explorerUrl === "#" ? undefined : explorerUrl,
+        symbol: selectedAsset.symbol,
+      });
+
+      setSuccessResult({
+        txHash: result.txHash,
+        explorerUrl,
+        type: "deposit",
+        amount,
+        tokenSymbol: selectedAsset.symbol,
+        sourceNetworkName: route.fromNetwork.displayName,
+        destinationNetworkName: route.toNetwork.displayName,
+      });
+
+      toast.success("Deposit submitted", { description: `Transaction: ${result.txHash}` });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Deposit failed";
       setSubmitError(message);
@@ -216,7 +246,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     } finally {
        setIsSubmitting(false);
     }
-  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError]);
+  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError, route, addLocalTransaction]);
 
   const submitWithdraw = useCallback(async () => {
     setIsSubmitting(true);
@@ -235,7 +265,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
       if (!walletClient) throw new Error("Wallet not ready");
       const signer = clientToSigner(walletClient);
 
-      await executeEthereumWithdraw({
+      const result = await executeEthereumWithdraw({
         asset: selectedAsset,
         amount,
         recipientEthereumAddress: recipientAddress,
@@ -243,7 +273,31 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
         signer,
       });
 
-      setAmount("");
+      const explorerUrl = result.l1ExplorerUrl
+        ?? (route.fromNetwork.blockExplorerUrl
+          ? `${route.fromNetwork.blockExplorerUrl.replace(/\/+$/, "")}/tx/${result.txHash}`
+          : "#");
+
+      addLocalTransaction({
+        type: "withdraw",
+        amount,
+        status: "Pending",
+        txHash: result.txHash,
+        l2ExplorerUrl: explorerUrl === "#" ? undefined : explorerUrl,
+        symbol: selectedAsset.symbol,
+      });
+
+      setSuccessResult({
+        txHash: result.txHash,
+        explorerUrl,
+        type: "withdraw",
+        amount,
+        tokenSymbol: selectedAsset.symbol,
+        sourceNetworkName: route.fromNetwork.displayName,
+        destinationNetworkName: route.toNetwork.displayName,
+      });
+
+      toast.success("Withdrawal submitted!", { description: `Transaction: ${result.txHash}` });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Withdraw failed";
       setSubmitError(message);
@@ -252,7 +306,14 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     } finally {
       setIsSubmitting(false);
     }
-  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError]);
+  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError, route, addLocalTransaction]);
+
+  const resetSuccessResult = useCallback(() => {
+    setSuccessResult(null);
+    setAmount("");
+    setRecipientAddress("");
+    setSubmitError(null);
+  }, []);
 
   const toggleMode = () => {
     setMode(mode === "deposit" ? "withdraw" : "deposit");
@@ -294,6 +355,8 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     submitWithdraw,
     isSubmitting,
     submitError,
+    successResult,
+    resetSuccessResult,
     recipientAddress,
     setRecipientAddress,
     isClaimModalOpen,

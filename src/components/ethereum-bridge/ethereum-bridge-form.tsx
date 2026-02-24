@@ -11,6 +11,7 @@ import {
   AvailableBalanceDisplay,
   AmountSlider,
   SourceWalletBanner,
+  TransactionSuccessDialog,
 } from "@/components/bridge";
 import { TransactionHistory } from "@/components/transaction-history";
 import { Button } from "@/components/ui/button";
@@ -122,6 +123,10 @@ export function EthereumBridgeForm() {
     return { amountDisplay, receiveAmount: conversion.outputAmount, receiveUnit, showConversion: true };
   }, [form.inputAmount, form.isYieldEnabled, form.vaultMetrics.exchangeRate, form.selectedAsset, form.mode]);
 
+  const handleResetSuccess = () => {
+    form.resetSuccessResult();
+  };
+
   return (
     <div className="w-full flex justify-center py-8 px-4">
       <div className="w-full max-w-4xl">
@@ -189,6 +194,13 @@ export function EthereumBridgeForm() {
               )}
             </div>
           </form>
+
+          <TransactionSuccessDialog
+            open={form.successResult !== null}
+            onOpenChange={(open) => !open && handleResetSuccess()}
+            result={form.successResult}
+            onReset={handleResetSuccess}
+          />
         </div>
       </div>
 

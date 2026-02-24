@@ -16,6 +16,10 @@ export interface TransactionResult {
   amount: string;
   /** Token symbol (e.g., "BTC", "USDC", "USDT") - supports future multi-asset bridging */
   tokenSymbol: string;
+  /** Source network display name (e.g., "Bitcoin Mainnet", "Via Network", "Ethereum Sepolia") */
+  sourceNetworkName?: string;
+  /** Destination network display name (e.g., "Via Network", "Bitcoin Testnet4", "Ethereum Sepolia") */
+  destinationNetworkName?: string;
 }
 
 /**
@@ -121,6 +125,8 @@ export function useBridgeSubmit(): UseBridgeSubmitResult {
           type: "deposit",
           amount,
           tokenSymbol: route.token.symbol,
+          sourceNetworkName: route.fromNetwork.displayName,
+          destinationNetworkName: route.toNetwork.displayName,
         });
 
         toast.success("Deposit submitted", { description: `Transaction: ${result.txId}` });
@@ -150,6 +156,8 @@ export function useBridgeSubmit(): UseBridgeSubmitResult {
             type: "withdraw",
             amount,
             tokenSymbol: route.token.symbol,
+            sourceNetworkName: route.fromNetwork.displayName,
+            destinationNetworkName: route.toNetwork.displayName,
           });
 
           toast.success("Withdrawal submitted!", { description: `Transaction: ${result.txHash}` });
