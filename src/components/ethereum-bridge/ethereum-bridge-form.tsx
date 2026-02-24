@@ -7,6 +7,7 @@ import {
   BridgeModeTabs,
   NetworkLaneSelector,
   TransferAmountInput,
+  TransactionSummaryCard,
   AvailableBalanceDisplay,
   AmountSlider,
   SourceWalletBanner,
@@ -32,18 +33,23 @@ const WalletsSelectorContainer = dynamic(() => import("@/components/wallets/sele
 
 export function EthereumBridgeForm() {
   const form = useEthereumBridgeForm();
-  const { ethTransactions, isLoadingTransactions, fetchEthTransactions } = useWalletStore();
+  const {ethTransactions, isLoadingTransactions, fetchEthTransactions} = useWalletStore();
   const [showTransactions, setShowTransactions] = useState(false);
   const [showEvmWalletSelector, setShowEvmWalletSelector] = useState(false);
 
-  const { isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress } = useWalletState();
+  const {isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress} = useWalletState();
 
   // Derive whether the source wallet is connected and on the correct source chain for the current mode.
   // e.g. { isConnected: true, isCorrectNetwork: true, isReady: true, networkLabel: "Sepolia" }
   const sourceWalletStatus = useMemo(() => {
     const isConnected = isMetamaskConnected && !!(l1Address || viaAddress);
     const isCorrectNetwork = form.mode === "deposit" ? isCorrectL1Network : isCorrectViaNetwork;
-    return { isConnected, isCorrectNetwork, isReady: isConnected && isCorrectNetwork, networkLabel: form.route.fromNetwork.displayName };
+    return {
+      isConnected,
+      isCorrectNetwork,
+      isReady: isConnected && isCorrectNetwork,
+      networkLabel: form.route.fromNetwork.displayName
+    };
   }, [isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress, form.mode, form.route.fromNetwork.displayName]);
 
   // Vault exchange rate for display (kept in UI layer).
@@ -79,6 +85,42 @@ export function EthereumBridgeForm() {
 
     return `${expected.outputAmount} ${form.selectedAsset.symbol}`;
   }, [form.mode, form.isYieldEnabled, form.inputAmount, form.vaultMetrics.exchangeRate, form.selectedAsset]);
+
+  // Transaction summary: always returns an object so the card renders unconditionally.
+  const summaryState = useMemo(() => {
+    const decimals = form.selectedAsset.decimals;
+    const underlyingSymbol = form.selectedAsset.symbol;
+    const vaultSymbol = form.selectedAsset.l2ValueSymbol || `v${underlyingSymbol}`;
+    const input = form.inputAmount;
+    const hasAmount = input > 0;
+    const emptyAmountDisplay = (0).toFixed(decimals);
+    const amountDisplay = hasAmount ? input.toFixed(decimals) : emptyAmountDisplay;
+
+    // Standard (no yield): send and receive are the same token and amount.
+    if (!form.isYieldEnabled) {
+      return { amountDisplay, receiveAmount: amountDisplay, receiveUnit: underlyingSymbol, showConversion: false };
+    }
+
+    const receiveUnit = form.mode === "deposit" ? vaultSymbol : underlyingSymbol;
+
+    // No amount entered yet - show zeroes.
+    if (!hasAmount) {
+      return { amountDisplay, receiveAmount: emptyAmountDisplay, receiveUnit, showConversion: false };
+    }
+
+    // Yield enabled but exchange rate not loaded yet.
+    const exchangeRate = form.vaultMetrics.exchangeRate;
+    if (!exchangeRate) {
+      return { amountDisplay, receiveAmount: "...", receiveUnit, showConversion: false };
+    }
+
+    const conversion = calculateVaultConversion(input, exchangeRate, form.mode, decimals);
+    if (!conversion) {
+      return { amountDisplay, receiveAmount: "...", receiveUnit, showConversion: false };
+    }
+
+    return { amountDisplay, receiveAmount: conversion.outputAmount, receiveUnit, showConversion: true };
+  }, [form.inputAmount, form.isYieldEnabled, form.vaultMetrics.exchangeRate, form.selectedAsset, form.mode]);
 
   return (
     <div className="w-full flex justify-center py-8 px-4">
@@ -116,6 +158,10 @@ export function EthereumBridgeForm() {
                 <AmountSlider value={form.inputAmount} max={form.maxAmount} onChange={form.handleSliderChange} unit={form.amountUnit} decimals={form.selectedAsset.decimals} />
               </div>
             )}
+
+            <div className="mb-6">
+              <TransactionSummaryCard amount={summaryState.amountDisplay} fee="Estimated in wallet" netReceive={summaryState.receiveAmount} unit={form.amountUnit} netReceiveUnit={summaryState.receiveUnit} showConversion={summaryState.showConversion} />
+            </div>
 
             {form.mode === "deposit" ? (
               <DepositSection amount={form.amount} recipient={form.recipientAddress} onRecipientChange={form.setRecipientAddress} onSubmit={form.submitDeposit} isSubmitting={form.isSubmitting} error={form.submitError} />
