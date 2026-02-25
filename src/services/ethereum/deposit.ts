@@ -7,6 +7,7 @@ import {
 } from "@/services/ethereum/config";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { getEvmTxExplorerUrl } from "@/services/bridge/explorer";
+import { abortablePromise } from "@/utils/promise";
 
 /** Input payload for an Ethereum to VIA deposit. */
 export interface ExecuteEthereumDepositParams {
@@ -15,6 +16,7 @@ export interface ExecuteEthereumDepositParams {
   recipientViaAddress: string;
   isYield: boolean;
   signer: ethers.JsonRpcSigner;
+  signal?: AbortSignal;
 }
 
 /** Minimal response for tracking the deposit on L1. */
@@ -32,7 +34,7 @@ export interface ExecuteEthereumDepositResponse {
  * @throws {Error} If the asset is unsupported (missing token or vault address)
  */
 export async function executeEthereumDeposit(params: ExecuteEthereumDepositParams): Promise<ExecuteEthereumDepositResponse> {
-  const { asset, amount, recipientViaAddress, isYield, signer } = params;
+  const { asset, amount, recipientViaAddress, isYield, signer, signal } = params;
 
   const route = GetCurrentRoute("deposit", "ethereum");
 
@@ -55,13 +57,13 @@ export async function executeEthereumDeposit(params: ExecuteEthereumDepositParam
 
   // Approve only when the current allowance is insufficient.
   if (allowance < amountBN) {
-    const approveTx = await tokenRead.approve(vaultAddress, amountBN);
-    await approveTx.wait();
+    const approveTx = await abortablePromise(tokenRead.approve(vaultAddress, amountBN), signal);
+    await abortablePromise(approveTx.wait(), signal);
   }
 
   const vault = new ethers.Contract(vaultAddress, VAULT_ABI, signer);
-  const tx = await vault.depositWithBridge(amountBN, recipientViaAddress);
-  await tx.wait();
+  const tx = await abortablePromise(vault.depositWithBridge(amountBN, recipientViaAddress), signal);
+  await abortablePromise(tx.wait(), signal);
 
   return {
     txHash: tx.hash,

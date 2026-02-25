@@ -1,7 +1,7 @@
 // src/hooks/use-ethereum-bridge-form.ts
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useChainId, useSwitchChain } from "wagmi";
 import { toast } from "sonner";
 import { getWalletClient } from "@wagmi/core";
@@ -19,10 +19,30 @@ import { useEthereumBalance } from "@/hooks/use-ethereum-balance";
 import { executeEthereumDeposit } from "@/services/ethereum/deposit";
 import { executeEthereumWithdraw } from "@/services/ethereum/withdraw";
 import { parseTokenAmount } from "@/utils/token-amount";
+import { isAbortError } from "@/utils/promise";
 
 import type { BridgeMode } from "@/components/bridge/bridge-mode-tabs";
 import type { SupportedAsset } from "@/services/ethereum/config";
 import type { TransactionResult } from "@/hooks/useBridgeSubmit";
+
+type EthereumSubmitOperation = "deposit" | "withdraw";
+
+function handleEthereumBridgeSubmitError(
+  error: unknown,
+  operation: EthereumSubmitOperation,
+  setSubmitError: (message: string) => void
+): boolean {
+  if (isAbortError(error)) {
+    toast.info("Transfer cancelled");
+    return false;
+  }
+
+  const title = operation === "deposit" ? "Deposit failed" : "Withdraw failed";
+  const message = error instanceof Error ? error.message : title;
+  setSubmitError(message);
+  toast.error(title, { description: message });
+  return true;
+}
 
 export interface UseEthereumBridgeFormResult {
   mode: BridgeMode;
@@ -64,7 +84,10 @@ export interface UseEthereumBridgeFormResult {
 
   submitDeposit: () => Promise<void>;
   submitWithdraw: () => Promise<void>;
+  cancelSubmit: () => void;
   isSubmitting: boolean;
+  approvalOpen: boolean;
+  setApprovalOpen: (open: boolean) => void;
   submitError: string | null;
   successResult: TransactionResult | null;
   resetSuccessResult: () => void;
@@ -88,8 +111,10 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
   const [recipientAddress, setRecipientAddress] = useState("");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [approvalOpen, setApprovalOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successResult, setSuccessResult] = useState<TransactionResult | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const [isClaimModalOpen, setClaimModalOpen] = useState(false);
   const [readyWithdrawalsCount, setReadyWithdrawalsCount] = useState(0);
@@ -202,11 +227,15 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
   }, [isAmountValid, amountError, ensureOnSourceNetwork, targetChainId]);
 
   const submitDeposit = useCallback(async () => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
       const signer = await prepareSubmissionSigner();
       if (!signer) return;
+
+      setApprovalOpen(true);
 
       const result = await executeEthereumDeposit({
         asset: selectedAsset,
@@ -214,6 +243,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
         recipientViaAddress: recipientAddress,
         isYield: isYieldEnabled,
         signer,
+        signal: controller.signal,
       });
 
       const explorerUrl = result.l1ExplorerUrl
@@ -242,21 +272,28 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
 
       toast.success("Deposit submitted", { description: `Transaction: ${result.txHash}` });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Deposit failed";
-      setSubmitError(message);
-      toast.error("Deposit failed", { description: message });
+      const shouldRethrow = handleEthereumBridgeSubmitError(error, "deposit", setSubmitError);
+      if (!shouldRethrow) return;
       throw error;
     } finally {
-       setIsSubmitting(false);
+      setIsSubmitting(false);
+      setApprovalOpen(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   }, [prepareSubmissionSigner, selectedAsset, amount, recipientAddress, isYieldEnabled, route, addLocalTransaction]);
 
   const submitWithdraw = useCallback(async () => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsSubmitting(true);
     setSubmitError(null);
     try {
       const signer = await prepareSubmissionSigner();
       if (!signer) return;
+
+      setApprovalOpen(true);
 
       const result = await executeEthereumWithdraw({
         asset: selectedAsset,
@@ -264,6 +301,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
         recipientEthereumAddress: recipientAddress,
         isYield: isYieldEnabled,
         signer,
+        signal: controller.signal,
       });
 
       const explorerUrl = result.l1ExplorerUrl
@@ -292,14 +330,22 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
 
       toast.success("Withdrawal submitted!", { description: `Transaction: ${result.txHash}` });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Withdraw failed";
-      setSubmitError(message);
-      toast.error("Withdraw failed", { description: message });
+      const shouldRethrow = handleEthereumBridgeSubmitError(error, "withdraw", setSubmitError);
+      if (!shouldRethrow) return;
       throw error;
     } finally {
       setIsSubmitting(false);
+      setApprovalOpen(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+      }
     }
   }, [prepareSubmissionSigner, selectedAsset, amount, recipientAddress, isYieldEnabled, route, addLocalTransaction]);
+
+  const cancelSubmit = useCallback(() => {
+    abortControllerRef.current?.abort();
+    setApprovalOpen(false);
+  }, []);
 
   const resetSuccessResult = useCallback(() => {
     setSuccessResult(null);
@@ -346,7 +392,10 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     isLoadingVaultMetrics,
     submitDeposit,
     submitWithdraw,
+    cancelSubmit,
     isSubmitting,
+    approvalOpen,
+    setApprovalOpen,
     submitError,
     successResult,
     resetSuccessResult,

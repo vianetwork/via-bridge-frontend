@@ -309,7 +309,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
 
           {/*Transaction Summary*/}
           <div className="mb-8">
-            <TransactionSummaryCard amount={amount} fee={`${storeFeeEstimation?.fee ?? 0} sats`} netReceive={(netReceive / 100_000_000).toFixed(8)} unit={unit}/>
+            <TransactionSummaryCard amount={amount} fee={`${storeFeeEstimation?.fee ?? 0} sats`} feeKind="viaVerifier" netReceive={(netReceive / 100_000_000).toFixed(8)} unit={unit}/>
           </div>
 
           {/*Recipient Address*/}
@@ -330,6 +330,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           toNetwork: route.toNetwork,
           recipientAddress,
           networkFee: storeFeeEstimation ? `${storeFeeEstimation.fee.toLocaleString()} sats` : undefined,
+          networkFeeKind: "viaVerifier",
         }}
         />
 
