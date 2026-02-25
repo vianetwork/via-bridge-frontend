@@ -3,6 +3,7 @@
 
 import { useMemo, useState } from "react";
 import dynamic from "next/dynamic";
+import ApprovalModal from "@/components/approval-modal";
 import {
   BridgeModeTabs,
   NetworkLaneSelector,
@@ -24,7 +25,10 @@ import { ClaimSection } from "@/components/ethereum-bridge/sections/claim-sectio
 import { useEthereumBridgeForm } from "@/hooks/use-ethereum-bridge-form";
 import { useWalletState } from "@/hooks/use-wallet-state";
 import { useWalletStore } from "@/store/wallet-store";
+import { TOKENS } from "@/services/bridge/tokens";
 import { calculateVaultConversion, formatVaultRate } from "@/utils/vault-conversion";
+import { getWalletMetadataByRdns } from "@/utils/wallet-metadata";
+import type { TokenInfo } from "@/services/bridge/types";
 
 // Dynamic import to avoid SSR issues: the wallet selector relies on browser-only APIs
 // (injected providers / window access) and can crash during server rendering.
@@ -34,11 +38,12 @@ const WalletsSelectorContainer = dynamic(() => import("@/components/wallets/sele
 
 export function EthereumBridgeForm() {
   const form = useEthereumBridgeForm();
-  const {ethTransactions, isLoadingTransactions, fetchEthTransactions} = useWalletStore();
+  const { ethTransactions, isLoadingTransactions, fetchEthTransactions, selectedWallet } = useWalletStore();
   const [showTransactions, setShowTransactions] = useState(false);
   const [showEvmWalletSelector, setShowEvmWalletSelector] = useState(false);
 
-  const {isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress} = useWalletState();
+  const { isMetamaskConnected, isCorrectL1Network, isCorrectViaNetwork, l1Address, viaAddress } = useWalletState();
+  const walletName = getWalletMetadataByRdns(selectedWallet ?? undefined)?.name ?? "Wallet";
 
   // Derive whether the source wallet is connected and on the correct source chain for the current mode.
   // e.g. { isConnected: true, isCorrectNetwork: true, isReady: true, networkLabel: "Sepolia" }
@@ -123,6 +128,39 @@ export function EthereumBridgeForm() {
     return { amountDisplay, receiveAmount: conversion.outputAmount, receiveUnit, showConversion: true };
   }, [form.inputAmount, form.isYieldEnabled, form.vaultMetrics.exchangeRate, form.selectedAsset, form.mode]);
 
+  const approvalTransactionData = useMemo(() => {
+    const fallbackUnderlyingToken: TokenInfo = {
+      symbol: form.selectedAsset.symbol,
+      name: form.selectedAsset.symbol,
+      decimals: form.selectedAsset.decimals,
+      icon: form.selectedAsset.icon,
+    };
+
+    const underlyingToken = TOKENS[form.selectedAsset.symbol] ?? fallbackUnderlyingToken;
+    const vaultSymbol = form.selectedAsset.l2ValueSymbol || `v${form.selectedAsset.symbol}`;
+    const vaultToken: TokenInfo = {
+      symbol: vaultSymbol,
+      name: vaultSymbol,
+      decimals: form.selectedAsset.decimals,
+      icon: underlyingToken.icon,
+    };
+
+    const fromToken = form.isYieldEnabled && form.mode === "withdraw" ? vaultToken : underlyingToken;
+    const toToken = form.isYieldEnabled && form.mode === "deposit" ? vaultToken : underlyingToken;
+
+    return {
+      fromAmount: summaryState.amountDisplay,
+      toAmount: summaryState.receiveAmount,
+      fromToken,
+      toToken,
+      fromNetwork: form.route.fromNetwork,
+      toNetwork: form.route.toNetwork,
+      recipientAddress: form.recipientAddress || undefined,
+      networkFee: "Estimated in wallet",
+      networkFeeKind: "networkGas" as const,
+    };
+  }, [form.selectedAsset, form.isYieldEnabled, form.mode, form.route, form.recipientAddress, summaryState]);
+
   const handleResetSuccess = () => {
     form.resetSuccessResult();
   };
@@ -165,7 +203,7 @@ export function EthereumBridgeForm() {
             )}
 
             <div className="mb-6">
-              <TransactionSummaryCard amount={summaryState.amountDisplay} fee="Estimated in wallet" netReceive={summaryState.receiveAmount} unit={form.amountUnit} netReceiveUnit={summaryState.receiveUnit} showConversion={summaryState.showConversion} />
+              <TransactionSummaryCard amount={summaryState.amountDisplay} fee="Estimated in wallet" feeKind="networkGas" netReceive={summaryState.receiveAmount} unit={form.amountUnit} netReceiveUnit={summaryState.receiveUnit} showConversion={summaryState.showConversion} />
             </div>
 
             {form.mode === "deposit" ? (
@@ -200,6 +238,16 @@ export function EthereumBridgeForm() {
             onOpenChange={(open) => !open && handleResetSuccess()}
             result={form.successResult}
             onReset={handleResetSuccess}
+          />
+
+          <ApprovalModal
+            open={form.approvalOpen}
+            onOpenChange={form.setApprovalOpen}
+            onCancel={form.cancelSubmit}
+            direction={form.mode}
+            title="Waiting for Approval"
+            walletName={walletName}
+            transactionData={approvalTransactionData}
           />
         </div>
       </div>

@@ -5,6 +5,7 @@ import type { SupportedAsset } from "@/services/ethereum/config";
 import { GetCurrentRoute } from "@/services/bridge/routes";
 import { getEvmTxExplorerUrl } from "@/services/bridge/explorer";
 import {ethers} from "ethers";
+import { abortablePromise } from "@/utils/promise";
 
 export interface ExecuteEthereumWithdrawParams {
   asset: SupportedAsset;
@@ -12,6 +13,7 @@ export interface ExecuteEthereumWithdrawParams {
   recipientEthereumAddress: string;
   isYield: boolean;
   signer: ethers.JsonRpcSigner;
+  signal?: AbortSignal;
 }
 
 export interface ExecuteEthereumWithdrawResult {
@@ -25,7 +27,7 @@ export interface ExecuteEthereumWithdrawResult {
  * @throws {Error} If the vault address is missing for the asset
  */
 export async function executeEthereumWithdraw(params: ExecuteEthereumWithdrawParams): Promise<ExecuteEthereumWithdrawResult> {
-  const { asset, amount, recipientEthereumAddress, isYield, signer } = params;
+  const { asset, amount, recipientEthereumAddress, isYield, signer, signal } = params;
 
   const route = GetCurrentRoute("withdraw", "ethereum");
 
@@ -40,8 +42,8 @@ export async function executeEthereumWithdraw(params: ExecuteEthereumWithdrawPar
   const amountBN = ethers.parseUnits(amountStr, decimals);
 
   const vault = new ethers.Contract(vaultAddress, VAULT_ABI, signer);
-  const tx = await vault.withdraw(amountBN, recipientEthereumAddress);
-  await tx.wait();
+  const tx = await abortablePromise(vault.withdraw(amountBN, recipientEthereumAddress), signal);
+  await abortablePromise(tx.wait(), signal);
 
   return {
     txHash: tx.hash,

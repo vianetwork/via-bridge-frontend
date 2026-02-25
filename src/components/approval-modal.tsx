@@ -4,6 +4,7 @@ import React, { useMemo, useId, useRef } from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import {NetworkInfo, TokenInfo} from "@/services/bridge/types";
 import { TransactionSummaryCard } from "@/components/bridge/transaction-summary-card";
+import type { TransactionFeeKind } from "@/components/bridge/transaction-summary-card";
 import Image from "next/image";
 
 export type ApprovalTransactionData = {
@@ -17,6 +18,7 @@ export type ApprovalTransactionData = {
   bridgeFee?: string;
   estimatedTime?: string;
   networkFee?: string;
+  networkFeeKind?: TransactionFeeKind;
 };
 
 type Props = {
@@ -80,14 +82,18 @@ export default function ApprovalModal({
   // Format fee display - show "sats" for BTC, otherwise show token symbol or "ETH" for gas
   const formatFee = (fee: string | undefined) => {
     if (!fee) return isBitcoin ? "0 sats" : "0";
+
+    // Ethereum bridge: keep gas placeholder text unchanged.
+    if (transactionData?.networkFeeKind === "networkGas" && fee === "Estimated in wallet") return fee;
+
+    const feeLower = fee.toLowerCase();
+
     // If fee already contains units, return as is
-    if (fee.toLowerCase().includes("sat") || fee.toLowerCase().includes("eth") || fee.toLowerCase().includes("usdc") || fee.toLowerCase().includes("usdt")) {
-      return fee;
-    }
+    if (feeLower.includes("sat") || feeLower.includes("eth") || feeLower.includes("usdc") || feeLower.includes("usdt")) return fee;
+
     // For Bitcoin, default to sats
-    if (isBitcoin) {
-      return `${fee} sats`;
-    }
+    if (isBitcoin) return `${fee} sats`;
+
     // For Ethereum tokens, show as token amount
     const tokenSymbol = transactionData?.fromToken.symbol || "ETH";
     return `${fee} ${tokenSymbol}`;
@@ -97,11 +103,8 @@ export default function ApprovalModal({
   const overlayClass = overlay === "dim" ? "bg-black/80" : "bg-transparent";
 
   const handleCancel = () => {
-    if (onCancel) {
-      onCancel();
-    } else {
-      onOpenChange(false);
-    }
+    if (onCancel) return onCancel();
+    onOpenChange(false);
   };
 
   return (
@@ -149,13 +152,7 @@ export default function ApprovalModal({
                       {isBitcoin ? (
                         <span className="text-lg font-bold text-slate-900">₿</span>
                       ) : transactionData?.fromToken.icon && transactionData.fromToken.icon.startsWith('/') ? (
-                        <Image 
-                          src={transactionData.fromToken.icon} 
-                          alt={transactionData.fromToken.symbol} 
-                          width={48} 
-                          height={48} 
-                          className="w-full h-full object-contain" 
-                        />
+                        <Image src={transactionData.fromToken.icon} alt={transactionData.fromToken.symbol} width={48} height={48} className="w-full h-full object-contain" />
                       ) : (
                         <span className="text-lg font-bold text-slate-900">{transactionData?.fromToken.symbol?.charAt(0) || "?"}</span>
                       )}
@@ -183,13 +180,7 @@ export default function ApprovalModal({
                       {isBitcoin ? (
                         <span className="text-base font-bold text-slate-900">₿</span>
                       ) : transactionData?.toToken.icon && transactionData.toToken.icon.startsWith('/') ? (
-                        <Image 
-                          src={transactionData.toToken.icon} 
-                          alt={transactionData.toToken.symbol} 
-                          width={48} 
-                          height={48} 
-                          className="w-full h-full object-contain" 
-                        />
+                        <Image src={transactionData.toToken.icon} alt={transactionData.toToken.symbol} width={48} height={48} className="w-full h-full object-contain"/>
                       ) : (
                         <span className="text-base font-bold text-slate-900">{transactionData?.toToken.symbol?.charAt(0) || "?"}</span>
                       )}
@@ -207,6 +198,7 @@ export default function ApprovalModal({
                 <TransactionSummaryCard
                   amount={transactionData?.fromAmount || "0"}
                   fee={formatFee(transactionData?.networkFee) || (isBitcoin ? "0 sats" : "0")}
+                  feeKind={transactionData?.networkFeeKind || "viaVerifier"}
                   netReceive={transactionData?.toAmount || "0"}
                   unit={transactionData?.fromToken.symbol || (isBitcoin ? "BTC" : "ETH")}
                   netReceiveUnit={transactionData?.toToken.symbol || (isBitcoin ? "BTC" : "ETH")}

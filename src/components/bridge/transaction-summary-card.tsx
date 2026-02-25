@@ -3,11 +3,15 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 
+export type TransactionFeeKind = "networkGas" | "viaVerifier";
+
 interface TransactionSummaryCardProps {
   /** Transfer amount as string (e.g., "0.00064965") */
   amount: string;
   /** Network fee as string (e.g., "100 sats") */
   fee: string;
+  /** Fee category used to render helper copy under the fee label */
+  feeKind?: TransactionFeeKind;
   /** Net amount to receive as string (e.g., "0.00064865") */
   netReceive: string;
   /** Unit to display for transfer amount (e.g, "BTC", "USDC", "vUSDC" */
@@ -35,8 +39,9 @@ interface TransactionSummaryCardProps {
  * <TransactionSummaryCard amount="0.00064965" fee={100} netReceive={0.00064865} unit="BTC" />
  * ```
  */
-export function TransactionSummaryCard({amount, fee, netReceive, unit, netReceiveUnit, showConversion, conversionRate, className} : TransactionSummaryCardProps) {
+export function TransactionSummaryCard({amount, fee, feeKind = "viaVerifier", netReceive, unit, netReceiveUnit, showConversion, conversionRate, className} : TransactionSummaryCardProps) {
   const receiveUnit = netReceiveUnit || unit;
+  const feeDescription = feeKind === "networkGas" ? "Estimated gas fee for the network transaction" : "Required for processing on the Via Verifier Network";
   
   // Calculate conversion rate if not provided but conversion should be shown
   const calculatedRate = useMemo(() => {
@@ -87,9 +92,7 @@ export function TransactionSummaryCard({amount, fee, netReceive, unit, netReceiv
             <div className="text-sm font-medium text-slate-900">
               Network fee
             </div>
-            <div className="text-xs text-slate-500 mt-0.5">
-              Required for processing on the Via Verifier Network
-            </div>
+            <div className="text-xs text-slate-500 mt-0.5">{feeDescription}</div>
           </div>
           <div className="text-base font-semibold text-slate-900 tabular-nums">
             {fee}

@@ -39,7 +39,7 @@ export const TOKENS: Record<string, TokenInfo> = {
     symbol: 'USDC',
     name: 'USD Coin',
     decimals: 6,
-    icon: '/usdc.svg',
+    icon: '/usdc-logo.png',
     contractAddress: '0x...', // Contract addresses are network-specific and stored in routes or ethereum/config.ts but it should be here
   },
   // TODO uncomment when USDT is available on Via
@@ -47,6 +47,6 @@ export const TOKENS: Record<string, TokenInfo> = {
   //   symbol: 'USDT',
   //   name: 'Tether USD',
   //   decimals: 6,
-  //   icon: '/usdt.svg',
+  //   icon: '/usdt-logo.png',
   // }
 };
