@@ -105,7 +105,7 @@ export default function DepositForm({ bitcoinAddress, bitcoinPublicKey, onTransa
   const [approvalOpen, setApprovalOpen] = useState(false);
 
   // Get the current bridge route configuration
-  const bridgeRoute  = GetCurrentRoute('deposit', BRIDGE_CONFIG.defaultNetwork);
+  const bridgeRoute  = GetCurrentRoute('deposit');
   const { fromNetwork, toNetwork, token } = bridgeRoute;
 
   // Calculate net BTC amount after fee estimation

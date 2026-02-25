@@ -4,6 +4,8 @@ import { ethers } from "ethers";
 import { TransactionStatus } from "@/store/wallet-store";
 import { API_BASE_URL, API_CONFIG, BRIDGE_CONFIG, getNetworkConfig } from "../config";
 import { computeWithdrawalPayloadHash } from "@/utils/payload-hash";
+import { GetCurrentRoute } from '@/services/bridge/routes';
+import { getEvmTxExplorerUrl } from '@/services/bridge/explorer';
 
 // Define types for the API response
 interface Deposit {
@@ -181,6 +183,9 @@ export async function fetchEthUserTransactions(
 export function mapEthApiTransactionsToAppFormat(data: EthTransactionsResponseData) {
   const { deposits, withdrawals } = data;
 
+  const ethDepositRoute = GetCurrentRoute('deposit', 'ethereum');
+  const ethWithdrawRoute = GetCurrentRoute('withdraw', 'ethereum');
+
   const mappedDeposits = deposits.map(item => {
     const deposit = item.l1_deposit;
     const execution = item.l2_execution;
@@ -199,9 +204,11 @@ export function mapEthApiTransactionsToAppFormat(data: EthTransactionsResponseDa
       status: status,
       timestamp: parseInt(deposit.block_timestamp) * 1000,
       txHash: deposit.transaction_hash,
-      l1ExplorerUrl: `https://sepolia.etherscan.io/tx/${deposit.transaction_hash}`,
+      l1ExplorerUrl: getEvmTxExplorerUrl(ethDepositRoute.fromNetwork, deposit.transaction_hash) ?? undefined,
       l2TxHash: execution?.transaction_hash,
-      l2ExplorerUrl: execution?.transaction_hash ? new URL(`tx/${execution.transaction_hash}`, getNetworkConfig().blockExplorerUrls[0]).toString() : undefined,
+      l2ExplorerUrl: execution?.transaction_hash
+        ? (getEvmTxExplorerUrl(ethDepositRoute.toNetwork, execution.transaction_hash) ?? undefined)
+        : undefined,
       symbol: "USDC"
     };
   });
@@ -232,9 +239,11 @@ export function mapEthApiTransactionsToAppFormat(data: EthTransactionsResponseDa
       status: status,
       timestamp: parseInt(withdrawal.block_timestamp) * 1000,
       txHash: withdrawal.transaction_hash,
-      l2ExplorerUrl: new URL(`tx/${withdrawal.transaction_hash}`, getNetworkConfig().blockExplorerUrls[0]).toString(),
+      l2ExplorerUrl: getEvmTxExplorerUrl(ethWithdrawRoute.fromNetwork, withdrawal.transaction_hash) ?? undefined,
       l1TxHash: execution?.transaction_hash,
-      l1ExplorerUrl: execution?.transaction_hash ? `https://sepolia.etherscan.io/tx/${execution.transaction_hash}` : undefined,
+      l1ExplorerUrl: execution?.transaction_hash
+        ? (getEvmTxExplorerUrl(ethWithdrawRoute.toNetwork, execution.transaction_hash) ?? undefined)
+        : undefined,
       symbol: "USDC",
       // Additional fields for pending withdrawals
       withdrawalId: withdrawal.nonce, // nonce for claiming

@@ -7,9 +7,8 @@ import { fetchUserTransactions, mapApiTransactionsToAppFormat, fetchEthUserTrans
 import { maskAddress } from "@/utils";
 import { resolveDisplayName, resolveIcon } from '@/utils/wallet-metadata';
 import {injectedForProvider} from "@/lib/wagmi/connector";
-import { switchToL1Network, switchToEthereumNetwork } from "@/utils/network-switcher";
-import { EthereumNetwork } from "@/services/ethereum/config";
 import { requestWalletAccountSelection, setupAccountsChangedListener, cleanupAccountsChangedListener } from "@/utils/evm-account-selection";
+import { GetCurrentRoute } from '@/services/bridge/routes';
 
 // Create events for wallet state changes
 export const walletEvents = {
@@ -537,15 +536,28 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             console.warn("Cannot switch L1 network: Xverse wallet not connected");
             return false;
           }
-          const l1Result = await switchToL1Network();
-          if (l1Result.success) {
-            if (l1Result.switched) {
-              await get().checkXverseConnection();
-            }
+          try {
+            const { request } = await import('sats-connect');
+            const targetName =
+              BRIDGE_CONFIG.defaultNetwork === 'mainnet'
+                ? 'Mainnet'
+                : BRIDGE_CONFIG.defaultNetwork === 'testnet4'
+                  ? 'Testnet4'
+                  : 'Regtest';
+
+            const res = (await request('wallet_changeNetwork', {
+              name: targetName,
+            } as any)) as any;
+
+            if (res?.status !== 'success') return false;
+
+            await get().checkXverseConnection();
             walletEvents.networkChanged.emit();
-            return l1Result.success;
+            return true;
+          } catch (e) {
+            console.error('Failed to switch Bitcoin network', e);
+            return false;
           }
-          return false;
 
         case Layer.L2:
           if (isMetamaskConnected) {
@@ -814,8 +826,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const bestProvider = await getPreferredWeb3ProviderAsync();
       if (!bestProvider) return;
 
-      // Sepolia Chain ID
-      const expectedChainId = "0xaa36a7"; // 11155111
+      const route = GetCurrentRoute('deposit', 'ethereum');
+      const expectedChainIdNum = route.fromNetwork.chainId;
+      if (!expectedChainIdNum) {
+        set({ isCorrectL1Network: false });
+        return;
+      }
+      const expectedChainId = `0x${expectedChainIdNum.toString(16)}`;
       const chainId = await bestProvider.provider.request({ method: 'eth_chainId' }) as string;
       const isCorrect = chainId.toLowerCase() === expectedChainId.toLowerCase();
 
@@ -857,18 +874,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         });
       }
 
-      // Step 2: Automatically switch to Sepolia network
-      console.log("🔄 Switching to Sepolia network...");
-      const networkResult = await switchToEthereumNetwork(EthereumNetwork.SEPOLIA);
-      
-      if (networkResult.success) {
+      // Switch to Ethereum L1 via wagmi core (keeps wagmi state in sync)
+      try {
+        const route = GetCurrentRoute('deposit', 'ethereum');
+        const chainId = route.fromNetwork.chainId;
+        if (!chainId) throw new Error('Missing Ethereum chainId for current route');
+
+        const { switchChain } = await import('@wagmi/core');
+        const { wagmiConfig } = await import('@/lib/wagmi/config');
+        await switchChain(wagmiConfig, { chainId });
+
         set({ isCorrectL1Network: true });
-        console.log("✅ Connected to L1 wallet and switched to Sepolia");
         walletEvents.networkChanged.emit();
-      } else {
-        // If switch failed, still mark as connected but network is incorrect
-        // User will see a warning but can proceed
-        console.warn("⚠️ Connected but network switch failed:", networkResult.error);
+      } catch (err) {
+        console.warn('Ethereum L1 switch failed:', err);
         await get().checkL1Network();
       }
 

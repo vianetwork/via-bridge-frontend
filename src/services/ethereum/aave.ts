@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { AAVE_POOL_ADDRESSES, ETHEREUM_NETWORK_CONFIG, EthereumNetwork } from "./config";
+import { AAVE_POOL_ADDRESSES } from "./config";
 
 // ABI for Aave V3 Pool.getReserveData
 // function getReserveData(address asset) external view returns (DataTypes.ReserveData memory);
@@ -48,32 +48,26 @@ function formatCompactNumber(num: number): string {
 
 /**
  * Fetches the current supply APY and TVL for a given asset on Aave V3.
- * @param chainId The chain ID of the network.
+ * @param chainId The chain ID of the network (number or hex string).
  * @param tokenAddress The address of the asset (e.g., USDC).
  * @param provider An ethers.js Provider instance.
  * @returns Object containing formatted APY and TVL.
  */
 export async function fetchAaveData(
-  chainId: string,
+  chainId: number | string,
   tokenAddress: string,
   provider: ethers.Provider
 ): Promise<AaveData> {
   try {
-    // Determine network from chainId
-    const networkEntry = Object.entries(ETHEREUM_NETWORK_CONFIG).find(
-      ([, config]) => config.chainId.toLowerCase() === chainId.toLowerCase()
-    );
+    // Normalize chainId to number for lookup
+    const chainIdNum = typeof chainId === 'string'
+      ? parseInt(chainId, 16)
+      : chainId;
 
-    if (!networkEntry) {
-      console.warn(`[fetchAaveData] Network not found for chainId: ${chainId}`);
-      return { apy: "0%", tvl: "$0" };
-    }
+    // Direct lookup by chainId
+    const poolAddress = AAVE_POOL_ADDRESSES[chainIdNum];
 
-    const network = networkEntry[0] as EthereumNetwork;
-    const poolAddress = AAVE_POOL_ADDRESSES[network]; // This config key now points to Pool addresses
-
-    if (!poolAddress || poolAddress === "0x0000000000000000000000000000000000000000") {
-      // console.warn(`[fetchAaveData] Pool address not configured for network: ${network}`);
+    if (!poolAddress) {
       return { apy: "0%", tvl: "$0" };
     }
 

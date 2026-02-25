@@ -1,7 +1,8 @@
 import { NetworkInfo } from '@/services/bridge/types';
 import { BitcoinNetwork } from '@/services/bitcoin/types';
-import { ViaMainnet, ViaTestnet } from '@/lib/wagmi/chains';
+import {EthereumMainnet, EthereumSepolia, ViaMainnet, ViaTestnet} from '@/lib/wagmi/chains';
 import { BTC_NETWORK_NAMES } from '@/services/networks/bitcoin';
+import { BTC_API } from '@/services/config';
 
 /**
  * All supported bridge networks
@@ -51,12 +52,14 @@ export const NETWORKS: Record<string, NetworkInfo> = {
     id: 'bitcoin-mainnet',
     displayName: BTC_NETWORK_NAMES[BitcoinNetwork.MAINNET], // "Bitcoin Mainnet"
     type: 'bitcoin',
+    blockExplorerUrl: BTC_API.explorer[BitcoinNetwork.MAINNET],
     //icon: '/bitcoin.svg', // TODO: Add icon file
   },
   BITCOIN_TESTNET4: {
     id: 'bitcoin-testnet4',
     displayName: BTC_NETWORK_NAMES[BitcoinNetwork.TESTNET], // "Bitcoin Testnet4"
     type: 'bitcoin',
+    blockExplorerUrl: BTC_API.explorer[BitcoinNetwork.TESTNET],
     //icon: '/bitcoin-testnet.svg', // TODO: Add icon file
   },
   VIA_MAINNET: {
@@ -64,6 +67,7 @@ export const NETWORKS: Record<string, NetworkInfo> = {
     displayName: ViaMainnet.name,        // "Via Network"
     chainId: ViaMainnet.id,              // 5223 (0x1467)
     type: 'evm',
+    blockExplorerUrl: ViaMainnet.blockExplorers.default.url
     //icon: '/via.svg', // TODO: Add icon file
   },
   VIA_TESTNET: {
@@ -71,6 +75,23 @@ export const NETWORKS: Record<string, NetworkInfo> = {
     displayName: ViaTestnet.name,        // "Via Network Sepolia"
     chainId: ViaTestnet.id,              // 25223 (0x6287)
     type: 'evm',
+    blockExplorerUrl: ViaTestnet.blockExplorers.default.url
     //icon: '/via-testnet.svg', // TODO: Add icon file
   },
+  ETHEREUM_MAINNET: {
+    id: 'ethereum-mainnet',
+    displayName: EthereumMainnet.name,
+    chainId: EthereumMainnet.id,
+    type: 'evm',
+    blockExplorerUrl: EthereumMainnet.blockExplorers.default.url,
+    icon: '/ethereum-logo.png',
+  },
+  ETHEREUM_SEPOLIA: {
+    id: 'ethereum-sepolia',
+    displayName: EthereumSepolia.name,
+    chainId: EthereumSepolia.id,
+    type: 'evm',
+    blockExplorerUrl: EthereumSepolia.blockExplorers.default.url,
+    icon: '/ethereum-logo.png',
+  }
 };

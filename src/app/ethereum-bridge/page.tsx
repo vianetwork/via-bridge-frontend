@@ -1,4 +1,4 @@
-import EthereumBridgeInterface from "@/components/ethereum-bridge-interface";
+import { EthereumBridgeInterface } from "@/components/ethereum-bridge/ethereum-bridge-interface";
 
 export default function EthereumBridgePage() {
     return (

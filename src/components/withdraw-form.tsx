@@ -3,7 +3,6 @@
 
 import { useState, useEffect, useRef } from "react";
 import { GetCurrentRoute} from "@/services/bridge/routes";
-import { BRIDGE_CONFIG } from "@/services/config";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -70,7 +69,7 @@ export default function WithdrawForm({ viaAddress, onTransactionSubmitted }: Wit
   }, [abortController]);
 
   // Get the current bridge route configuration
-  const bridgeRoute = GetCurrentRoute('withdraw', BRIDGE_CONFIG.defaultNetwork);
+  const bridgeRoute = GetCurrentRoute('withdraw');
   const { fromNetwork, toNetwork, token } = bridgeRoute;
 
   // Calculate net BTC amount after fee estimation

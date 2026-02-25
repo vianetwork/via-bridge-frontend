@@ -7,9 +7,8 @@ import { useBridgeSubmit } from "@/hooks/useBridgeSubmit";
 import { useBalance} from "@/hooks/useBalance";
 import { verifyRecipientAddress} from "@/utils/address";
 import { GetCurrentRoute } from "@/services/bridge/routes";
-import { BRIDGE_CONFIG, Layer } from "@/services/config";
 import { useWalletStore } from "@/store/wallet-store";
-import { useNetworkSwitcher } from "@/hooks/use-network-switcher";
+import { Layer } from "@/services/config";
 
 import {
   BridgeModeTabs,
@@ -81,44 +80,8 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     fetchDepositFeeEstimation,
   } = useWalletStore();
   
-  const { switchToL2 } = useNetworkSwitcher();
-  const { checkMetamaskNetwork } = useWalletStore();
-
   // Debounce amount to avoid excessive API calls
   const debouncedAmount = useDebounce(amount, 600);
-
-  // Auto-switch to VIA network when withdrawal mode is selected
-  useEffect(() => {
-    const autoSwitchToVia = async () => {
-      // Only auto-switch for withdrawal mode
-      if (mode !== "withdraw") {
-        return;
-      }
-
-      // Only proceed if wallet is connected
-      if (!isMetamaskConnected) {
-        return;
-      }
-
-      // Check current network state
-      await checkMetamaskNetwork();
-
-      // If not on VIA network, try to switch
-      if (!isCorrectViaNetwork) {
-        try {
-          const result = await switchToL2();
-          if (result.success) {
-            // Refresh network state after switch
-            await checkMetamaskNetwork();
-          }
-        } catch (error) {
-          console.error("Auto-switch to VIA failed:", error);
-        }
-      }
-    };
-
-    autoSwitchToVia();
-  }, [mode, isMetamaskConnected, isCorrectViaNetwork, switchToL2, checkMetamaskNetwork]);
 
   // Fetch fee estimation when debounced amount changes
   useEffect(() => {
@@ -135,7 +98,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
     }
   }, [debouncedAmount, mode, fetchFeeEstimation, fetchDepositFeeEstimation]);
 
-  const route = useMemo(() => GetCurrentRoute(mode, BRIDGE_CONFIG.defaultNetwork), [mode]);
+  const route = useMemo(() => GetCurrentRoute(mode), [mode]);
   const unit = route.token.symbol;
 
 
@@ -324,7 +287,7 @@ export function BridgeForm({ initialMode = "deposit", className}:  BridgeFormPro
           <NetworkLaneSelector route={route} onSwap={handleSwap} />
 
           {/*Source Wallet Banner - prompt user to connect the wallet they are sending FROM*/}
-          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
+          <SourceWalletBanner walletType={sourceWalletStatus.walletType} isConnected={sourceWalletStatus.isConnected} isCorrectNetwork={sourceWalletStatus.isCorrectNetwork} targetNetworkLabel={route.fromNetwork.displayName} onConnect={handleConnectSourceWallet} onSwitchNetwork={handleSwitchSourceNetwork}/>
 
           {/*Amount section conditionally shown if a balance is available*/}
           { balance && parseFloat(balance) > 0 && (

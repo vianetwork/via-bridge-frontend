@@ -1,8 +1,9 @@
-import { BitcoinNetwork } from "@/services/bitcoin/types";
-import { env } from "@/lib/env";
-import {VIA_EVM_CHAIN_PARAMS, ViaNetwork} from "@/services/networks/evm";
+import {BitcoinNetwork} from "@/services/bitcoin/types";
+import {env} from "@/lib/env";
+import { VIA_EVM_CHAIN_PARAMS, ViaNetwork} from "@/services/networks/evm";
 export { VIA_EVM_CHAIN_PARAMS } from "@/services/networks/evm";
 export { BTC_NETWORK_NAMES } from "@/services/networks/bitcoin";
+
 
 // Define the API base URL
 export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://0.0.0.0:5050";

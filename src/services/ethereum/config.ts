@@ -1,5 +1,6 @@
-
-
+import {EthereumMainnet, EthereumSepolia} from "@/lib/wagmi/chains";
+import { BRIDGE_CONFIG } from "@/services/config";
+import { BitcoinNetwork } from "@/services/bitcoin/types";
 
 export enum EthereumNetwork {
   SEPOLIA = "sepolia",
@@ -24,12 +25,54 @@ export const MULTICALL_ADDRESSES = {
   [EthereumNetwork.SEPOLIA]: "0xD7F33bCdb21b359c8ee6F0251d30E94832baAd07"
 };
 
-// Aave V3 "Pool" Contract Addresses
-export const AAVE_POOL_ADDRESSES = {
-  [EthereumNetwork.SEPOLIA]: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+// Aave V3 "Pool" Contract Addresses (keyed by chainId)
+export const AAVE_POOL_ADDRESSES: Record<number, string> = {
+  [EthereumSepolia.id]: "0x6Ae43d3271ff6888e7Fc43Fd7321a503ff738951",
+  [EthereumMainnet.id]: "",
 };
 
-export const SUPPORTED_ASSETS = [
+/** Vault addresses for a supported asset on each network */
+export interface AssetVaultAddresses {
+  /** Vault addresses on Ethereum L1 (Sepolia for testnet) */
+  ethereum: {
+    /** Standard vault without yield generation */
+    standard: string;
+    /** Yield-bearing vault (Aave integration) */
+    yieldBearing: string;
+  };
+  /** Vault addresses on VIA Network L2 */
+  via: {
+    /** Standard vault without yield generation */
+    standard: string;
+    /** Yield-bearing vault (Aave integration) */
+    yieldBearing: string;
+  };
+}
+
+/** Network-specific token addresses */
+export interface AssetAddresses {
+  /** Token address on Sepolia testnet */
+  sepolia: string;
+  /** Token address on Ethereum mainnet */
+  mainnet: string;
+}
+
+/** Supported asset configuration */
+export interface SupportedAsset {
+  symbol: string;
+  name: string;
+  l2ValueSymbol: string;
+  icon: string;
+  decimals: number;
+  minAmount: string;
+  active: boolean;
+  apy: string;
+  tvl: string;
+  addresses: AssetAddresses;
+  vaultAddresses: AssetVaultAddresses;
+}
+
+export const SUPPORTED_ASSETS: SupportedAsset[] = [
   {
     symbol: "USDC",
     name: "USD Coin",
@@ -41,16 +84,17 @@ export const SUPPORTED_ASSETS = [
     apy: "Not available",
     tvl: "Not available",
     addresses: {
-      [EthereumNetwork.SEPOLIA]: "0x94a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8", // Custom Sepolia USDC
+      sepolia: "0x94a9d9ac8a22534e3faca9f4e7f2e2cf85d5e4c8", // Custom Sepolia USDC
+      mainnet: "", // TODO: Add mainnet address when ready
     },
-    vaults: {
-      l1: {
-        normal: "0xDfA2De059b80DD48c6f51E1ee791241f144a7F54", 
-        yield: "0x15Cc81D136277b5D38f75151dD5D0DB0571526Fc",
+    vaultAddresses: {
+      ethereum: {
+        standard: "0xDfA2De059b80DD48c6f51E1ee791241f144a7F54", 
+        yieldBearing: "0x15Cc81D136277b5D38f75151dD5D0DB0571526Fc",
       },
-      l2: {
-        normal: "0x59bc242EBB43e05707B05fBE04682C6E35EfB056", 
-        yield: "0x327d741E500E11Ab69F9D1A496A0ab4F934fA463",
+      via: {
+        standard: "0x59bc242EBB43e05707B05fBE04682C6E35EfB056", 
+        yieldBearing: "0x327d741E500E11Ab69F9D1A496A0ab4F934fA463",
       }
     }
   },
@@ -65,18 +109,27 @@ export const SUPPORTED_ASSETS = [
     apy: "4.8%", // Default fallback
     tvl: "$8.2M",
     addresses: {
-      [EthereumNetwork.SEPOLIA]: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", // Standard Sepolia USDT
+      sepolia: "0xaA8E23Fb1079EA71e0a56F48a2aA51851D8433D0", // Standard Sepolia USDT
+      mainnet: "", // TODO: Add mainnet address when ready
     },
-    vaults: {
-      l1: {
-        normal: "0x...", // TODO: Add real address
-        yield: "0x...", // TODO: Add real address
+    vaultAddresses: {
+      ethereum: {
+        standard: "0x...", // TODO: Add real address
+        yieldBearing: "0x...", // TODO: Add real address
       },
-      l2: {
-        normal: "0x...", // TODO: Add real address
-        yield: "0x...", // TODO: Add real address
+      via: {
+        standard: "0x...", // TODO: Add real address
+        yieldBearing: "0x...", // TODO: Add real address
       }
     }
   }
 ];
 
+/**
+ * Get the token address for an asset based on the current environment.
+ * Uses BRIDGE_CONFIG.defaultNetwork to determine mainnet vs testnet.
+ */
+export function getAssetAddress(asset: SupportedAsset): string {
+  const isMainnet = BRIDGE_CONFIG.defaultNetwork === BitcoinNetwork.MAINNET;
+  return isMainnet ? asset.addresses.mainnet : asset.addresses.sepolia;
+}

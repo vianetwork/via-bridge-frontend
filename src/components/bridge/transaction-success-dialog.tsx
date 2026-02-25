@@ -48,8 +48,11 @@ export function TransactionSuccessDialog({
 }: TransactionSuccessDialogProps) {
   if (!result) return null;
 
-  const { txHash, explorerUrl, type, amount, tokenSymbol } = result;
+  const { txHash, explorerUrl, type, amount, tokenSymbol, sourceNetworkName, destinationNetworkName } = result;
   const isDeposit = type === "deposit";
+  const sourceNetwork = sourceNetworkName || (isDeposit ? "Bitcoin" : "VIA");
+  const destinationNetwork = destinationNetworkName || (isDeposit ? "VIA" : "Bitcoin");
+  const destinationIsBitcoin = destinationNetwork.toLowerCase().includes("bitcoin");
 
   const handleMakeAnother = () => {
     onReset();
@@ -71,8 +74,8 @@ export function TransactionSuccessDialog({
 
           <DialogDescription className="text-sm">
             Your {isDeposit ? "deposit" : "withdrawal"} of {amount} {tokenSymbol} has been submitted
-            to the {isDeposit ? "Bitcoin" : "VIA"} network and is being processed.
-            {!isDeposit && ` Receiving ${tokenSymbol} on the Bitcoin network can take up to 24 hours.`}
+            to the {sourceNetwork} network and is being processed.
+            {destinationIsBitcoin && ` Receiving ${tokenSymbol} on the ${destinationNetwork} network can take up to 24 hours.`}
           </DialogDescription>
         </DialogHeader>
 
