@@ -9,15 +9,12 @@ import { SUPPORTED_ASSETS } from "@/services/ethereum/config";
 interface AssetSelectionDialogProps {
   selectedSymbol: string;
   onSelect: (symbol: string) => void;
-}
-
-
-interface AssetSelectionDialogProps {
-  selectedSymbol: string;
-  onSelect: (symbol: string) => void;
   trigger?: React.ReactNode;
 }
 
+/**
+ * Dialog for selecting the bridge asset (for example USDC) from supported vault assets.
+ */
 export function AssetSelectionDialog({ selectedSymbol, onSelect, trigger }: AssetSelectionDialogProps) {
   const [open, setOpen] = useState(false);
 

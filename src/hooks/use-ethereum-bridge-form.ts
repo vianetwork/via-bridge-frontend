@@ -186,24 +186,27 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     setAmount(value.toFixed(selectedAsset.decimals));
   };
 
+  const prepareSubmissionSigner = useCallback(async () => {
+    if (!isAmountValid) {
+      const message = amountError || "Invalid amount";
+      setSubmitError(message);
+      toast.error("Invalid amount", { description: message });
+      return null;
+    }
+
+    await ensureOnSourceNetwork();
+
+    const walletClient = await getWalletClient(wagmiConfig, { chainId: targetChainId });
+    if (!walletClient) throw new Error("Wallet not ready");
+    return clientToSigner(walletClient);
+  }, [isAmountValid, amountError, ensureOnSourceNetwork, targetChainId]);
+
   const submitDeposit = useCallback(async () => {
     setIsSubmitting(true);
     setSubmitError(null);
-
-    // TODO refactor Duplicated code fragment (12 lines long)
     try {
-      if (!isAmountValid) {
-        const message = amountError || "Invalid amount";
-        setSubmitError(message);
-        toast.error("Invalid amount", { description: message });
-        return;
-      }
-
-      await ensureOnSourceNetwork();
-
-      const walletClient = await getWalletClient(wagmiConfig, { chainId: targetChainId });
-      if (!walletClient) throw new Error("Wallet not ready");
-      const signer = clientToSigner(walletClient);
+      const signer = await prepareSubmissionSigner();
+      if (!signer) return;
 
       const result = await executeEthereumDeposit({
         asset: selectedAsset,
@@ -246,24 +249,14 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     } finally {
        setIsSubmitting(false);
     }
-  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError, route, addLocalTransaction]);
+  }, [prepareSubmissionSigner, selectedAsset, amount, recipientAddress, isYieldEnabled, route, addLocalTransaction]);
 
   const submitWithdraw = useCallback(async () => {
     setIsSubmitting(true);
     setSubmitError(null);
     try {
-      if (!isAmountValid) {
-        const message = amountError || "Invalid amount";
-        setSubmitError(message);
-        toast.error("Invalid amount", { description: message });
-        return;
-      }
-
-      await ensureOnSourceNetwork();
-
-      const walletClient = await getWalletClient(wagmiConfig, { chainId: targetChainId});
-      if (!walletClient) throw new Error("Wallet not ready");
-      const signer = clientToSigner(walletClient);
+      const signer = await prepareSubmissionSigner();
+      if (!signer) return;
 
       const result = await executeEthereumWithdraw({
         asset: selectedAsset,
@@ -306,7 +299,7 @@ export function useEthereumBridgeForm(): UseEthereumBridgeFormResult {
     } finally {
       setIsSubmitting(false);
     }
-  }, [ensureOnSourceNetwork, targetChainId, selectedAsset, amount, recipientAddress, isYieldEnabled, isAmountValid, amountError, route, addLocalTransaction]);
+  }, [prepareSubmissionSigner, selectedAsset, amount, recipientAddress, isYieldEnabled, route, addLocalTransaction]);
 
   const resetSuccessResult = useCallback(() => {
     setSuccessResult(null);
