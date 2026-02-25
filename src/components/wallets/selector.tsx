@@ -48,10 +48,15 @@ export default function WalletSelector({
 }) {
   const [open, setOpen] = React.useState(initialOpen);
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    setOpen(nextOpen);
+    onOpenChange?.(nextOpen);
+  };
+
   const onSelectedWallet = async (rdns: string) => {
     try {
       await onSelectWallet(rdns, detectedSet.has(rdns));
-      if (detectedSet.has(rdns)) setOpen(false);
+      if (detectedSet.has(rdns)) handleOpenChange(false);
     } catch (e) {
       console.error("Error connecting wallet", e);
     }
@@ -87,15 +92,12 @@ export default function WalletSelector({
     <div className="p-8 space-y-4">
 
       {showTrigger && (
-        <Button onClick={() => setOpen(true)}>Connect</Button>
+        <Button onClick={() => handleOpenChange(true)}>Connect</Button>
       )}
 
       <Dialog
         open={open}
-        onOpenChange={(v) => {
-                setOpen(v);
-                onOpenChange?.(v);
-        }}
+        onOpenChange={handleOpenChange}
       >
 
         <DialogContent className="sm:max-w-md p-0 gap-0">
